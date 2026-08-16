@@ -133,9 +133,15 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 /* seats — all kept fully inside the felt's own box so nothing ever depends on scrolling */
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);}
-.seat.left{left:6px;top:50%;transform:translateY(-50%);flex-direction:row;direction:ltr;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
-.seat.right{right:6px;top:50%;transform:translateY(-50%);flex-direction:row-reverse;direction:ltr;}
+/* Left/right badges and fans are positioned fully independently (not sharing a flex
+   row) — this avoids the RTL row-direction ambiguity that kept misplacing them. */
+.side-badge{position:absolute;z-index:20;}
+.side-badge.left-badge{left:6px;top:14%;}
+.side-badge.right-badge{right:6px;top:14%;}
+.fan.side{position:absolute;z-index:20;}
+.fan.left-fan{left:6px;top:50%;transform:translateY(-50%);}
+.fan.right-fan{right:6px;top:50%;transform:translateY(-50%);}
 
 .name-badge{
   background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
@@ -336,18 +342,18 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
           <div class="name-badge" id="badge-0"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-0"></span><span class="tricks-badge" id="tricks-0"></span></div></div>
           <div class="fan" id="fan-0"></div>
         </div>
-        <div class="seat left" id="seat-1">
-          <div class="fan side" id="fan-1"></div>
+        <div class="side-badge left-badge" id="seat-1">
           <div class="name-badge" id="badge-1"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-1"></span><span class="tricks-badge" id="tricks-1"></span></div></div>
         </div>
+        <div class="fan side left-fan" id="fan-1"></div>
         <div class="seat top" id="seat-2">
           <div class="name-badge" id="badge-2"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-2"></span><span class="tricks-badge" id="tricks-2"></span></div></div>
           <div class="fan" id="fan-2"></div>
         </div>
-        <div class="seat right" id="seat-3">
-          <div class="fan side" id="fan-3"></div>
+        <div class="side-badge right-badge" id="seat-3">
           <div class="name-badge" id="badge-3"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-3"></span><span class="tricks-badge" id="tricks-3"></span></div></div>
         </div>
+        <div class="fan side right-fan" id="fan-3"></div>
 
         <div id="trick-area"></div>
       </div>
