@@ -682,7 +682,27 @@ function renderTable(){
     }
   }
   renderTrickArea();
+  positionSideBadges();
 }
+function positionSideBadges(){
+  // Places the left/right badges directly above their own fan, measured from the
+  // ACTUAL rendered position — avoids guessing percentages that break on different
+  // screen proportions (this was the repeated source of overlap bugs).
+  try{
+    const felt = document.getElementById('felt');
+    const feltRect = felt.getBoundingClientRect();
+    [[1,'left-badge'],[3,'right-badge']].forEach(([p])=>{
+      const fanEl = document.getElementById('fan-'+p);
+      const badgeWrap = document.getElementById('seat-'+p);
+      if(!fanEl || !badgeWrap) return;
+      const fanRect = fanEl.getBoundingClientRect();
+      const badgeH = badgeWrap.offsetHeight || 30;
+      const top = (fanRect.top - feltRect.top) - badgeH - 6;
+      badgeWrap.style.top = Math.max(4, top) + 'px';
+    });
+  } catch(e){ /* non-fatal cosmetic positioning */ }
+}
+window.addEventListener('resize', ()=>{ if(S) positionSideBadges(); });
 function isCurrentActor(p){
   if(S.phase==='trump-bidding') return S.bidTurn===p && !S.passedBidders.includes(p) && S.activeBidders.includes(p);
   if(S.phase==='trick-bidding') return S.declareOrder[S.declareIdx]===p;
