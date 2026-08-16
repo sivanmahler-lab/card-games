@@ -140,8 +140,8 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .side-badge.left-badge{left:6px;top:14%;}
 .side-badge.right-badge{right:6px;top:14%;}
 .fan.side{position:absolute;z-index:20;}
-.fan.left-fan{left:6px;top:50%;transform:translateY(-50%);}
-.fan.right-fan{right:6px;top:50%;transform:translateY(-50%);}
+.fan.left-fan{left:6px;top:14%;}
+.fan.right-fan{right:6px;top:14%;}
 
 .name-badge{
   background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
@@ -203,6 +203,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 #trick-area{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   width:80%;height:74%;z-index:25;
+  pointer-events:none; /* nothing inside is interactive — never intercept taps meant for hands beneath */
 }
 .played-card{position:absolute;width:58px;height:82px;}
 
@@ -685,20 +686,23 @@ function renderTable(){
   positionSideBadges();
 }
 function positionSideBadges(){
-  // Places the left/right badges directly above their own fan, measured from the
-  // ACTUAL rendered position — avoids guessing percentages that break on different
-  // screen proportions (this was the repeated source of overlap bugs).
+  // Places the left/right badge+fan as a single vertically-centered unit, computed
+  // directly from measured heights — more reliable than CSS percentage centering,
+  // which wasn't behaving as expected across different phone aspect ratios.
   try{
     const felt = document.getElementById('felt');
-    const feltRect = felt.getBoundingClientRect();
-    [[1,'left-badge'],[3,'right-badge']].forEach(([p])=>{
-      const fanEl = document.getElementById('fan-'+p);
-      const badgeWrap = document.getElementById('seat-'+p);
+    const feltH = felt.clientHeight;
+    [[1,'fan-1','seat-1'],[3,'fan-3','seat-3']].forEach(([p,fanId,badgeId])=>{
+      const fanEl = document.getElementById(fanId);
+      const badgeWrap = document.getElementById(badgeId);
       if(!fanEl || !badgeWrap) return;
-      const fanRect = fanEl.getBoundingClientRect();
+      const fanH = fanEl.offsetHeight || 220;
       const badgeH = badgeWrap.offsetHeight || 30;
-      const top = (fanRect.top - feltRect.top) - badgeH - 6;
-      badgeWrap.style.top = Math.max(4, top) + 'px';
+      const gap = 6;
+      const totalH = fanH + gap + badgeH;
+      const startTop = Math.max(4, (feltH - totalH) / 2);
+      badgeWrap.style.top = startTop + 'px';
+      fanEl.style.top = (startTop + badgeH + gap) + 'px';
     });
   } catch(e){ /* non-fatal cosmetic positioning */ }
 }
