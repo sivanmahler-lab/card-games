@@ -173,7 +173,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 /* hand fans */
 .fan{position:relative;height:clamp(78px,15vmin,124px);width:clamp(240px,80vmin,620px);}
-.fan.side{height:clamp(170px,40vmin,280px);width:clamp(48px,10vmin,70px);}
+.fan.side{height:clamp(130px,30vmin,220px);width:clamp(44px,9vmin,64px);}
 .card{
   position:absolute;width:clamp(38px,9vmin,70px);height:clamp(55px,13vmin,100px);border-radius:8px;background:var(--cream);
   border:1px solid rgba(0,0,0,.35);box-shadow:0 3px 8px rgba(0,0,0,.4);
@@ -229,7 +229,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .opt-btn:disabled{opacity:.28;cursor:not-allowed;}
 .opt-btn.chosen{background:var(--gold);color:var(--ink);}
 .suit-choice{display:flex;gap:8px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;}
-.suit-choice button{font-size:13px;line-height:1.4;padding:8px 12px;border-radius:9px;min-width:70px;white-space:nowrap;}
+.suit-choice button{font-size:12px;line-height:1.3;padding:6px 10px;border-radius:8px;min-width:62px;white-space:nowrap;}
 .suit-choice button small{display:block;font-size:10px;opacity:.7;font-weight:400;}
 .count-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
 .count-row input[type=number]{width:70px;text-align:center;padding:8px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.08);color:var(--cream);font-size:16px;}
@@ -1134,7 +1134,7 @@ function advancePlaying(){
   renderTable();
   const p = currentTrickPlayer();
   if(S.isHuman[p]){
-    gateFor(p, ()=>{ renderTable(); showPlayHint(p); });
+    gateFor(p, ()=>{ hideControlPanel(); renderTable(); });
   } else {
     hideControlPanel();
     clearTimeout(window.__botWatchdog);
@@ -1142,10 +1142,6 @@ function advancePlaying(){
       try{ botPlay(p); } catch(err){ console.error('botPlay failed', err); }
     }, 800);
   }
-}
-function showPlayHint(p){
-  showControlPanel();
-  document.getElementById('cp-inner').innerHTML = `<h4>${S.names[p]} — תורך לזרוק קלף (לחצ/י על קלף זוהר ביד שלמטה)</h4>`;
 }
 function playHumanCard(c){
   playCard(0,c);
