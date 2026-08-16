@@ -132,7 +132,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 /* seats — all kept fully inside the felt's own box so nothing ever depends on scrolling */
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
-.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);}
+.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:60;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Left/right badges and fans are positioned fully independently (not sharing a flex
    row) — this avoids the RTL row-direction ambiguity that kept misplacing them. */
@@ -334,7 +334,6 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
     <div class="game-header" id="game-header">
       <div class="pill round" id="pill-round">סיבוב 1</div>
       <div class="pill trump" id="pill-trump" style="display:none;"></div>
-      <div class="pill up" id="pill-updown" style="display:none;"></div>
     </div>
     <div id="table-wrap">
       <div id="felt">
@@ -514,7 +513,7 @@ function showConfirmBox(title, sub, onYes){
   bg.innerHTML = `<div class="modal" style="max-width:360px;text-align:center;">
     <h2 style="font-size:19px;">${title}</h2>
     <p style="margin:10px 0 18px;">${sub}</p>
-    <button class="tb-btn" id="confirm-yes" style="margin-inline-end:8px;">כן, המשך</button>
+    <button class="tb-btn" id="confirm-yes" style="margin-inline-end:8px;">כן</button>
     <button class="tb-btn" id="confirm-no">ביטול</button>
   </div>`;
   document.body.appendChild(bg);
@@ -654,9 +653,10 @@ function startRound(){
   S.trickHistory=[];
   S.roundType=null;
   S.revealedHuman=-1;
-  document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
+  const roundPill = document.getElementById('pill-round');
+  roundPill.textContent = 'סיבוב '+S.roundNum;
+  roundPill.className = 'pill round';
   document.getElementById('pill-trump').style.display='none';
-  document.getElementById('pill-updown').style.display='none';
   document.getElementById('tb-trump').style.display='none';
   renderTable();
   S.phase='trump-bidding';
@@ -1000,7 +1000,7 @@ function finishTrumpBidding(winner){
   S.trumpSuit = S.trumpBid.suit;
   const pillTrump = document.getElementById('pill-trump');
   pillTrump.style.display='inline-block';
-  pillTrump.textContent = 'שליט: '+SUITS[S.trumpSuit].sym+' '+SUITS[S.trumpSuit].name+' ('+S.names[winner]+')';
+  pillTrump.textContent = SUITS[S.trumpSuit].sym+' ('+S.names[winner]+')';
   const tbTrump = document.getElementById('tb-trump');
   tbTrump.style.display='inline-block';
   tbTrump.textContent = SUITS[S.trumpSuit].sym+' שליט';
@@ -1020,10 +1020,9 @@ function advanceTrickBidding(){
   if(S.declareIdx>=4){
     const sum = S.bids.reduce((a,b)=>a+b,0);
     S.roundType = sum>13?'UP':'UNDER';
-    const pill = document.getElementById('pill-updown');
-    pill.style.display='inline-block';
-    pill.textContent = S.roundType==='UP' ? 'סיבוב UP ⬆' : 'סיבוב UNDER ⬇';
-    pill.className = 'pill '+(S.roundType==='UP'?'up':'under');
+    const roundPill = document.getElementById('pill-round');
+    roundPill.textContent = 'סיבוב '+S.roundNum+' — '+(S.roundType==='UP' ? 'UP ⬆' : 'UNDER ⬇');
+    roundPill.className = 'pill round '+(S.roundType==='UP'?'up':'under');
     hideControlPanel();
     showDeclareSummary(()=>{
       S.phase='playing';
