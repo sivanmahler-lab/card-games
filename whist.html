@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ויסט — משחק הקלפים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cp-h:0px;
+  --felt-1:#0d2b22;
+  --felt-2:#164434;
+  --felt-3:#1f5a44;
+  --gold:#d4af5a;
+  --gold-bright:#f0d896;
+  --cream:#faf4e6;
+  --ink:#211a10;
+  --brick:#a5372b;
+  --brick-bright:#d05c46;
+  --teal:#3f9a8b;
+  --amber:#e0a83a;
+  --panel:#0a1f18;
+  --danger:#c14b3f;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;background:var(--felt-1);color:var(--cream);font-family:'Heebo',sans-serif;overflow-y:auto;overflow-x:hidden;}
+body{
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.05), transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+}
+h1,h2,h3{font-family:'Frank Ruhl Libre',serif;margin:0;}
+button{font-family:'Heebo',sans-serif;cursor:pointer;}
+::selection{background:var(--gold);color:var(--ink);}
+
+#app{position:relative;width:100%;height:100%;}
+
+/* ---------- TOP BAR ---------- */
+#topbar{
+  position:fixed;top:0;right:0;left:0;height:52px;z-index:500;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;background:linear-gradient(180deg, rgba(6,17,13,0.95), rgba(6,17,13,0.75));
+  border-bottom:1px solid rgba(212,175,90,0.35);
+  backdrop-filter:blur(4px);
+}
+#topbar .brand{display:flex;align-items:center;gap:8px;font-family:'Frank Ruhl Libre',serif;font-weight:700;font-size:20px;color:var(--gold-bright);}
+#topbar .brand .suits{font-size:15px;letter-spacing:2px;opacity:.85;}
+.tb-trump{
+  font-family:'Heebo',sans-serif;font-size:13px;font-weight:800;color:var(--ink);
+  background:var(--gold-bright);border-radius:8px;padding:3px 10px;margin-inline-start:6px;white-space:nowrap;
+}
+#topbar .tb-btns{display:flex;gap:6px;}
+.tb-btn{
+  background:rgba(212,175,90,0.10);border:1px solid rgba(212,175,90,0.4);color:var(--gold-bright);
+  padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;transition:.15s;
+}
+.tb-btn:hover{background:rgba(212,175,90,0.25);}
+.tb-btn:active{transform:scale(.96);}
+
+/* ---------- SCREENS ---------- */
+.screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow:auto;}
+.screen.active{display:flex;}
+
+/* ---------- LOBBY ---------- */
+#screen-lobby{justify-content:center;padding:20px;text-align:center;}
+.lobby-card{max-width:640px;width:100%;}
+.hero-suits{font-size:52px;letter-spacing:14px;margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);}
+.hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;}
+.hero-sub{color:rgba(250,244,230,.65);font-size:15px;margin-bottom:34px;letter-spacing:.5px;}
+.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;}
+@media(max-width:640px){.mode-grid{grid-template-columns:1fr;}}
+.mode-card{
+  background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+  border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
+  transition:.18s; position:relative; overflow:hidden;
+}
+.mode-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);}
+.mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
+.mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
+.note-strip{font-size:12px;color:rgba(250,244,230,.5);border-top:1px dashed rgba(212,175,90,.3);padding-top:14px;margin-top:8px;line-height:1.6;}
+
+/* ---------- SETUP ---------- */
+#screen-setup{justify-content:center;padding:24px;}
+.setup-box{background:rgba(0,0,0,.25);border:1px solid rgba(212,175,90,.35);border-radius:16px;padding:28px;max-width:480px;width:92%;}
+.setup-box h2{color:var(--gold-bright);margin-bottom:18px;text-align:center;font-size:24px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:13px;margin-bottom:6px;color:rgba(250,244,230,.75);}
+.field input, .field select{
+  width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,175,90,.4);
+  background:rgba(255,255,255,.06);color:var(--cream);font-size:15px;
+}
+.field input:focus,.field select:focus{outline:2px solid var(--gold);}
+.btn-primary{
+  width:100%;padding:13px;border-radius:10px;border:none;margin-top:8px;
+  background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:var(--ink);font-weight:800;font-size:16px;
+  box-shadow:0 6px 18px rgba(212,175,90,.25);
+}
+.btn-primary:hover{filter:brightness(1.06);}
+.btn-secondary{
+  width:100%;padding:11px;border-radius:10px;margin-top:10px;border:1px solid rgba(212,175,90,.4);
+  background:transparent;color:var(--gold-bright);font-weight:600;font-size:14px;
+}
+
+/* ---------- GAME TABLE ---------- */
+#screen-game{padding:0;}
+#table-wrap{position:relative;width:100%;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;box-sizing:border-box;}
+#felt{
+  position:relative;width:min(100%,900px);height:min(78vmin,640px);
+  max-width:100%;max-height:100%;min-height:260px;
+  background:
+    radial-gradient(ellipse at 50% 50%, var(--felt-3) 0%, var(--felt-2) 60%, var(--felt-1) 100%);
+  border:10px solid #3a2a14;
+  border-image:linear-gradient(160deg,#8a6a2e,#3a2a14) 1;
+  border-radius:26px;
+  box-shadow:0 20px 60px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.4);
+}
+.game-header{
+  display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;
+  padding:8px 10px 4px;width:100%;
+}
+.pill{
+  padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;
+  border:1px solid rgba(255,255,255,.25);white-space:nowrap;
+}
+.pill.round{background:rgba(0,0,0,.55);color:var(--gold-bright);}
+.pill.trump{background:rgba(0,0,0,.55);color:var(--cream);border-color:rgba(212,175,90,.6);}
+.pill.up{background:var(--amber);color:#241a05;}
+.pill.under{background:var(--teal);color:#04211c;}
+
+/* seats — all kept fully inside the felt's own box so nothing ever depends on scrolling */
+.seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
+.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);}
+.seat.left{left:6px;top:50%;transform:translateY(-50%);flex-direction:row;}
+.seat.top{top:12px;left:50%;transform:translateX(-50%);}
+.seat.right{right:6px;top:50%;transform:translateY(-50%);flex-direction:row-reverse;}
+
+.name-badge{
+  background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
+  padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--cream);display:flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.name-badge .turn-dot{width:7px;height:7px;border-radius:50%;background:transparent;}
+.name-badge.active .turn-dot{background:#5be27a;box-shadow:0 0 8px #5be27a;}
+.name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);}
+.badge-stats{display:flex;flex-direction:column;gap:2px;align-items:center;}
+.bid-badge{font-size:10.5px;color:var(--teal);background:rgba(0,0,0,.4);border-radius:8px;padding:1px 7px;white-space:nowrap;}
+.tricks-badge{font-size:10.5px;color:var(--gold-bright);background:rgba(0,0,0,.4);border-radius:8px;padding:1px 7px;white-space:nowrap;}
+
+.trick-winner-ann{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(0,0,0,.78);border:1px solid var(--gold-bright);color:var(--gold-bright);
+  padding:6px 16px;border-radius:20px;font-weight:800;font-size:13px;z-index:100;
+  animation:annPop 1.1s ease forwards;pointer-events:none;white-space:nowrap;
+}
+@keyframes annPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.7);}15%{opacity:1;transform:translate(-50%,-50%) scale(1);}80%{opacity:1;}100%{opacity:0;}}
+
+.declare-summary{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(0,0,0,.86);border:1px solid var(--gold-bright);border-radius:14px;padding:16px 22px;
+  z-index:120;text-align:center;animation:dsPop 1.9s ease forwards;pointer-events:none;
+}
+.ds-title{color:var(--gold-bright);font-weight:800;margin-bottom:8px;font-size:15px;}
+.ds-rows{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:var(--cream);font-size:13px;}
+@keyframes dsPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.85);}10%{opacity:1;transform:translate(-50%,-50%) scale(1);}88%{opacity:1;}100%{opacity:0;}}
+
+/* hand fans */
+.fan{position:relative;height:clamp(78px,15vmin,124px);width:clamp(240px,80vmin,620px);}
+.fan.side{height:clamp(170px,40vmin,280px);width:clamp(48px,10vmin,70px);}
+.card{
+  position:absolute;width:clamp(38px,9vmin,70px);height:clamp(55px,13vmin,100px);border-radius:8px;background:var(--cream);
+  border:1px solid rgba(0,0,0,.35);box-shadow:0 3px 8px rgba(0,0,0,.4);
+  display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;
+  transition:transform .15s, box-shadow .15s, filter .15s;
+  cursor:default;user-select:none;
+  direction:ltr;
+}
+.card.dark{color:#141414;}
+.card.red{color:var(--brick);}
+.card .r-top{font-size:clamp(9px,2.3vmin,15px);font-weight:800;line-height:1;text-align:left;align-self:flex-start;}
+.card .r-top .s{display:block;font-size:clamp(8px,2.1vmin,14px);}
+.card .r-bot{font-size:clamp(9px,2.3vmin,15px);font-weight:800;line-height:1;align-self:flex-end;transform:rotate(180deg);text-align:left;}
+.card .r-bot .s{display:block;font-size:clamp(8px,2.1vmin,14px);}
+.card .center-sym{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(15px,4vmin,26px);opacity:.9;}
+.card.back{
+  background:repeating-linear-gradient(45deg, #7a1f2b, #7a1f2b 6px, #5c1620 6px, #5c1620 12px);
+  border:2px solid var(--gold);
+}
+.card.back .center-sym{display:none;}
+.card.legal{cursor:pointer;filter:brightness(1);}
+.card.legal:hover{box-shadow:0 10px 18px rgba(0,0,0,.5);z-index:30;}
+.card.illegal{filter:brightness(.55) saturate(.6);}
+.card.selected{transform:translateY(-16px) scale(1.06);box-shadow:0 0 0 3px var(--gold-bright);}
+
+/* center trick area */
+#trick-area{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:80%;height:74%;z-index:25;
+}
+.played-card{position:absolute;width:58px;height:82px;}
+
+/* bottom control panel */
+#control-panel{
+  width:100%;flex-shrink:0;
+  background:linear-gradient(0deg, rgba(6,17,13,.97), rgba(6,17,13,.85));
+  border-top:1px solid rgba(212,175,90,.35);
+  padding:10px 16px 12px;display:none;
+  max-height:38vh;overflow-y:auto;
+  box-sizing:border-box;
+}
+#control-panel.show{display:block;}
+#control-panel .cp-inner{max-width:760px;margin:0 auto;text-align:center;}
+#control-panel h4{color:var(--gold-bright);font-size:13.5px;margin-bottom:10px;font-weight:700;}
+.opt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+.opt-btn{
+  padding:9px 15px;border-radius:9px;border:1px solid rgba(212,175,90,.5);
+  background:rgba(255,255,255,.06);color:var(--cream);font-weight:700;font-size:14px;
+}
+.opt-btn:hover{background:rgba(212,175,90,.25);}
+.opt-btn.pass{border-color:var(--danger);color:#ffb3ac;}
+.opt-btn:disabled{opacity:.28;cursor:not-allowed;}
+.opt-btn.chosen{background:var(--gold);color:var(--ink);}
+.suit-choice{display:flex;gap:8px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;}
+.suit-choice button{font-size:13px;line-height:1.4;padding:8px 12px;border-radius:9px;min-width:70px;white-space:nowrap;}
+.suit-choice button small{display:block;font-size:10px;opacity:.7;font-weight:400;}
+.count-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.count-row input[type=number]{width:70px;text-align:center;padding:8px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.08);color:var(--cream);font-size:16px;}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:800;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-bg.show{display:flex;}
+.modal{background:var(--panel);border:1px solid rgba(212,175,90,.4);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 24px;}
+.modal h2{color:var(--gold-bright);margin-bottom:14px;font-size:24px;}
+.modal h4{color:var(--gold-bright);margin:16px 0 6px;font-size:15px;}
+.modal p, .modal li{font-size:13.5px;line-height:1.85;color:rgba(250,244,230,.9);}
+.modal ul,.modal ol{padding-inline-start:20px;margin:6px 0;}
+.modal .close-btn{margin-top:18px;}
+
+.gate-bg{position:fixed;inset:0;background:#050c09;z-index:900;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;text-align:center;}
+.gate-bg.show{display:flex;}
+.gate-bg .gs{font-size:44px;letter-spacing:10px;color:var(--gold-bright);}
+.gate-bg h2{font-size:26px;color:var(--cream);}
+.gate-bg p{color:rgba(250,244,230,.6);font-size:13px;max-width:320px;}
+
+.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:420px;width:92%;}
+table.score-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px;}
+table.score-table th, table.score-table td{padding:6px 8px;text-align:center;border-bottom:1px solid rgba(212,175,90,.2);}
+table.score-table th{color:var(--gold-bright);font-weight:700;}
+.win-tag{color:#7be29a;font-weight:800;}
+.lose-tag{color:#e77a6d;font-weight:800;}
+
+.toast-msg{
+  position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-12px);
+  background:rgba(0,0,0,.88);border:1px solid var(--gold-bright);color:var(--gold-bright);
+  padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;z-index:950;
+  opacity:0;transition:opacity .3s, transform .3s;pointer-events:none;white-space:nowrap;
+}
+.toast-msg.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media(max-width:760px){
+  #felt{width:96vmin;height:130vmin;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="brand"><span class="suits">♣♦♥♠</span> ויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span></div>
+    <div class="tb-btns">
+      <button class="tb-btn" onclick="newGame()">משחק חדש</button>
+      <button class="tb-btn" onclick="openInstructions()">הוראות</button>
+      <button class="tb-btn" onclick="goLobby()">לובי</button>
+      <button class="tb-btn" onclick="goHome()">בית</button>
+    </div>
+  </div>
+
+  <!-- LOBBY -->
+  <div class="screen active" id="screen-lobby">
+    <div class="lobby-card">
+      <div class="hero-suits">♣ ♦ ♥ ♠</div>
+      <div class="hero-title">ויסט</div>
+      <div class="hero-sub">חוזים, שליטים ולקיחות — משחק הקלפים הקלאסי</div>
+      <div class="mode-grid">
+        <div class="mode-card" onclick="chooseMode('computer')">
+          <div class="ic">🤖</div>
+          <h3>משחק מול המחשב</h3>
+          <p>את/ה מול שלושה בוטים. מתחילים מיד, בלי הרשמה.</p>
+        </div>
+        <div class="mode-card" onclick="chooseMode('friends')">
+          <div class="ic">👥</div>
+          <h3>משחק מול חברים</h3>
+          <p>מצב "העברת מכשיר" — כולם סביב אותו מסך, כל אחד בתורו.</p>
+        </div>
+        <div class="mode-card" onclick="chooseMode('mixed')">
+          <div class="ic">🎭</div>
+          <h3>משחק משולב</h3>
+          <p>חבר אחד או שניים באותו מכשיר, השאר בוטים.</p>
+        </div>
+      </div>
+      <div class="note-strip">
+        הערה: המשחק כאן פועל כדף אחד עצמאי בדפדפן, ללא שרת. לכן מצבי "חברים"/"משולב" הם במתכונת <b>העברת מכשיר</b> (Pass &amp; Play) ולא הזמנה חיה בוואטסאפ עם לינק בזמן אמת — זה ידרוש שרת (למשל Supabase + WebSocket), ואשמח לבנות את זה בנפרד אם תרצה גרסת אונליין אמיתית.
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="screen" id="screen-setup">
+    <div class="setup-box" id="setup-box"></div>
+  </div>
+
+  <!-- GAME -->
+  <div class="screen" id="screen-game">
+    <div class="game-header" id="game-header">
+      <div class="pill round" id="pill-round">סיבוב 1</div>
+      <div class="pill trump" id="pill-trump" style="display:none;"></div>
+      <div class="pill up" id="pill-updown" style="display:none;"></div>
+    </div>
+    <div id="table-wrap">
+      <div id="felt">
+
+        <div class="seat bottom" id="seat-0">
+          <div class="name-badge" id="badge-0"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-0"></span><span class="tricks-badge" id="tricks-0"></span></div></div>
+          <div class="fan" id="fan-0"></div>
+        </div>
+        <div class="seat left" id="seat-1">
+          <div class="fan side" id="fan-1"></div>
+          <div class="name-badge" id="badge-1"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-1"></span><span class="tricks-badge" id="tricks-1"></span></div></div>
+        </div>
+        <div class="seat top" id="seat-2">
+          <div class="name-badge" id="badge-2"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-2"></span><span class="tricks-badge" id="tricks-2"></span></div></div>
+          <div class="fan" id="fan-2"></div>
+        </div>
+        <div class="seat right" id="seat-3">
+          <div class="fan side" id="fan-3"></div>
+          <div class="name-badge" id="badge-3"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-3"></span><span class="tricks-badge" id="tricks-3"></span></div></div>
+        </div>
+
+        <div id="trick-area"></div>
+      </div>
+    </div>
+    <div id="control-panel">
+      <div class="cp-inner" id="cp-inner"></div>
+    </div>
+  </div>
+
+  <!-- round end -->
+  <div class="modal-bg" id="round-end-modal">
+    <div class="round-end-card" id="round-end-content"></div>
+  </div>
+
+  <!-- instructions modal -->
+  <div class="modal-bg" id="instr-modal">
+    <div class="modal">
+      <h2>הוראות משחק וויסט</h2>
+      <div id="instr-body"></div>
+      <button class="tb-btn close-btn" onclick="closeInstructions()">סגירה</button>
+    </div>
+  </div>
+
+  <!-- pass-device gate -->
+  <div class="gate-bg" id="gate">
+    <div class="gs">♠ ♥</div>
+    <h2 id="gate-title"></h2>
+    <p>המכשיר עובר אליך. לחצו "המשך" רק כשאתם רואים את המסך לבד — כדי לא לחשוף את הקלפים לשחקנים האחרים.</p>
+    <button class="btn-primary" style="width:220px;" onclick="gateContinue()">המשך</button>
+  </div>
+
+</div>
+
+<script>
+/* ============================= DATA ============================= */
+const SUITS = [
+  {sym:'♣', name:'תלתן', color:'dark'},
+  {sym:'♦', name:'מעוין', color:'red'},
+  {sym:'♥', name:'לב',   color:'red'},
+  {sym:'♠', name:'עלה',  color:'dark'},
+];
+const RANK_LABEL = r => r<=10 ? String(r) : ({11:'J',12:'Q',13:'K',14:'A'}[r]);
+
+function makeDeck(){
+  const d=[];
+  for(let s=0;s<4;s++) for(let r=2;r<=14;r++) d.push({suit:s, rank:r});
+  return d;
+}
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+function sortHand(h){ return h.slice().sort((a,b)=> a.suit-b.suit || a.rank-b.rank); }
+
+/* ============================= STATE ============================= */
+let S = null; // full game state object
+
+function freshState(){
+  return {
+    mode:'computer',
+    names:['את/ה','בוט 1','בוט 2','בוט 3'],
+    isHuman:[true,false,false,false],
+    hands:[[],[],[],[]],
+    totals:[0,0,0,0],
+    roundNum:1,
+    starter:0,
+    phase:'idle',
+    trumpBid:null,        // {count,suit,player}
+    playerLastBid:[null,null,null,null],
+    activeBidders:[0,1,2,3],
+    passedBidders:[],
+    bidTurn:0,
+    declareOrder:[],
+    declareIdx:0,
+    bids:[null,null,null,null],
+    tricksWon:[0,0,0,0],
+    leader:0,
+    currentTrick:[],      // {player,card}
+    turnInTrick:0,
+    trumpBroken:false,
+    trickHistory:[],
+    revealedHuman:-1,
+    roundType:null,
+    trumpSuit:null,
+    turnSig:'',
+    turnSigTime:Date.now(),
+  };
+}
+
+/* ============================= HEARTBEAT WATCHDOG ============================= */
+/* Catches ANY stuck-bot situation (whatever the cause) and nudges the game forward. */
+function heartbeatCheck(){
+  if(!S) return;
+  if(S.phase!=='trump-bidding' && S.phase!=='trick-bidding' && S.phase!=='playing') return;
+
+  if(S.phase==='playing' && S.currentTrick.length===4){
+    const sig = 'pl:resolving';
+    if(sig!==S.turnSig){ S.turnSig=sig; S.turnSigTime=Date.now(); return; }
+    if(Date.now()-S.turnSigTime < 4000) return;
+    S.turnSigTime = Date.now();
+    console.warn('Heartbeat: trick never resolved, forcing resolveTrick');
+    try{ resolveTrick(); } catch(e){ console.error('Heartbeat resolve failed', e); }
+    return;
+  }
+
+  let p=null;
+  try{
+    if(S.phase==='trump-bidding') p = S.passedBidders.includes(S.bidTurn) ? null : S.bidTurn;
+    else if(S.phase==='trick-bidding') p = S.declareOrder[S.declareIdx];
+    else if(S.phase==='playing') p = currentTrickPlayer();
+  } catch(e){ p=null; }
+
+  if(p===null || p===undefined || S.isHuman[p]){
+    S.turnSigTime = Date.now();
+    S.turnSig = S.phase+':human-or-none';
+    return;
+  }
+  const sig = S.phase+':'+p+':'+(S.phase==='playing'?S.currentTrick.length:'');
+  if(sig!==S.turnSig){
+    S.turnSig = sig;
+    S.turnSigTime = Date.now();
+    return;
+  }
+  if(Date.now()-S.turnSigTime < 4000) return;
+
+  S.turnSigTime = Date.now();
+  console.warn('Heartbeat: bot turn stuck, forcing retry', sig);
+  try{
+    if(S.phase==='trump-bidding') advanceTrumpBidding();
+    else if(S.phase==='trick-bidding') advanceTrickBidding();
+    else if(S.phase==='playing') advancePlaying();
+  } catch(e){ console.error('Heartbeat nudge failed', e); }
+}
+setInterval(heartbeatCheck, 1500);
+
+/* ============================= NAV ============================= */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function goLobby(){
+  showScreen('screen-lobby');
+  hideControlPanel();
+  document.getElementById('round-end-modal').classList.remove('show');
+  document.getElementById('instr-modal').classList.remove('show');
+  document.getElementById('gate').classList.remove('show');
+  gateCallback=null;
+}
+function goHome(){ goLobby(); }
+function newGame(){
+  showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
+}
+function showConfirmBox(title, sub, onYes){
+  const bg = document.createElement('div');
+  bg.className='modal-bg show';
+  bg.style.zIndex=950;
+  bg.innerHTML = `<div class="modal" style="max-width:360px;text-align:center;">
+    <h2 style="font-size:19px;">${title}</h2>
+    <p style="margin:10px 0 18px;">${sub}</p>
+    <button class="tb-btn" id="confirm-yes" style="margin-inline-end:8px;">כן, המשך</button>
+    <button class="tb-btn" id="confirm-no">ביטול</button>
+  </div>`;
+  document.body.appendChild(bg);
+  bg.querySelector('#confirm-yes').onclick = ()=>{ bg.remove(); onYes(); };
+  bg.querySelector('#confirm-no').onclick = ()=>{ bg.remove(); };
+  bg.onclick = (e)=>{ if(e.target===bg) bg.remove(); };
+}
+function showToast(msg, duration=1800){
+  const t=document.createElement('div');
+  t.className='toast-msg';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, duration);
+}
+
+/* ============================= SAVED NAME (persists on this device) ============================= */
+async function getSavedName(){
+  try{
+    const res = await window.storage.get('whist_player_name', false);
+    return (res && res.value) ? res.value : '';
+  } catch(e){
+    return '';
+  }
+}
+async function saveMyName(name){
+  try{
+    await window.storage.set('whist_player_name', name, false);
+  } catch(e){ /* storage unavailable, ignore */ }
+}
+
+/* ============================= LOBBY -> SETUP ============================= */
+async function chooseMode(mode){
+  S = freshState();
+  S.mode = mode;
+  const myName = (await getSavedName()) || 'את/ה';
+  const box = document.getElementById('setup-box');
+  if(mode==='computer'){
+    box.innerHTML = `
+      <h2>משחק מול המחשב</h2>
+      <div class="field"><label>השם שלך</label><input id="inp-name" value="${myName}" maxlength="12"></div>
+      <button class="btn-primary" onclick="startComputerGame()">התחל משחק</button>
+      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
+  } else if(mode==='friends'){
+    box.innerHTML = `
+      <h2>משחק מול חברים (העברת מכשיר)</h2>
+      <div class="field"><label>כמה שחקנים סה"כ? (כולל אותך)</label>
+        <select id="inp-count"><option value="4">4 שחקנים</option><option value="3">3 שחקנים (+ בוט אחד)</option></select>
+      </div>
+      <div id="name-fields"></div>
+      <button class="btn-primary" onclick="startFriendsGame()">התחל משחק</button>
+      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
+    renderNameFields(4, myName);
+    document.getElementById('inp-count').onchange = e=>renderNameFields(parseInt(e.target.value), myName);
+  } else if(mode==='mixed'){
+    box.innerHTML = `
+      <h2>משחק משולב</h2>
+      <div class="field"><label>כמה חברים באותו מכשיר? (מלבדך)</label>
+        <select id="inp-count"><option value="1">חבר אחד (+ 2 בוטים)</option><option value="2">שני חברים (+ בוט אחד)</option></select>
+      </div>
+      <div id="name-fields"></div>
+      <button class="btn-primary" onclick="startMixedGame()">התחל משחק</button>
+      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
+    renderMixedNameFields(1, myName);
+    document.getElementById('inp-count').onchange = e=>renderMixedNameFields(parseInt(e.target.value), myName);
+  }
+  showScreen('screen-setup');
+}
+function renderNameFields(totalHumans, myName){
+  const wrap = document.getElementById('name-fields');
+  let html = `<div class="field"><label>השם שלך</label><input id="inp-name-0" value="${myName||'את/ה'}" maxlength="12"></div>`;
+  for(let i=1;i<totalHumans;i++){
+    html += `<div class="field"><label>שם שחקן ${i+1}</label><input id="inp-name-${i}" value="חבר ${i+1}" maxlength="12"></div>`;
+  }
+  wrap.innerHTML = html;
+  wrap.dataset.total = totalHumans;
+}
+function renderMixedNameFields(friendCount, myName){
+  const wrap = document.getElementById('name-fields');
+  let html = `<div class="field"><label>השם שלך</label><input id="inp-name-0" value="${myName||'את/ה'}" maxlength="12"></div>`;
+  for(let i=1;i<=friendCount;i++){
+    html += `<div class="field"><label>שם חבר ${i}</label><input id="inp-name-${i}" value="חבר ${i}" maxlength="12"></div>`;
+  }
+  wrap.innerHTML = html;
+  wrap.dataset.friends = friendCount;
+}
+function startComputerGame(){
+  S.names[0] = document.getElementById('inp-name').value.trim() || 'את/ה';
+  S.isHuman = [true,false,false,false];
+  saveMyName(S.names[0]);
+  beginMatch();
+}
+function startFriendsGame(){
+  const total = parseInt(document.getElementById('inp-count').value);
+  for(let i=0;i<total;i++){
+    S.names[i] = document.getElementById('inp-name-'+i).value.trim() || ('שחקן '+(i+1));
+    S.isHuman[i] = true;
+  }
+  for(let i=total;i<4;i++){ S.isHuman[i]=false; S.names[i] = 'בוט '+(i-total+1); }
+  saveMyName(S.names[0]);
+  beginMatch();
+}
+function startMixedGame(){
+  const friends = parseInt(document.getElementById('inp-count').value);
+  S.names[0] = document.getElementById('inp-name-0').value.trim() || 'את/ה';
+  S.isHuman[0] = true;
+  for(let i=1;i<=friends;i++){
+    S.names[i] = document.getElementById('inp-name-'+i).value.trim() || ('חבר '+i);
+    S.isHuman[i] = true;
+  }
+  for(let i=friends+1;i<4;i++){ S.isHuman[i]=false; S.names[i]='בוט '+(i-friends); }
+  saveMyName(S.names[0]);
+  beginMatch();
+}
+function beginMatch(){
+  S.totals=[0,0,0,0];
+  S.roundNum=1;
+  S.starter=0;
+  showScreen('screen-game');
+  for(let i=0;i<4;i++) document.getElementById('badge-'+i).querySelector('.nm').textContent = S.names[i];
+  startRound();
+}
+
+/* ============================= ROUND SETUP ============================= */
+function startRound(){
+  let deck = shuffle(makeDeck());
+  S.hands = [ sortHand(deck.slice(0,13)), sortHand(deck.slice(13,26)), sortHand(deck.slice(26,39)), sortHand(deck.slice(39,52)) ];
+  S.trumpBid=null;
+  S.playerLastBid=['','','',''];
+  S.activeBidders=[0,1,2,3];
+  S.passedBidders=[];
+  S.bidTurn = S.starter;
+  S.bids=[null,null,null,null];
+  S.tricksWon=[0,0,0,0];
+  S.currentTrick=[];
+  S.trumpBroken=false;
+  S.trickHistory=[];
+  S.roundType=null;
+  S.revealedHuman=-1;
+  document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
+  document.getElementById('pill-trump').style.display='none';
+  document.getElementById('pill-updown').style.display='none';
+  document.getElementById('tb-trump').style.display='none';
+  renderTable();
+  S.phase='trump-bidding';
+  advanceTrumpBidding();
+}
+
+/* ============================= RENDER: TABLE ============================= */
+function renderTable(){
+  for(let p=0;p<4;p++){
+    const badge = document.getElementById('badge-'+p);
+    badge.classList.toggle('active', isCurrentActor(p));
+    if(S.phase==='trump-bidding'){
+      document.getElementById('bid-'+p).textContent = S.playerLastBid[p] || '';
+    } else {
+      document.getElementById('bid-'+p).textContent = (S.bids[p]!==null && S.bids[p]!==undefined) ? ('הכריז/ה: '+S.bids[p]) : (S.playerLastBid[p]||'');
+    }
+    document.getElementById('tricks-'+p).textContent = (S.phase==='playing') ? ('לקח/ה: '+S.tricksWon[p]) : '';
+    const fan = document.getElementById('fan-'+p);
+    fan.innerHTML='';
+    if(p===0){
+      renderOwnFan(fan, p);
+    } else {
+      renderBackFan(fan, p, S.hands[p].length);
+    }
+  }
+  renderTrickArea();
+}
+function isCurrentActor(p){
+  if(S.phase==='trump-bidding') return S.bidTurn===p && !S.passedBidders.includes(p) && S.activeBidders.includes(p);
+  if(S.phase==='trick-bidding') return S.declareOrder[S.declareIdx]===p;
+  if(S.phase==='playing') return S.currentTrick.length<4 && currentTrickPlayer()===p;
+  return false;
+}
+function currentTrickPlayer(){
+  return (S.leader + S.turnInTrick) % 4;
+}
+function suitClass(s){ return SUITS[s].color; }
+function cardHTML(c, extraClass){
+  return `<div class="card ${suitClass(c.suit)} ${extraClass||''}">
+    <div class="r-top">${RANK_LABEL(c.rank)}<span class="s">${SUITS[c.suit].sym}</span></div>
+    <div class="center-sym">${SUITS[c.suit].sym}</div>
+    <div class="r-bot">${RANK_LABEL(c.rank)}<span class="s">${SUITS[c.suit].sym}</span></div>
+  </div>`;
+}
+function renderOwnFan(fan, p){
+  const hand = S.hands[p];
+  const n = hand.length;
+  if(n===0) return;
+  const legal = getLegalCardsForHuman();
+
+  // Measure real available space and real card size (no hardcoded pixel assumptions)
+  const containerW = fan.clientWidth || 300;
+  const containerH = fan.clientHeight || 100;
+  const probe = document.createElement('div');
+  probe.className='card'; probe.style.visibility='hidden'; probe.style.position='absolute';
+  fan.appendChild(probe);
+  const cardW = probe.offsetWidth || 60;
+  fan.removeChild(probe);
+
+  const maxSpread = cardW*0.86;
+  const spread = n>1 ? Math.min(maxSpread, (containerW-cardW)/(n-1)) : 0;
+  const totalWidth = cardW + spread*(n-1);
+  const startX = Math.max(0, (containerW-totalWidth)/2);
+  const mid = (n-1)/2;
+  const maxAngle = Math.min(26, 220/n); // total half-angle range, tames itself for larger hands
+  const arcLift = Math.min(16, containerH*0.18);
+  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===0 && S.isHuman[0]);
+
+  // Click zones are derived from the ACTUAL visual card positions (midpoints between
+  // neighboring cards), not an independent even split — so they always stay aligned
+  // with what's shown, regardless of how much the hand has shrunk.
+  const boundaries = [0];
+  for(let k=1;k<n;k++){
+    boundaries.push(startX + (k-1)*spread + (cardW+spread)/2);
+  }
+  boundaries.push(containerW);
+
+  hand.forEach((c,i)=>{
+    const div=document.createElement('div');
+    const isLegal = legal===null ? true : legal.some(lc=>lc.suit===c.suit && lc.rank===c.rank);
+    const cls = isPlayable ? (isLegal?'legal':'illegal') : '';
+    div.innerHTML = cardHTML(c, cls);
+    const el = div.firstElementChild;
+    const offsetFromMid = mid ? (i-mid)/mid : 0; // -1..1
+    const angle = offsetFromMid * maxAngle;
+    const lift = arcLift*(1-offsetFromMid*offsetFromMid); // arch: center cards lifted a bit
+    el.style.left = (startX + i*spread)+'px';
+    el.style.top = (10 - lift)+'px';
+    el.style.transformOrigin = '50% 120%';
+    el.style.transform = `rotate(${angle.toFixed(1)}deg)`;
+    el.style.zIndex = i;
+    el.style.pointerEvents = 'none'; // the invisible hit-zone below handles interaction, not the (overlapped) visual card
+    fan.appendChild(el);
+
+    if(cls==='legal'){
+      const hit = document.createElement('div');
+      hit.style.position='absolute';
+      hit.style.left = boundaries[i]+'px';
+      hit.style.top = '0px';
+      hit.style.width = (boundaries[i+1]-boundaries[i])+'px';
+      hit.style.height = containerH+'px';
+      hit.style.zIndex = 300+i;
+      hit.style.cursor='pointer';
+      hit.style.background='transparent';
+      hit.onclick = ()=>playHumanCard(c);
+      hit.addEventListener('mouseenter', ()=>{ el.style.transform = `rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; });
+      hit.addEventListener('mouseleave', ()=>{ el.style.transform = `rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; });
+      fan.appendChild(hit);
+    }
+  });
+}
+function renderBackFan(fan, p, n){
+  if(n===0) return;
+  const vertical = (p===1||p===3);
+  const probe = document.createElement('div');
+  probe.className='card back'; probe.style.visibility='hidden'; probe.style.position='absolute';
+  fan.appendChild(probe);
+  const cardW = probe.offsetWidth || 50;
+  const cardH = probe.offsetHeight || 72;
+  fan.removeChild(probe);
+
+  if(vertical){
+    const containerH = fan.clientHeight || 220;
+    const spread = n>1 ? Math.min(cardH*0.32, (containerH-cardH)/(n-1)) : 0;
+    const totalH = cardH + spread*(n-1);
+    const startY = Math.max(0,(containerH-totalH)/2);
+    for(let i=0;i<n;i++){
+      const div=document.createElement('div');
+      div.className='card back';
+      div.style.left='2px';
+      div.style.top=(startY+i*spread)+'px';
+      div.style.zIndex=i;
+      fan.appendChild(div);
+    }
+  } else {
+    const containerW = fan.clientWidth || 300;
+    const spread = n>1 ? Math.min(cardW*0.5, (containerW-cardW)/(n-1)) : 0;
+    const totalW = cardW + spread*(n-1);
+    const startX = Math.max(0,(containerW-totalW)/2);
+    for(let i=0;i<n;i++){
+      const div=document.createElement('div');
+      div.className='card back';
+      div.style.left=(startX+i*spread)+'px';
+      div.style.top='8px';
+      div.style.zIndex=i;
+      fan.appendChild(div);
+    }
+  }
+}
+function renderTrickArea(){
+  const area = document.getElementById('trick-area');
+  area.innerHTML='';
+  const positions = { 0:{left:'50%',top:'66%'}, 1:{left:'22%',top:'50%'}, 2:{left:'50%',top:'30%'}, 3:{left:'78%',top:'50%'} };
+  S.currentTrick.forEach(pc=>{
+    const pos = positions[pc.player];
+    const wrap = document.createElement('div');
+    wrap.className='played-card';
+    wrap.style.left = pos.left; wrap.style.top=pos.top; wrap.style.transform='translate(-50%,-50%)';
+    wrap.innerHTML = cardHTML(pc.card,'');
+    area.appendChild(wrap);
+  });
+}
+
+/* ============================= HELPERS: strength ============================= */
+function highCardPts(c){ return c.rank===14?4:c.rank===13?3:c.rank===12?2:c.rank===11?1:c.rank===10?0.5:0; }
+function suitScore(hand, suit){
+  const cards = hand.filter(c=>c.suit===suit);
+  const len = cards.length;
+  const pts = cards.reduce((s,c)=>s+highCardPts(c),0);
+  return len*1.4 + pts;
+}
+function bestSuitFor(hand){
+  let best=0, bestScore=-1;
+  for(let s=0;s<4;s++){ const sc=suitScore(hand,s); if(sc>bestScore){bestScore=sc; best=s;} }
+  return {suit:best, score:bestScore};
+}
+function estimateTricks(hand, trumpSuit){
+  let est=0;
+  // Trump cards: only the top few in length are realistically likely to win a trick.
+  const trumpCards = hand.filter(c=>c.suit===trumpSuit).sort((a,b)=>b.rank-a.rank);
+  const trumpWeights = [0.9,0.6,0.4,0.25,0.15,0.1];
+  trumpCards.forEach((c,i)=>{ est += trumpWeights[i] !== undefined ? trumpWeights[i] : 0.05; });
+  // Non-trump: only genuinely strong cards (mainly Aces, sometimes a lone King) are likely winners.
+  const bySuit = {};
+  hand.forEach(c=>{ if(c.suit!==trumpSuit){ (bySuit[c.suit]=bySuit[c.suit]||[]).push(c); } });
+  Object.values(bySuit).forEach(cards=>{
+    cards.sort((a,b)=>b.rank-a.rank);
+    cards.forEach((c,i)=>{
+      if(c.rank===14) est += 0.6;
+      else if(c.rank===13 && i===0) est += 0.3;
+      else if(c.rank===13) est += 0.12;
+      else if(c.rank===12 && i<=1) est += 0.08;
+    });
+  });
+  return Math.max(0, Math.min(13, est));
+}
+
+/* ============================= TRUMP BIDDING ============================= */
+function nextActiveBidder(from){
+  let p = from;
+  for(let k=0;k<8;k++){
+    p = (p+1)%4;
+    if(!S.passedBidders.includes(p)) return p;
+  }
+  return p;
+}
+function advanceTrumpBidding(){
+  renderTable();
+  const remaining = [0,1,2,3].filter(p=>!S.passedBidders.includes(p));
+  if(remaining.length===1 && S.trumpBid){
+    finishTrumpBidding(remaining[0]);
+    return;
+  }
+  if(remaining.length===0){
+    hideControlPanel();
+    showToast('כולם עברו (PASS) — מחלקים מחדש.');
+    setTimeout(()=>{ startRound(); }, 1200);
+    return;
+  }
+  const p = S.bidTurn;
+  if(S.passedBidders.includes(p)){
+    S.bidTurn = nextActiveBidder(p);
+    advanceTrumpBidding();
+    return;
+  }
+  if(S.isHuman[p]){
+    gateFor(p, ()=>showTrumpBidUI(p));
+  } else {
+    hideControlPanel();
+    setTimeout(()=>botTrumpBid(p), 750);
+  }
+}
+function minCountForSuit(suit){
+  if(!S.trumpBid) return 5;
+  if(suit>S.trumpBid.suit) return S.trumpBid.count;
+  return S.trumpBid.count+1;
+}
+let chosenBidSuit = null;
+function showTrumpBidUI(p){
+  chosenBidSuit = null;
+  showControlPanel();
+  const cp = document.getElementById('cp-inner');
+  let suitBtns='';
+  for(let s=0;s<4;s++){
+    const min = minCountForSuit(s);
+    suitBtns += `<button class="opt-btn" style="color:${SUITS[s].color==='red'?'#e77a6d':'#faf4e6'}" onclick="selectBidSuit(${s})" id="sbtn-${s}">${SUITS[s].sym} ${SUITS[s].name}<small>מינ' ${min}</small></button>`;
+  }
+  cp.innerHTML = `
+    <h4>${S.names[p]} — הכרזת שליט ${S.trumpBid? '(נוכחי: '+S.trumpBid.count+' '+SUITS[S.trumpBid.suit].sym+' ע"י '+S.names[S.trumpBid.player]+')':''}</h4>
+    <div class="suit-choice">${suitBtns}</div>
+    <div class="count-row" id="count-row" style="display:none;">
+      <span>מספר לקיחות:</span><input type="number" id="bid-count-inp" />
+      <button class="opt-btn" onclick="confirmTrumpBid(${p})">הצע</button>
+    </div>
+    <div class="opt-row"><button class="opt-btn pass" onclick="humanTrumpPass(${p})">PASS</button></div>
+  `;
+}
+function selectBidSuit(s){
+  chosenBidSuit = s;
+  document.querySelectorAll('.suit-choice .opt-btn').forEach((b,i)=>b.classList.toggle('chosen', i===s));
+  document.getElementById('count-row').style.display='flex';
+  const inp = document.getElementById('bid-count-inp');
+  inp.min = minCountForSuit(s); inp.max=13; inp.value=minCountForSuit(s);
+}
+function confirmTrumpBid(p){
+  if(chosenBidSuit===null){ showToast('בחר/י צורה קודם'); return; }
+  const count = parseInt(document.getElementById('bid-count-inp').value);
+  const min = minCountForSuit(chosenBidSuit);
+  if(isNaN(count) || count<min || count>13){ showToast('מספר לא חוקי — נדרש לפחות '+min); return; }
+  S.trumpBid = {count, suit:chosenBidSuit, player:p};
+  S.playerLastBid[p] = count+' '+SUITS[chosenBidSuit].sym;
+  chosenBidSuit=null;
+  S.bidTurn = nextActiveBidder(p);
+  hideControlPanel();
+  advanceTrumpBidding();
+}
+function humanTrumpPass(p){
+  S.passedBidders.push(p);
+  S.playerLastBid[p] = 'PASS';
+  chosenBidSuit=null;
+  S.bidTurn = nextActiveBidder(p);
+  hideControlPanel();
+  advanceTrumpBidding();
+}
+function botTrumpBid(p){
+  const hand = S.hands[p];
+  const {suit,score} = bestSuitFor(hand);
+  const potential = Math.max(0, Math.min(13, Math.round(score/1.6)));
+  let bidMade=false;
+  if(!S.trumpBid){
+    if(potential>=5 && Math.random()<0.8){
+      S.trumpBid = {count:5, suit, player:p};
+      S.playerLastBid[p] = '5 '+SUITS[suit].sym;
+      bidMade=true;
+    }
+  } else {
+    const sameCount = S.trumpBid.count;
+    let candidate=null;
+    if(suit>S.trumpBid.suit && potential>=sameCount){
+      candidate = {count:sameCount, suit};
+    } else if(potential>=sameCount+1){
+      candidate = {count:sameCount+1, suit};
+    }
+    if(candidate && Math.random()<0.75){
+      S.trumpBid = {count:candidate.count, suit:candidate.suit, player:p};
+      S.playerLastBid[p] = candidate.count+' '+SUITS[candidate.suit].sym;
+      bidMade=true;
+    }
+  }
+  if(!bidMade){
+    S.passedBidders.push(p);
+    S.playerLastBid[p] = 'PASS';
+  }
+  S.bidTurn = nextActiveBidder(p);
+  advanceTrumpBidding();
+}
+function finishTrumpBidding(winner){
+  S.trumpSuit = S.trumpBid.suit;
+  const pillTrump = document.getElementById('pill-trump');
+  pillTrump.style.display='inline-block';
+  pillTrump.textContent = 'שליט: '+SUITS[S.trumpSuit].sym+' '+SUITS[S.trumpSuit].name+' ('+S.names[winner]+')';
+  const tbTrump = document.getElementById('tb-trump');
+  tbTrump.style.display='inline-block';
+  tbTrump.textContent = SUITS[S.trumpSuit].sym+' שליט';
+  S.phase='trick-bidding';
+  S.declareOrder = [0,1,2,3].map(i=>(winner+i)%4);
+  S.declareIdx = 0;
+  hideControlPanel();
+  setTimeout(()=>{
+    renderTable();
+    advanceTrickBidding();
+  }, 400);
+}
+
+/* ============================= TRICK (TAKES) BIDDING ============================= */
+function advanceTrickBidding(){
+  renderTable();
+  if(S.declareIdx>=4){
+    const sum = S.bids.reduce((a,b)=>a+b,0);
+    S.roundType = sum>13?'UP':'UNDER';
+    const pill = document.getElementById('pill-updown');
+    pill.style.display='inline-block';
+    pill.textContent = S.roundType==='UP' ? 'סיבוב UP ⬆' : 'סיבוב UNDER ⬇';
+    pill.className = 'pill '+(S.roundType==='UP'?'up':'under');
+    hideControlPanel();
+    showDeclareSummary(()=>{
+      S.phase='playing';
+      S.leader = S.trumpBid.player;
+      S.turnInTrick=0;
+      S.currentTrick=[];
+      setTimeout(()=>advancePlaying(), 300);
+    });
+    return;
+  }
+  const p = S.declareOrder[S.declareIdx];
+  if(S.isHuman[p]){
+    gateFor(p, ()=>showDeclareUI(p));
+  } else {
+    hideControlPanel();
+    setTimeout(()=>botDeclare(p), 700);
+  }
+}
+function showDeclareSummary(cb){
+  const felt = document.getElementById('felt');
+  const box = document.createElement('div');
+  box.className='declare-summary';
+  box.innerHTML = `<div class="ds-title">${S.roundType==='UP'?'UP ⬆ — מחסור בלקיחות':'UNDER ⬇ — עודף לקיחות'}</div>
+    <div class="ds-rows">${[0,1,2,3].map(p=>`<div>${S.names[p]}: <b style="color:var(--gold-bright)">${S.bids[p]}</b></div>`).join('')}</div>`;
+  felt.appendChild(box);
+  setTimeout(()=>{ box.remove(); cb(); }, 1900);
+}
+function forbiddenLastValue(){
+  if(S.declareIdx!==3) return null;
+  const sumSoFar = S.declareOrder.slice(0,3).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
+  const forbidden = 13-sumSoFar;
+  return (forbidden>=0 && forbidden<=13) ? forbidden : null;
+}
+function showDeclareUI(p){
+  showControlPanel();
+  const cp = document.getElementById('cp-inner');
+  const isTrumpWinner = (p===S.trumpBid.player);
+  const minVal = isTrumpWinner ? S.trumpBid.count : 0;
+  const forbid = forbiddenLastValue();
+  let btns='';
+  for(let v=0; v<=13; v++){
+    const disabled = (v<minVal) || (forbid!==null && v===forbid);
+    btns += `<button class="opt-btn" ${disabled?'disabled':''} onclick="confirmDeclare(${p},${v})">${v}</button>`;
+  }
+  cp.innerHTML = `
+    <h4>${S.names[p]} — כמה לקיחות תיקח/י? (שליט: ${SUITS[S.trumpSuit].sym} ${SUITS[S.trumpSuit].name})${isTrumpWinner?' — מינימום '+minVal:''}${forbid!==null?' — אסור לבחור '+forbid:''}</h4>
+    <div class="opt-row">${btns}</div>
+  `;
+}
+function confirmDeclare(p, v){
+  S.bids[p]=v;
+  S.declareIdx++;
+  hideControlPanel();
+  advanceTrickBidding();
+}
+function botDeclare(p){
+  const isTrumpWinner = (p===S.trumpBid.player);
+  let v;
+  if(isTrumpWinner){
+    v = S.trumpBid.count;
+  } else {
+    const est = estimateTricks(S.hands[p], S.trumpSuit);
+    v = Math.max(0, Math.min(13, Math.round(est)));
+
+    // Stay aware of the table: nudge toward a total near 13, but only when the
+    // hand's own estimate has genuine wiggle room (a near-half fraction), never
+    // overriding a hand that clearly supports its rounded bid.
+    const declaredSoFar = S.declareOrder.slice(0, S.declareIdx).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
+    const remainingAfterThis = 4 - (S.declareIdx+1);
+    const projectedTotal = declaredSoFar + v + remainingAfterThis*3.25;
+    const diff = projectedTotal - 13;
+    const frac = est - Math.floor(est);
+    if(diff > 3 && frac < 0.65 && v>0){ v -= 1; }
+    else if(diff < -3 && frac > 0.35 && v<13){ v += 1; }
+  }
+  const forbid = forbiddenLastValue();
+  if(forbid!==null && v===forbid){
+    v = v<13 ? v+1 : v-1;
+  }
+  v = Math.max(isTrumpWinner?S.trumpBid.count:0, Math.min(13, v));
+  if(forbid!==null && v===forbid) v = v>0? v-1 : v+1;
+  S.bids[p]=v;
+  S.declareIdx++;
+  advanceTrickBidding();
+}
+
+/* ============================= PLAYING ============================= */
+function legalCardsFor(p){
+  const hand = S.hands[p];
+  if(S.currentTrick.length===0){
+    const nonTrump = hand.filter(c=>c.suit!==S.trumpSuit);
+    if(!S.trumpBroken && nonTrump.length>0) return nonTrump;
+    return hand.slice();
+  } else {
+    const ledSuit = S.currentTrick[0].card.suit;
+    const followers = hand.filter(c=>c.suit===ledSuit);
+    if(followers.length>0) return followers;
+    return hand.slice();
+  }
+}
+function getLegalCardsForHuman(){
+  if(S.phase!=='playing') return null;
+  if(currentTrickPlayer()!==0) return null;
+  if(!S.isHuman[0]) return null;
+  return legalCardsFor(0);
+}
+function advancePlaying(){
+  renderTable();
+  const p = currentTrickPlayer();
+  if(S.isHuman[p]){
+    gateFor(p, ()=>{ renderTable(); showPlayHint(p); });
+  } else {
+    hideControlPanel();
+    clearTimeout(window.__botWatchdog);
+    window.__botWatchdog = setTimeout(()=>{
+      try{ botPlay(p); } catch(err){ console.error('botPlay failed', err); }
+    }, 800);
+  }
+}
+function showPlayHint(p){
+  showControlPanel();
+  document.getElementById('cp-inner').innerHTML = `<h4>${S.names[p]} — תורך לזרוק קלף (לחצ/י על קלף זוהר ביד שלמטה)</h4>`;
+}
+function playHumanCard(c){
+  playCard(0,c);
+}
+function playCard(p, c){
+  const hand=S.hands[p];
+  const idx = hand.findIndex(x=>x.suit===c.suit && x.rank===c.rank);
+  if(idx===-1) return;
+  hand.splice(idx,1);
+  S.currentTrick.push({player:p, card:c});
+  if(c.suit===S.trumpSuit) S.trumpBroken=true;
+  hideControlPanel();
+  S.turnInTrick++;
+  renderTable();
+  if(S.currentTrick.length===4){
+    setTimeout(resolveTrick, 900);
+  } else {
+    setTimeout(advancePlaying, 500);
+  }
+}
+function botPlay(p){
+  const legal = legalCardsFor(p);
+  let choice;
+  if(S.currentTrick.length===0){
+    const needMore = S.tricksWon[p] < S.bids[p];
+    const sorted = legal.slice().sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
+
+    // UNDER rounds: everyone tries to shed tricks, so don't lead strong early — probe first.
+    // If someone bid 0, there's a tacit agreement the table leads low cards early to try
+    // to strip out and expose that player's weak suits, forcing them into an unwanted trick.
+    const iAmZero = (S.bids[p]===0);
+    const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0) : [];
+    const earlyInRound = S.trickHistory.length < 8;
+
+    if(S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
+      choice = sorted[0]; // hunt: lead the lowest card, regardless of own need
+    } else if(needMore){
+      // UP rounds especially reward locking in tricks early with strong cards.
+      const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
+      choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
+    } else {
+      choice = sorted[0];
+    }
+  } else {
+    const ledSuit = S.currentTrick[0].card.suit;
+    let winning = S.currentTrick[0];
+    for(const pc of S.currentTrick){
+      if(pc.card.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) winning=pc;
+      else if(pc.card.suit===winning.card.suit && pc.card.rank>winning.card.rank) winning=pc;
+    }
+    const needMore = S.tricksWon[p] < S.bids[p];
+    if(needMore){
+      let winners = legal.filter(c=>{
+        if(c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) return true;
+        if(c.suit===winning.card.suit && c.rank>winning.card.rank) return true;
+        return false;
+      }).sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
+      choice = winners.length>0 ? winners[0] : legal.slice().sort((a,b)=>a.rank-b.rank)[0];
+    } else {
+      let losers = legal.filter(c=>{
+        if(c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) return false;
+        if(c.suit===winning.card.suit && c.rank>winning.card.rank) return false;
+        return true;
+      }).sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
+      choice = losers.length>0 ? losers[0] : legal.slice().sort((a,b)=>a.rank-b.rank)[0];
+    }
+  }
+  playCard(p, choice);
+}
+function resolveTrick(){
+  let winnerPlayer;
+  try{
+    let winning = S.currentTrick[0];
+    for(const pc of S.currentTrick){
+      if(pc.card.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) winning=pc;
+      else if(pc.card.suit===winning.card.suit && pc.card.rank>winning.card.rank) winning=pc;
+    }
+    winnerPlayer = winning.player;
+  } catch(err){
+    console.error('Trick winner calculation failed, defaulting to leader', err);
+    winnerPlayer = S.leader;
+  }
+
+  try{
+    const badge = document.getElementById('badge-'+winnerPlayer);
+    if(badge) badge.classList.add('trick-winner');
+    const area = document.getElementById('trick-area');
+    const ann = document.createElement('div');
+    ann.className='trick-winner-ann';
+    ann.textContent = '🏆 '+S.names[winnerPlayer]+' לוקח/ת את הלקיחה';
+    if(area) area.appendChild(ann);
+  } catch(err){ console.error('Trick announcement failed', err); }
+
+  let finished = false;
+  const finishTrick = ()=>{
+    if(finished) return;
+    finished = true;
+    clearTimeout(window.__trickWatchdog);
+    const badge = document.getElementById('badge-'+winnerPlayer);
+    if(badge) badge.classList.remove('trick-winner');
+    S.tricksWon[winnerPlayer]++;
+    S.trickHistory.push({cards:S.currentTrick, winner:winnerPlayer});
+    S.leader = winnerPlayer;
+    S.turnInTrick = 0;
+    S.currentTrick=[];
+    renderTable();
+    if(S.hands[0].length===0){
+      setTimeout(finishRound, 700);
+    } else {
+      setTimeout(advancePlaying, 700);
+    }
+  };
+
+  try{
+    animateTrickToWinner(winnerPlayer, finishTrick);
+  } catch(err){
+    console.error('Trick animation failed, skipping straight to next trick', err);
+    finishTrick();
+  }
+  // Safety net: if for any reason the animation never calls back, force the game to continue.
+  clearTimeout(window.__trickWatchdog);
+  window.__trickWatchdog = setTimeout(()=>{
+    if(!finished){ console.warn('Trick watchdog triggered — forcing resolution'); finishTrick(); }
+  }, 2600);
+}
+function animateTrickToWinner(winnerPlayer, cb){
+  try{
+    const area = document.getElementById('trick-area');
+    const seatEl = document.getElementById('seat-'+winnerPlayer);
+    if(!area || !seatEl){ setTimeout(cb, 300); return; }
+    const seatRect = seatEl.getBoundingClientRect();
+    const targetX = seatRect.left + seatRect.width/2;
+    const targetY = seatRect.top + seatRect.height/2;
+    const cards = area.querySelectorAll('.played-card');
+    if(cards.length===0){ setTimeout(cb, 300); return; }
+    cards.forEach((el,i)=>{
+      // Each card starts at a DIFFERENT spot (top/left/right/bottom), so each needs
+      // its own path to the winner — a single shared offset would just slide the
+      // whole cross-shaped arrangement sideways instead of converging it.
+      const cardRect = el.getBoundingClientRect();
+      const cardCenterX = cardRect.left + cardRect.width/2;
+      const cardCenterY = cardRect.top + cardRect.height/2;
+      const dx = targetX - cardCenterX;
+      const dy = targetY - cardCenterY;
+      const stackDx = i*2.5;
+      const stackDy = -i*2.5;
+      const stackAngle = (i-1.5)*4;
+      el.style.transition = 'transform .55s cubic-bezier(.35,0,.25,1)';
+      el.style.zIndex = 50+i;
+      el.style.transform = `translate(-50%,-50%) translate(${dx+stackDx}px, ${dy+stackDy}px) rotate(${stackAngle}deg) scale(.5)`;
+    });
+    // hold briefly as a settled pile, then fade the whole pile together
+    setTimeout(()=>{
+      cards.forEach(el=>{ el.style.transition='opacity .35s ease'; el.style.opacity='0'; });
+    }, 700);
+    setTimeout(cb, 1050);
+  } catch(err){
+    console.error('animateTrickToWinner error', err);
+    setTimeout(cb, 300);
+  }
+}
+
+/* ============================= SCORING ============================= */
+function finishRound(){
+  hideControlPanel();
+  const results = [];
+  for(let p=0;p<4;p++){
+    const bid = S.bids[p], won = S.tricksWon[p];
+    let pts;
+    let made = (bid===won);
+    if(made){
+      if(bid===0){
+        pts = (S.roundType==='UP') ? 20 : 50;
+      } else {
+        pts = bid*bid + 10;
+      }
+    } else {
+      if(bid===0){
+        pts = (S.roundType==='UP') ? -20 : -50;
+      } else {
+        pts = -10*Math.abs(bid-won);
+      }
+    }
+    S.totals[p]+=pts;
+    results.push({p, bid, won, pts, made});
+  }
+  let rows = results.map(r=>`<tr>
+    <td>${S.names[r.p]}</td><td>${r.bid}</td><td>${r.won}</td>
+    <td class="${r.made?'win-tag':'lose-tag'}">${r.pts>0?'+':''}${r.pts}</td>
+    <td>${S.totals[r.p]}</td>
+  </tr>`).join('');
+  document.getElementById('round-end-content').innerHTML = `
+    <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum} — ${S.roundType==='UP'?'UP ⬆':'UNDER ⬇'} (שליט ${SUITS[S.trumpSuit].sym} ${SUITS[S.trumpSuit].name})</h3>
+    <table class="score-table">
+      <tr><th>שחקן</th><th>הימור</th><th>לקח</th><th>ניקוד</th><th>סה"כ</th></tr>
+      ${rows}
+    </table>
+    <button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
+    <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>
+  `;
+  document.getElementById('round-end-modal').classList.add('show');
+}
+function closeRoundEnd(){ document.getElementById('round-end-modal').classList.remove('show'); }
+function nextRound(){
+  S.roundNum++;
+  S.starter = (S.starter+1)%4;
+  startRound();
+}
+
+/* ============================= CONTROL PANEL / GATE ============================= */
+function showControlPanel(){
+  document.getElementById('control-panel').classList.add('show');
+}
+function hideControlPanel(){
+  document.getElementById('control-panel').classList.remove('show');
+  document.getElementById('cp-inner').innerHTML='';
+}
+
+let gateCallback=null;
+function gateFor(p, cb){
+  if(S.mode==='computer' || S.revealedHuman===p){
+    cb();
+    return;
+  }
+  gateCallback=cb;
+  document.getElementById('gate-title').textContent = 'תור של '+S.names[p];
+  document.getElementById('gate').classList.add('show');
+}
+function gateContinue(){
+  document.getElementById('gate').classList.remove('show');
+  let p;
+  if(S.phase==='trump-bidding') p=S.bidTurn;
+  else if(S.phase==='trick-bidding') p=S.declareOrder[S.declareIdx];
+  else if(S.phase==='playing') p=currentTrickPlayer();
+  S.revealedHuman = p;
+  renderTable();
+  if(gateCallback){ const cb=gateCallback; gateCallback=null; cb(); }
+}
+
+/* ============================= INSTRUCTIONS ============================= */
+function openInstructions(){
+  document.getElementById('instr-body').innerHTML = `
+    <h4>מטרת המשחק</h4>
+    <p>4 שחקנים, 13 קלפים לכל אחד. המטרה: לחזות בדיוק כמה לקיחות תבצעו, ולקבל נקודות בהתאם.</p>
+    <h4>שלב 1 — קביעת השליט</h4>
+    <p>סדר הצורות מהחלש לחזק: ${SUITS.map(s=>s.sym+' '+s.name).join(' ⬅ ')}. כל שחקן בתורו מציע "X לקיחות בצורה מסוימת" (מינ' 5), הצעה הבאה חייבת להיות גבוהה יותר (מספר גבוה יותר, או אותו מספר בצורה חזקה יותר). מי שאין לו הצעה — אומר PASS. מי שנשאר אחרון קובע את השליט, ומחויב להמר לפחות את המינימום שקבע.</p>
+    <h4>שלב 2 — הימור לקיחות</h4>
+    <p>כל שחקן מצהיר כמה לקיחות בדיוק הוא יקח. השחקן שקבע את השליט מצהיר ראשון (חייב לפחות את המספר שקבע). אסור שסכום כל ההצהרות יהיה 13 בדיוק — לשחקן האחרון תיחסם האפשרות המשלימה ל-13.</p>
+    <p><b>UP</b>: סכום ההצהרות גבוה מ-13 — מחסור בלקיחות, נלחמים על כל לקיחה.<br><b>UNDER</b>: סכום נמוך מ-13 — עודף לקיחות, מנסים "להיפטר" מקלפים.</p>
+    <h4>שלב 3 — מהלך המשחק</h4>
+    <ul>
+      <li>מי שקבע את השליט פותח את המשחקון הראשון.</li>
+      <li>חובה לזרוק קלף מאותה צורה שנזרקה ראשונה, אם יש כזה ביד.</li>
+      <li>אם אין — אפשר לזרוק כל קלף, כולל שליט ("לחתוך").</li>
+      <li>הקלף השליט הגבוה ביותר בלקיחה מנצח; אם אין שליט — הקלף הגבוה ביותר מהצורה שנפתחה מנצח.</li>
+      <li>אסור לפתוח משחקון עם קלף שליט, עד שהשליט "נשבר" (מישהו זרק אותו במהלך המשחק) — אלא אם נותרו רק קלפי שליט ביד.</li>
+      <li>הזוכה בלקיחה פותח את המשחקון הבא.</li>
+    </ul>
+    <h4>שלב 4 — ניקוד</h4>
+    <p>עמד בהימור: (הימור בריבוע) + 10 נקודות. הימור 0: ‎20+‎ ב-UP, ‎50+‎ ב-UNDER.</p>
+    <p>לא עמד בהימור: מינוס 10 על כל לקיחה של הפרש. הימור 0 שלא הצליח: ‎20-‎ ב-UP, ‎50-‎ ב-UNDER.</p>
+  `;
+  document.getElementById('instr-modal').classList.add('show');
+}
+function closeInstructions(){ document.getElementById('instr-modal').classList.remove('show'); }
+
+</script>
+</body>
+</html>
