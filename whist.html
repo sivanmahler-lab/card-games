@@ -346,15 +346,10 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
           <h3>מול המחשב</h3>
           <p>את/ה מול שלושה בוטים. מתחילים מיד.</p>
         </div>
-        <div class="mode-card" onclick="chooseMode('mixed')">
-          <div class="ic">🎭</div>
-          <h3>משולב + בוטים</h3>
-          <p>חבר אחד או שניים + בוטים.</p>
-        </div>
         <div class="mode-card online-card" onclick="chooseMode('online')">
           <div class="ic">🌐</div>
-          <h3>אונליין בזמן אמת</h3>
-          <p>שתפו קוד חדר עם חברים — כל אחד על המכשיר שלו. דורש Firebase Realtime Database.</p>
+          <h3>אונליין עם חברים</h3>
+          <p>כל שחקן על המכשיר שלו, בזמן אמת. אפשר להתחיל גם עם פחות מ-4 — המקומות הפנויים יתמלאו בבוטים.</p>
         </div>
       </div>
     </div>
@@ -686,29 +681,11 @@ async function chooseMode(mode){
       <div class="field"><label>השם שלך</label><input id="inp-name" value="${myName}" maxlength="12"></div>
       <button class="btn-primary" onclick="startComputerGame()">התחל משחק</button>
       <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
-  } else if(mode==='friends'){
-    box.innerHTML = `
-      <h2>משחק מול חברים (העברת מכשיר)</h2>
-      <div class="field"><label>כמה שחקנים?</label>
-        <select id="inp-count"><option value="4">4 שחקנים</option><option value="3">3 שחקנים (+ בוט)</option></select>
-      </div>
-      <div id="name-fields"></div>
-      <button class="btn-primary" onclick="startFriendsGame()">התחל משחק</button>
-      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
-    renderNameFields(4, myName);
-    document.getElementById('inp-count').onchange = e=>renderNameFields(parseInt(e.target.value), myName);
-  } else if(mode==='mixed'){
-    box.innerHTML = `
-      <h2>משחק משולב</h2>
-      <div class="field"><label>כמה חברים באותו מכשיר? (מלבדך)</label>
-        <select id="inp-count"><option value="1">חבר אחד (+ 2 בוטים)</option><option value="2">שני חברים (+ בוט)</option></select>
-      </div>
-      <div id="name-fields"></div>
-      <button class="btn-primary" onclick="startMixedGame()">התחל משחק</button>
-      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
-    renderMixedNameFields(1, myName);
-    document.getElementById('inp-count').onchange = e=>renderMixedNameFields(parseInt(e.target.value), myName);
   }
+  // Note: 'friends' (pass-device) and 'mixed' local modes have been superseded by the
+  // 'online' mode above — real device-to-device play with auto-filled bot seats covers
+  // both use cases, so their lobby entry points were removed. The setup/helper functions
+  // below are kept only in case they're needed again; they're unreachable from the lobby.
   showScreen('screen-setup');
 }
 function renderNameFields(totalHumans, myName){
