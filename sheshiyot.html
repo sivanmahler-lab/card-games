@@ -99,6 +99,8 @@ body{
 .pill{padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 #table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;}
+@media(min-width:700px){ #table-wrap{max-width:640px;} }
+@media(min-width:1000px){ #table-wrap{max-width:760px;} }
 #felt{position:relative;width:100%;flex:1;min-height:0;background:radial-gradient(ellipse at center, #145840 0%, #0a2a1e 100%);
   border-radius:20px;border:4px solid var(--gold);box-shadow:inset 0 0 40px rgba(0,0,0,.5);overflow:visible;}
 #peek-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
@@ -115,6 +117,14 @@ body{
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
 .pgrid.small{transform:scale(.62);}
+@media(min-width:700px){
+  /* On wider screens there's plenty of room — don't shrink the other players' cards
+     so much that their ranks/suits become unreadable. */
+  .pgrid.small{transform:scale(.85);}
+}
+@media(min-width:1000px){
+  .pgrid.small{transform:scale(1);}
+}
 .pcell{
   width:44px;height:62px;border-radius:6px;position:relative;cursor:default;
   background:linear-gradient(150deg,#8a1f2b,#5c1219);border:1px solid rgba(255,255,255,.25);
@@ -135,12 +145,18 @@ body{
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
 #reveal-results-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
 #reveal-results-overlay.show{display:block;}
-.results-panel{position:fixed;left:0;right:0;bottom:0;max-height:46vh;overflow-y:auto;
-  background:rgba(8,26,20,.96);border-top:2px solid var(--gold);border-radius:16px 16px 0 0;
+.results-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:420px;max-height:46vh;overflow-y:auto;
+  background:rgba(8,26,20,.96);border:2px solid var(--gold);border-radius:16px 16px 0 0;
   padding:18px 16px 16px;z-index:850;display:none;box-shadow:0 -10px 34px rgba(0,0,0,.55);}
 .results-panel.show{display:block;}
-.results-panel .rp-close{position:absolute;top:10px;left:14px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
-  color:var(--cream);border-radius:8px;width:28px;height:28px;font-size:15px;cursor:pointer;}
+.results-panel .rp-head{cursor:grab;margin:-18px -16px 10px;padding:10px 16px 6px;border-radius:16px 16px 0 0;
+  user-select:none;touch-action:none;text-align:center;font-size:11.5px;color:rgba(250,244,230,.45);
+  background:rgba(255,255,255,.04);}
+.results-panel .rp-head:active{cursor:grabbing;}
+.results-panel.dragging{transition:none;}
+.results-panel .rp-close{position:absolute;top:8px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
+  color:var(--cream);border-radius:8px;width:26px;height:26px;font-size:14px;cursor:pointer;z-index:2;}
+@media(min-width:700px){ .results-panel{max-width:480px;} }
 
 .center-pot{display:flex;align-items:center;gap:18px;}
 .pile{width:52px;height:74px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
@@ -157,6 +173,8 @@ body{
 
 .action-bar{width:100%;max-width:520px;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
   padding:10px 14px;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;flex-shrink:0;}
+@media(min-width:700px){ .action-bar{max-width:640px;} }
+@media(min-width:1000px){ .action-bar{max-width:760px;} }
 .action-bar button{padding:9px 16px;border-radius:10px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);
   color:var(--cream);font-size:13px;font-weight:700;cursor:pointer;}
 .action-bar button.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
@@ -319,6 +337,7 @@ body{
      player keep looking at everyone's revealed cards on the felt above it while reading
      the score breakdown) -->
 <div class="results-panel" id="results-panel">
+  <div class="rp-head" id="rp-head">⠿ גררי כדי להזיז</div>
   <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
   <div id="round-end-content"></div>
 </div>
@@ -1069,6 +1088,41 @@ function doReorderSwap(a, b){
   }
   renderAll();
 }
+
+/* ============================= RESULTS PANEL DRAG ============================= */
+// Lets the results panel be dragged anywhere on screen, so it can be pulled aside to
+// see the revealed cards underneath instead of blocking them. Starts docked at the
+// bottom-center (via CSS); the first drag switches it to a free-floating top/left
+// position that's then kept for the rest of the session.
+(function initResultsPanelDrag(){
+  const panel = document.getElementById('results-panel');
+  const head = document.getElementById('rp-head');
+  if(!panel || !head) return;
+  let drag = null;
+  head.addEventListener('pointerdown', (ev)=>{
+    const rect = panel.getBoundingClientRect();
+    drag = {startX:ev.clientX, startY:ev.clientY, rectLeft:rect.left, rectTop:rect.top};
+    panel.classList.add('dragging');
+    try{ head.setPointerCapture(ev.pointerId); } catch(e){}
+  });
+  head.addEventListener('pointermove', (ev)=>{
+    if(!drag) return;
+    const dx = ev.clientX - drag.startX;
+    const dy = ev.clientY - drag.startY;
+    let left = drag.rectLeft + dx;
+    let top = drag.rectTop + dy;
+    const rect = panel.getBoundingClientRect();
+    left = Math.max(4, Math.min(left, window.innerWidth - rect.width - 4));
+    top = Math.max(4, Math.min(top, window.innerHeight - rect.height - 4));
+    panel.style.left = left+'px';
+    panel.style.top = top+'px';
+    panel.style.bottom = 'auto';
+    panel.style.transform = 'none';
+  });
+  const stop = ()=>{ drag = null; panel.classList.remove('dragging'); };
+  head.addEventListener('pointerup', stop);
+  head.addEventListener('pointercancel', stop);
+})();
 
 /* ============================= NAV ============================= */
 function showScreen(id){
