@@ -370,7 +370,7 @@ function buildRoundState(names, isHuman, matchHistory, roundNum, starter){
     turn:starter,
     starter:starter,
     finishCaller:null,
-    finalOrder:[],
+    finalTurnsRemaining:0,
     pendingDraw:null,
     turnActed:false,
     matchHistory: matchHistory.slice(),
@@ -596,8 +596,7 @@ function endMyTurn(){
 }
 function doDeclareFinished(p){
   S.finishCaller = p;
-  S.finalOrder = [];
-  for(let i=1;i<=3;i++) S.finalOrder.push((p+i)%4);
+  S.finalTurnsRemaining = 3; // the other 3 players each get exactly one more turn
 }
 function finishTurnAction(){
   S.turnActed = true;
@@ -610,8 +609,12 @@ function finishTurnAction(){
 }
 function advanceTurn(){
   if(S.finishCaller!==null){
-    if(S.finalOrder.length>0) S.finalOrder.shift();
-    if(S.finalOrder.length===0){
+    // Exactly 3 more turns happen after a declaration (one per remaining player), counted
+    // down here rather than via a shifted queue — a queue-shift approach double-counts the
+    // very first advance (the declarer's own turn ending), causing the round to end one
+    // player short of everyone actually getting their final turn.
+    S.finalTurnsRemaining--;
+    if(S.finalTurnsRemaining<=0){
       endRound();
       return;
     }
@@ -787,8 +790,7 @@ function renderAll(){
   for(let disp=0; disp<4; disp++){
     const actual = seatFor(disp);
     const nameEl = document.getElementById('pn-'+disp);
-    nameEl.textContent = S.names[actual] + (S.graduated[actual]?' ⬆':'');
-    nameEl.title = S.graduated[actual] ? 'עבר/ה לשחק עם השורה העליונה' : '';
+    nameEl.textContent = S.names[actual];
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     renderPlayerGrid(disp, actual);
   }
