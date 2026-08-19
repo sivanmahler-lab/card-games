@@ -497,6 +497,32 @@ function flyGhostCard(card, fromRect, toRect){
   setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
   setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
 }
+// Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
+// draw, still face-down. Reuses the plain card-back look.
+function flyGhostBack(fromRect, toRect){
+  if(!fromRect || !toRect) return;
+  const ghost = document.createElement('div');
+  ghost.className = 'pcell';
+  ghost.textContent = '🎴';
+  ghost.style.position = 'fixed';
+  ghost.style.left = fromRect.left+'px';
+  ghost.style.top = fromRect.top+'px';
+  ghost.style.width = fromRect.width+'px';
+  ghost.style.height = fromRect.height+'px';
+  ghost.style.margin = '0';
+  ghost.style.zIndex = 998;
+  ghost.style.pointerEvents = 'none';
+  document.body.appendChild(ghost);
+  const dx = toRect.left - fromRect.left;
+  const dy = toRect.top - fromRect.top;
+  const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
+  const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
+  void ghost.offsetHeight;
+  ghost.style.transition = 'transform .45s cubic-bezier(.35,0,.25,1), opacity .45s ease';
+  ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+  setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
+  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
+}
 
 /* ============================= TURN ACTIONS ============================= */
 function isMyTurnLocal(){
@@ -627,6 +653,9 @@ function maybeBotTurn(){
 /* ============================= BOT AI ============================= */
 function botTakeTurn(p){
   if(S===null || S.turn!==p) return;
+  // Anim plan is filled in during the try block and consumed just after renderAll(), so the
+  // ghost flies over the already-updated table (same pattern as the human player's own moves).
+  let animPlan = null;
   try{
     const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
     const hand = S.hands[p];
@@ -650,6 +679,14 @@ function botTakeTurn(p){
       const topMatchesHand = rankCounts[top.rank]>=1;
       if(cardValue(top.rank) < w.val || topMatchesHand) useOpen = true;
     }
+    // Capture the source rect (closed or open pile) BEFORE any state mutation.
+    const closedEl = document.getElementById('pile-closed');
+    const openEl = document.getElementById('pile-open');
+    const disp = displayFor(p);
+    const gridEl = document.getElementById('pg-'+disp);
+    const sourceRect = (useOpen && top)
+      ? (openEl ? openEl.getBoundingClientRect() : null)
+      : (closedEl ? closedEl.getBoundingClientRect() : null);
     let drawn;
     if(useOpen && top){
       drawn = S.discardPile.pop();
@@ -664,14 +701,32 @@ function botTakeTurn(p){
     } else {
       const matched = rankCounts[drawn.rank]>=1;
       const improves = w.idx>=0 && (matched || cardValue(drawn.rank) < w.val);
+      // Capture the target slot rect before the DOM re-renders.
+      const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
+      const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
       if(improves){
         const old = hand[w.idx];
         hand[w.idx] = drawn;
         S.discardPile.push(old);
         rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
         rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+        // The drawn card's identity stays hidden (face-down ghost) flying into the bot's
+        // hand slot; the card it discarded is public, so it flies face-up into the open pile.
+        animPlan = {
+          incoming: {fromRect: sourceRect, toRect: slotRect},
+          outgoing: {card: old, fromRect: slotRect, toRect: openEl ? openEl.getBoundingClientRect() : null}
+        };
       } else {
         S.discardPile.push(drawn);
+        // Declined without swapping: whatever was drawn just flies straight to the open pile.
+        // If it came from the open pile itself it's already public knowledge (face-up ghost);
+        // if it came from the closed pile it stays hidden (face-down ghost).
+        const toRect = openEl ? openEl.getBoundingClientRect() : null;
+        if(useOpen && top){
+          animPlan = {outgoing: {card: drawn, fromRect: sourceRect, toRect}};
+        } else {
+          animPlan = {declinedHidden: {fromRect: sourceRect, toRect}};
+        }
       }
       S.turnActed = true;
 
@@ -694,6 +749,11 @@ function botTakeTurn(p){
       }
     }
     renderAll();
+    if(animPlan){
+      if(animPlan.incoming) flyGhostBack(animPlan.incoming.fromRect, animPlan.incoming.toRect);
+      if(animPlan.outgoing) flyGhostCard(animPlan.outgoing.card, animPlan.outgoing.fromRect, animPlan.outgoing.toRect);
+      if(animPlan.declinedHidden) flyGhostBack(animPlan.declinedHidden.fromRect, animPlan.declinedHidden.toRect);
+    }
   } catch(err){
     // A bot AI bug should never be able to freeze the whole game — log it, tell the
     // player something went wrong (with enough detail to report back), and still let
@@ -858,6 +918,14 @@ function renderAll(){
 
 function renderPlayerGrid(disp, actual){
   const el = document.getElementById('pg-'+disp);
+  if(dragReorder && el.contains(dragReorder.cellEl)){
+    // A render landed while the player has a card actively mid-drag in THIS grid (e.g. a
+    // bot's turn resolving in the background). Rebuilding the DOM now would yank the
+    // dragged element out from under the pointer and silently kill the gesture — so skip
+    // this grid's rebuild entirely; the drag's own renderAll() call afterwards will catch
+    // it up correctly once the gesture finishes.
+    return;
+  }
   el.innerHTML = '';
   const myActual = seatFor(0);
   const isSelf = actual===myActual;
