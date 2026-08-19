@@ -98,9 +98,12 @@ body{
 .game-header{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0;flex-wrap:wrap;}
 .pill{padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
-#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;}
-#felt{position:relative;width:100%;flex:1;min-height:420px;background:radial-gradient(ellipse at center, #145840 0%, #0a2a1e 100%);
+#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;}
+#felt{position:relative;width:100%;flex:1;min-height:0;background:radial-gradient(ellipse at center, #145840 0%, #0a2a1e 100%);
   border-radius:20px;border:4px solid var(--gold);box-shadow:inset 0 0 40px rgba(0,0,0,.5);overflow:visible;}
+#peek-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
+#peek-overlay.show{display:block;}
+#peek-overlay button{white-space:nowrap;}
 
 .pgrid-wrap{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
 .pgrid-wrap.pos-0{bottom:6px;left:50%;transform:translateX(-50%);z-index:40;}
@@ -278,10 +281,11 @@ body{
       <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid small" id="pg-3"></div></div>
       <div class="center-pot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
         <div style="display:flex;gap:18px;align-items:flex-start;">
-          <div><div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div><div class="pile-label">קופה סגורה</div></div>
-          <div><div class="pile open" id="pile-open" onclick="onTakeOpen()"></div><div class="pile-label">קופה פתוחה</div></div>
+          <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
+          <div class="pile open" id="pile-open" onclick="onTakeOpen()"></div>
         </div>
       </div>
+      <div id="peek-overlay"><button class="btn-primary" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button></div>
     </div>
   </div>
 </div>
@@ -704,20 +708,9 @@ function renderAll(){
   }
   openEl.classList.toggle('disabled', !isMyTurnLocal() || !!pendingDraw);
 
-  // peek button overlay on own grid if not yet peeked
-  const myPeekWrap = document.getElementById('pw-0');
-  let peekBtn = document.getElementById('peek-btn-inline');
-  if(S.phase==='peek' && !S.peeked[myActual]){
-    if(!peekBtn){
-      peekBtn = document.createElement('button');
-      peekBtn.id='peek-btn-inline';
-      peekBtn.className='btn-primary';
-      peekBtn.style.marginTop='6px';
-      peekBtn.textContent='הצץ בשלושת הקלפים התחתונים';
-      peekBtn.onclick = doPeek;
-      myPeekWrap.appendChild(peekBtn);
-    }
-  } else if(peekBtn){ peekBtn.remove(); }
+  // peek prompt overlaid centered on the felt, doesn't push any layout around
+  const peekOverlay = document.getElementById('peek-overlay');
+  peekOverlay.classList.toggle('show', S.phase==='peek' && !S.peeked[myActual]);
 
   // action bar
   const bar = document.getElementById('action-bar');
@@ -778,7 +771,7 @@ function goLobby(){
 }
 function goHub(){
   cleanupOnlineListeners();
-  window.location.href = 'index.html';
+  window.location.href = 'https://sivanmahler-lab.github.io/card-games/';
 }
 function newGame(){
   showConfirmBox('להתחיל משחק חדש?', 'הסבב הנוכחי יתאפס.', ()=>{ goLobby(); });
