@@ -241,6 +241,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .card.illegal{filter:brightness(.55) saturate(.6);}
 .card.selected{transform:translateY(-16px) scale(1.06);box-shadow:0 0 0 3px var(--gold-bright);}
 
+.card-confirm-hint{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
+  background:rgba(0,0,0,.85);border:1px solid var(--gold-bright);color:var(--gold-bright);
+  padding:6px 14px;border-radius:20px;font-size:12.5px;font-weight:700;white-space:nowrap;
+  z-index:70;pointer-events:none;display:none;
+}
+.card-confirm-hint.show{display:block;}
+
 #trick-area{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   width:80%;height:74%;z-index:25;
@@ -426,6 +434,7 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
         <div class="seat bottom" id="seat-0">
           <div class="name-badge" id="badge-0"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-0"></span><span class="tricks-badge" id="tricks-0"></span></div></div>
           <div class="fan" id="fan-0"></div>
+          <div class="card-confirm-hint" id="card-confirm-hint">הקש שוב כדי לזרוק</div>
         </div>
         <div class="side-badge left-badge" id="seat-1">
           <div class="name-badge" id="badge-1"><span class="turn-dot"></span><span class="nm"></span><div class="badge-stats"><span class="bid-badge" id="bid-1"></span><span class="tricks-badge" id="tricks-1"></span></div></div>
@@ -515,6 +524,12 @@ function sortHand(h){ return h.slice().sort((a,b)=> a.suit-b.suit || a.rank-b.ra
 
 /* ============================= STATE ============================= */
 let S = null;
+
+// Two-tap card play: first tap on a legal card selects it (lifts it up); a second tap on
+// the SAME card actually plays it. Tapping a different legal card just moves the selection.
+// This exists because on a phone, a finger is wide relative to a card, so a mis-tap that
+// immediately played the card was easy to make and impossible to undo.
+let selectedCard = null; // {suit, rank} or null
 
 /* Online mode */
 let myOnlineSeat = 0;  // display seat: always 0 for local games; 0-3 for online
@@ -844,7 +859,11 @@ function cardHTML(c, extraClass){
 function renderOwnFan(fan, actual){
   const hand = S.hands[actual];
   const n = hand.length;
-  if(n===0) return;
+  if(n===0){
+    const hint = document.getElementById('card-confirm-hint');
+    if(hint) hint.classList.remove('show');
+    return;
+  }
   const legal = getLegalCardsForHuman();
 
   const containerW = fan.clientWidth || 300;
@@ -873,10 +892,16 @@ function renderOwnFan(fan, actual){
   }
   boundaries.push(containerW);
 
+  // A previously selected card only stays selected if it's still in hand and still legal
+  // to play (e.g. the led suit can change what's legal between renders).
+  let selectionStillValid = false;
+
   hand.forEach((c,i)=>{
     const div=document.createElement('div');
     const isLegal = legal===null ? true : legal.some(lc=>lc.suit===c.suit && lc.rank===c.rank);
     const cls = isPlayable ? (isLegal?'legal':'illegal') : '';
+    const isSelected = cls==='legal' && selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank;
+    if(isSelected) selectionStillValid = true;
     div.innerHTML = cardHTML(c, cls);
     const el = div.firstElementChild;
     const offsetFromMid = mid ? (i-mid)/mid : 0;
@@ -885,9 +910,14 @@ function renderOwnFan(fan, actual){
     el.style.left = (startX + i*spread)+'px';
     el.style.top = (10 - lift)+'px';
     el.style.transformOrigin = '50% 120%';
-    el.style.transform = `rotate(${angle.toFixed(1)}deg)`;
-    el.style.zIndex = i;
+    // Inline transform takes priority over the .selected CSS class (inline always wins),
+    // so the lift for a selected card has to be folded into this same string.
+    el.style.transform = isSelected
+      ? `rotate(${angle.toFixed(1)}deg) translateY(-16px) scale(1.06)`
+      : `rotate(${angle.toFixed(1)}deg)`;
+    el.style.zIndex = isSelected ? 250 : i;
     el.style.pointerEvents = 'none';
+    if(isSelected) el.style.boxShadow = '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)';
     fan.appendChild(el);
 
     if(cls==='legal'){
@@ -900,12 +930,28 @@ function renderOwnFan(fan, actual){
       hit.style.zIndex = 300+i;
       hit.style.cursor='pointer';
       hit.style.background='transparent';
-      hit.onclick = ()=>playHumanCard(c);
-      hit.addEventListener('mouseenter', ()=>{ el.style.transform = `rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; });
-      hit.addEventListener('mouseleave', ()=>{ el.style.transform = `rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; });
+      hit.onclick = ()=>{
+        if(selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank){
+          // second tap on the same card — actually play it
+          selectedCard = null;
+          playHumanCard(c);
+        } else {
+          // first tap (or tapping a different card) — just select, don't play yet
+          selectedCard = {suit:c.suit, rank:c.rank};
+          renderTable();
+        }
+      };
+      hit.addEventListener('mouseenter', ()=>{ if(!isSelected){ el.style.transform = `rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; } });
+      hit.addEventListener('mouseleave', ()=>{ if(!isSelected){ el.style.transform = `rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; } });
       fan.appendChild(hit);
     }
   });
+
+  // Clear a stale selection (card no longer in hand, or no longer legal — e.g. the led
+  // suit changed) so we don't leave the hint pill stuck on with nothing actually selected.
+  if(selectedCard && !selectionStillValid) selectedCard = null;
+  const hint = document.getElementById('card-confirm-hint');
+  if(hint) hint.classList.toggle('show', selectionStillValid);
 }
 function renderBackFan(fan, disp, n){
   if(n===0) return;
