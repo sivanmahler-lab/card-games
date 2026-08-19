@@ -346,11 +346,6 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
           <h3>מול המחשב</h3>
           <p>את/ה מול שלושה בוטים. מתחילים מיד.</p>
         </div>
-        <div class="mode-card" onclick="chooseMode('friends')">
-          <div class="ic">👥</div>
-          <h3>העברת מכשיר</h3>
-          <p>כולם סביב אותו מסך, כל אחד בתורו.</p>
-        </div>
         <div class="mode-card" onclick="chooseMode('mixed')">
           <div class="ic">🎭</div>
           <h3>משולב + בוטים</h3>
@@ -1554,11 +1549,25 @@ function closeInstructions(){ document.getElementById('instr-modal').classList.r
 
 /* ============================= FIREBASE ONLINE MODE ============================= */
 
+// Built-in default config, so every player gets working online play out of the box
+// without each person having to create their own Firebase project. A player-supplied
+// config (via the settings modal) always takes priority over this default.
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDPyCNI4MQMgb1kfvEaQFK5Ss86bq8t_4A",
+  authDomain: "whist-45d5e.firebaseapp.com",
+  databaseURL: "https://whist-45d5e-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "whist-45d5e",
+  storageBucket: "whist-45d5e.firebasestorage.app",
+  messagingSenderId: "415893241295",
+  appId: "1:415893241295:web:937158fd82c89283e8e6ba"
+};
+
 function loadFirebaseConfig(){
   try{
     const s = localStorage.getItem('whist_firebase_config');
-    return s ? JSON.parse(s) : null;
-  } catch(e){ return null; }
+    if(s) return JSON.parse(s);
+  } catch(e){ /* fall through to default */ }
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 function openFirebaseModal(){
@@ -1579,10 +1588,12 @@ function saveFirebaseConfig(){
 }
 
 function clearFirebaseConfig(){
+  // Removing a custom config reverts to the built-in default rather than
+  // leaving the player disconnected.
   localStorage.removeItem('whist_firebase_config');
   fbApp = null; fbDb = null;
   document.getElementById('firebase-modal').classList.remove('show');
-  updateFirebaseStatus(false);
+  initFirebaseAndUpdateStatus();
 }
 
 async function initFirebaseAndUpdateStatus(){
