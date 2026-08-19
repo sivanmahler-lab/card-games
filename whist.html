@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ויסט — משחק הקלפים</title>
+<title>וויסט — משחק הקלפים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
 <!-- Firebase SDKs -->
@@ -69,7 +69,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 /* ---------- LOBBY ---------- */
 #screen-lobby{justify-content:center;padding:20px;text-align:center;}
 .lobby-card{max-width:640px;width:100%;}
-.hero-suits{font-size:52px;letter-spacing:14px;margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);}
+.hero-suits{font-size:clamp(28px,9vw,52px);letter-spacing:clamp(4px,2.5vw,14px);margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);white-space:nowrap;}
 .hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;}
 .hero-sub{color:rgba(250,244,230,.65);font-size:15px;margin-bottom:34px;letter-spacing:.5px;}
 .mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
@@ -85,6 +85,20 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
 .mode-card.online-card{border-color:var(--teal);}
 .mode-card.online-card .ic{color:var(--teal);}
+.game-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
+@media(max-width:640px){.game-grid{grid-template-columns:1fr;}}
+.game-card{
+  background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+  border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
+  transition:.18s; position:relative; overflow:hidden; cursor:pointer;
+}
+.game-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.game-card .ic{font-size:34px;margin-bottom:10px;}
+.game-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
+.game-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
+.game-card.disabled{cursor:default;opacity:.55;}
+.game-card.disabled:hover{border-color:rgba(212,175,90,0.35);transform:none;box-shadow:none;}
+.game-card .soon{display:inline-block;margin-top:8px;font-size:11px;color:var(--teal);border:1px solid var(--teal);border-radius:20px;padding:2px 10px;}
 .online-actions-row{display:flex;gap:10px;margin-top:8px;}
 .online-actions-row .btn-primary{margin-top:0;flex:1 1 0;width:auto;}
 @media(max-width:420px){.online-actions-row{flex-direction:column;}}
@@ -175,7 +189,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .pill.round{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 .pill.trump{background:rgba(0,0,0,.55);color:var(--cream);border-color:rgba(212,175,90,.6);}
 .pill.up{background:var(--amber);color:#241a05;}
-.pill.under{background:var(--teal);color:#04211c);}
+.pill.under{background:var(--teal);color:#04211c;}
 .pill.online{background:rgba(63,154,139,.25);color:var(--teal);border-color:rgba(63,154,139,.5);}
 
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
@@ -337,7 +351,7 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
 <div id="app">
 
   <div id="topbar">
-    <div class="brand"><span class="suits">♣♦♥♠</span> ויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span></div>
+    <div class="brand"><span class="suits">♣♦♥♠</span> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span></div>
     <div class="tb-btns">
       <button class="tb-btn" onclick="newGame()">משחק חדש</button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
@@ -345,11 +359,32 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
     </div>
   </div>
 
-  <!-- LOBBY -->
-  <div class="screen active" id="screen-lobby">
+  <!-- GAME HUB (choose which card game) -->
+  <div class="screen active" id="screen-hub">
     <div class="lobby-card">
       <div class="hero-suits">♣ ♦ ♥ ♠</div>
-      <div class="hero-title">ויסט</div>
+      <div class="hero-title">משחקי קלפים</div>
+      <div class="hero-sub">בחר/י משחק</div>
+      <div class="game-grid">
+        <div class="game-card" onclick="goLobby()">
+          <div class="ic">🃏</div>
+          <h3>וויסט</h3>
+          <p>חוזים, שליטים ולקיחות — משחק הקלפים הקלאסי</p>
+        </div>
+        <div class="game-card" onclick="window.location.href='sheshiyot.html'">
+          <div class="ic">🎴</div>
+          <h3>שישיות</h3>
+          <p>שישה קלפים, כמה שפחות נקודות — משחק הקלפים הישראלי</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY (whist menu) -->
+  <div class="screen" id="screen-lobby">
+    <div class="lobby-card">
+      <div class="hero-suits">♣ ♦ ♥ ♠</div>
+      <div class="hero-title">וויסט</div>
       <div class="hero-sub">חוזים, שליטים ולקיחות — משחק הקלפים הקלאסי</div>
       <div class="mode-grid">
         <div class="mode-card" onclick="chooseMode('computer')">
@@ -363,6 +398,7 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
           <p>כל שחקן על המכשיר שלו, בזמן אמת. אפשר להתחיל גם עם פחות מ-4 — המקומות הפנויים יתמלאו בבוטים.</p>
         </div>
       </div>
+      <button class="btn-secondary" onclick="goHub()" style="margin-top:18px;">חזרה לבחירת משחק</button>
     </div>
   </div>
 
@@ -630,6 +666,16 @@ function goLobby(){
   cleanupOnlineListeners();
   isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
   showScreen('screen-lobby');
+  hideControlPanel();
+  document.getElementById('round-end-modal').classList.remove('show');
+  document.getElementById('instr-modal').classList.remove('show');
+  document.getElementById('gate').classList.remove('show');
+  gateCallback=null;
+}
+function goHub(){
+  cleanupOnlineListeners();
+  isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
+  showScreen('screen-hub');
   hideControlPanel();
   document.getElementById('round-end-modal').classList.remove('show');
   document.getElementById('instr-modal').classList.remove('show');
