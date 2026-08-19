@@ -130,9 +130,17 @@ body{
 .pcell.selectable{cursor:pointer;box-shadow:0 0 0 2px var(--gold-bright);}
 .pcell.selectable:hover{transform:translateY(-4px);}
 .pcell.justswapped{box-shadow:0 0 0 3px var(--teal);}
-.pcell.reorderable{cursor:pointer;}
-.pcell.reorderable:hover{transform:translateY(-3px);}
-.pcell.reorder-selected{box-shadow:0 0 0 3px var(--teal);transform:translateY(-6px);}
+.pcell.reorderable{cursor:grab;touch-action:none;}
+.pcell.reorderable:active{cursor:grabbing;}
+.pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
+#reveal-results-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
+#reveal-results-overlay.show{display:block;}
+.results-panel{position:fixed;left:0;right:0;bottom:0;max-height:46vh;overflow-y:auto;
+  background:rgba(8,26,20,.96);border-top:2px solid var(--gold);border-radius:16px 16px 0 0;
+  padding:18px 16px 16px;z-index:850;display:none;box-shadow:0 -10px 34px rgba(0,0,0,.55);}
+.results-panel.show{display:block;}
+.results-panel .rp-close{position:absolute;top:10px;left:14px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
+  color:var(--cream);border-radius:8px;width:28px;height:28px;font-size:15px;cursor:pointer;}
 
 .center-pot{display:flex;align-items:center;gap:18px;}
 .pile{width:52px;height:74px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
@@ -282,6 +290,9 @@ body{
         <button class="btn-primary" id="peek-start-btn" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button>
         <button class="btn-primary" id="peek-close-btn" onclick="closePeek()" style="display:none;">סגור</button>
       </div>
+      <div id="reveal-results-overlay">
+        <button class="btn-primary" onclick="showRoundEndModal()">הצג תוצאות</button>
+      </div>
     </div>
   </div>
   <div class="action-bar" id="action-bar" style="display:none;">
@@ -304,9 +315,12 @@ body{
   </div>
 </div>
 
-<!-- ROUND END -->
-<div class="modal-bg" id="round-end-modal">
-  <div class="modal" id="round-end-content"></div>
+<!-- ROUND END (a non-blocking bottom sheet, not a full modal — the point is to let the
+     player keep looking at everyone's revealed cards on the felt above it while reading
+     the score breakdown) -->
+<div class="results-panel" id="results-panel">
+  <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
+  <div id="round-end-content"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -387,13 +401,13 @@ function startNextRound(){
   const nextStarter = (S.starter+1)%4;
   const nextRoundNum = (S.roundNum||1)+1;
   buildRoundState(S.names, S.isHuman, S.matchHistory||[], nextRoundNum, nextStarter);
-  document.getElementById('round-end-modal').classList.remove('show');
+  document.getElementById('results-panel').classList.remove('show');
   showScreen('screen-game');
   renderAll();
   maybeBotTurn();
 }
 function onClickNextRound(){
-  document.getElementById('round-end-modal').classList.remove('show');
+  document.getElementById('results-panel').classList.remove('show');
   if(isOnline && !isHost){ submitRemoteAction('startNextRound', {}); return; }
   startNextRound();
 }
@@ -426,7 +440,6 @@ function startLocalGame(numHumans){
 
 /* ============================= PEEK PHASE ============================= */
 let peekingNow = false;
-let reorderSelectedIdx = null;
 function doPeek(){
   const myActual = seatFor(0);
   if(S.peeked[myActual]) return;
@@ -434,31 +447,10 @@ function doPeek(){
   renderAll();
   // Cards stay face-up until the player explicitly closes the peek — no auto-timeout.
 }
-function onReorderTap(i){
-  const myActual = seatFor(0);
-  if(reorderSelectedIdx===null){
-    reorderSelectedIdx = i;
-  } else if(reorderSelectedIdx===i){
-    reorderSelectedIdx = null;
-  } else {
-    const a = reorderSelectedIdx, b = i;
-    reorderSelectedIdx = null;
-    if(isOnline && !isHost){
-      const hand = S.hands[myActual];
-      [hand[a], hand[b]] = [hand[b], hand[a]];
-      submitRemoteAction('reorderBottom', {a, b});
-    } else {
-      const hand = S.hands[myActual];
-      [hand[a], hand[b]] = [hand[b], hand[a]];
-    }
-  }
-  renderAll();
-}
 function closePeek(){
   const myActual = seatFor(0);
   if(!peekingNow) return;
   peekingNow = false;
-  reorderSelectedIdx = null;
   if(S.peeked[myActual]) { renderAll(); return; }
   S.peeked[myActual] = true;
   if(isOnline && !isHost){
@@ -740,8 +732,12 @@ function endRound(){
   }
   if(!S.matchHistory) S.matchHistory = [];
   S.matchHistory.push({raw, final, caller, names:S.names.slice()});
+  // Cards get revealed face-up for everyone right away (renderAll/renderPlayerGrid does
+  // this automatically once phase is 'ended'). The results panel itself stays closed —
+  // each player opens it in their own time via the "הצג תוצאות" button, so nobody's view
+  // of the open hands gets interrupted before they're ready.
+  document.getElementById('results-panel').classList.remove('show');
   renderAll();
-  showRoundEndModal();
 }
 function showRoundEndModal(){
   const history = S.matchHistory || [];
@@ -765,10 +761,10 @@ function showRoundEndModal(){
       ${rows}
       <tr class="winner" style="border-top:2px solid var(--gold);"><td>סה"כ</td>${totalsCells}</tr>
     </table>
-    <button class="btn-primary" onclick="onClickNextRound()">סבב חדש</button>
-    <button class="btn-secondary" onclick="document.getElementById('round-end-modal').classList.remove('show'); newGame();">סיום המשחק</button>
+    <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף</button>
+    <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">סיום המשחק</button>
   `;
-  document.getElementById('round-end-modal').classList.add('show');
+  document.getElementById('results-panel').classList.add('show');
 }
 
 /* ============================= RENDER ============================= */
@@ -841,6 +837,11 @@ function renderAll(){
     closeBtn.style.display = peekingNow ? 'inline-block' : 'none';
   }
 
+  // once the round ends, hands are revealed on the felt and each player opens the score
+  // panel at their own pace via this button (the panel itself never auto-opens)
+  const revealOverlay = document.getElementById('reveal-results-overlay');
+  revealOverlay.classList.toggle('show', S.phase==='ended');
+
   // action bar
   const bar = document.getElementById('action-bar');
   const finBtn = document.getElementById('btn-finish');
@@ -864,34 +865,88 @@ function renderPlayerGrid(disp, actual){
   // you on the spot). After graduating, only the top row remains available.
   const activeRow = S.graduated[actual] ? [0,1,2] : [0,1,2,3,4,5];
   const bottomRow = [3,4,5];
+  // Cards are always face-down to everyone, with two exceptions: the player's own bottom
+  // row during their initial peek window, and everyone's full hand once the round ends
+  // (so the score breakdown can actually be checked against what people were holding).
+  const revealAll = S.phase==='ended';
+  // Reordering your own hand (either row, independent of the other) is purely a private
+  // memory aid with no effect on game state, so it's allowed any time it's not mid-decision
+  // on a drawn card — during the peek window, during normal play, even after the round ends.
+  const canReorderOwnHand = isSelf && !pendingDraw;
   for(let i=0;i<6;i++){
     const card = S.hands[actual][i];
-    let cls = '';
-    // Cards are always face-down to everyone — the one exception is the player's own
-    // bottom row during their brief initial peek window right after dealing.
-    const showFace = isSelf && peekingNow && S.phase==='peek' && bottomRow.includes(i);
+    const showFace = revealAll || (isSelf && peekingNow && S.phase==='peek' && bottomRow.includes(i));
     let html;
     if(showFace){
       html = cardHTML(card);
     } else {
-      html = `<div class="pcell ${cls}">🎴</div>`;
+      html = `<div class="pcell">🎴</div>`;
     }
     const wrap = document.createElement('div');
     wrap.innerHTML = html;
     const cellEl = wrap.firstElementChild;
+    cellEl.dataset.slotIdx = i;
     if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
       cellEl.classList.add('selectable');
       cellEl.onclick = ()=>useDrawnOnSlot(i);
-    }
-    if(showFace){
-      // During the peek window the player may freely reorder their bottom-row cards —
-      // tap one, then tap another, to swap their positions (no re-peeking involved).
-      cellEl.classList.add('reorderable');
-      if(reorderSelectedIdx===i) cellEl.classList.add('reorder-selected');
-      cellEl.onclick = ()=>onReorderTap(i);
+    } else if(canReorderOwnHand && S.phase!=='ended'){
+      attachReorderDrag(cellEl, i);
     }
     el.appendChild(cellEl);
   }
+}
+
+/* ============================= DRAG-TO-REORDER (own hand only) ============================= */
+let dragReorder = null; // {slotIdx, cellEl, startX, moved}
+function attachReorderDrag(cellEl, i){
+  cellEl.classList.add('reorderable');
+  cellEl.addEventListener('pointerdown', (ev)=>{
+    ev.preventDefault();
+    dragReorder = {slotIdx:i, cellEl, startX:ev.clientX, moved:false};
+    try{ cellEl.setPointerCapture(ev.pointerId); } catch(e){}
+    cellEl.style.transition = 'none';
+    cellEl.style.zIndex = 500;
+  });
+  cellEl.addEventListener('pointermove', (ev)=>{
+    if(!dragReorder || dragReorder.slotIdx!==i) return;
+    const dx = ev.clientX - dragReorder.startX;
+    if(Math.abs(dx)>4) dragReorder.moved = true;
+    cellEl.style.transform = `translateX(${dx}px)`;
+    document.querySelectorAll('.pcell.drag-target').forEach(c=>c.classList.remove('drag-target'));
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const targetCell = under ? under.closest('.pcell') : null;
+    if(targetCell && targetCell!==cellEl && targetCell.dataset.slotIdx!==undefined){
+      const targetIdx = parseInt(targetCell.dataset.slotIdx, 10);
+      if(Math.floor(targetIdx/3)===Math.floor(i/3)) targetCell.classList.add('drag-target');
+    }
+  });
+  const finishDrag = (ev)=>{
+    if(!dragReorder || dragReorder.slotIdx!==i) return;
+    cellEl.style.transform = '';
+    cellEl.style.zIndex = '';
+    document.querySelectorAll('.pcell.drag-target').forEach(c=>c.classList.remove('drag-target'));
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const targetCell = under ? under.closest('.pcell') : null;
+    const moved = dragReorder.moved;
+    dragReorder = null;
+    if(moved && targetCell && targetCell!==cellEl && targetCell.dataset.slotIdx!==undefined){
+      const targetIdx = parseInt(targetCell.dataset.slotIdx, 10);
+      if(Math.floor(targetIdx/3)===Math.floor(i/3)){
+        doReorderSwap(i, targetIdx);
+      }
+    }
+  };
+  cellEl.addEventListener('pointerup', finishDrag);
+  cellEl.addEventListener('pointercancel', finishDrag);
+}
+function doReorderSwap(a, b){
+  const myActual = seatFor(0);
+  const hand = S.hands[myActual];
+  [hand[a], hand[b]] = [hand[b], hand[a]];
+  if(isOnline && !isHost){
+    submitRemoteAction('reorderHand', {a, b});
+  }
+  renderAll();
 }
 
 /* ============================= NAV ============================= */
@@ -903,7 +958,7 @@ function goLobby(){
   cleanupOnlineListeners();
   isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
   showScreen('screen-lobby');
-  document.getElementById('round-end-modal').classList.remove('show');
+  document.getElementById('results-panel').classList.remove('show');
   document.getElementById('instr-modal').classList.remove('show');
 }
 function goHub(){
@@ -1171,11 +1226,12 @@ function applyHostAction(act){
     renderAll(); pushStateToFirebase();
     return;
   }
-  if(act.type==='reorderBottom'){
-    if(S.peeked[p]) return; // reordering is only meaningful during the peek window
-    const hand = S.hands[p];
+  if(act.type==='reorderHand'){
+    // Purely a private display-order swap within one row of the player's own hand —
+    // allowed any time (peek window or mid-game), never across rows.
     const {a,b} = act.payload;
-    if([a,b].some(x=>x<3||x>5)) return; // bottom row only
+    if(a===b || a<0 || a>5 || b<0 || b>5 || Math.floor(a/3)!==Math.floor(b/3)) return;
+    const hand = S.hands[p];
     [hand[a], hand[b]] = [hand[b], hand[a]];
     renderAll(); pushStateToFirebase();
     return;
