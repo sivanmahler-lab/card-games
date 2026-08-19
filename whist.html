@@ -1709,7 +1709,8 @@ function showWaitingScreen(){
 
   // Listen for player changes
   cleanupOnlineListeners();
-  _playersListenerOff = roomRef.child('players').on('value', snap=>{
+  const playersRef = roomRef.child('players');
+  const playersHandler = playersRef.on('value', snap=>{
     const players = snap.val() || {};
     const list = document.getElementById('waiting-players');
     if(!list) return;
@@ -1731,6 +1732,9 @@ function showWaitingScreen(){
     if(startBtn) startBtn.disabled = !isHost || count<2;
     if(startBtn && isHost) startBtn.textContent = `התחל משחק (${count} אנשים + ${4-count} בוטים)`;
   });
+  // NOTE: ref.on() returns the handler function itself, not an unsubscribe function — it
+  // must be paired with ref.off(eventType, handler) on cleanup, never called directly.
+  _playersListenerOff = ()=>playersRef.off('value', playersHandler);
 
   // Non-host: listen for game to start. Two independent triggers point at the same
   // startOnlineClientGame() call — the gameState listener (normal path) and a fallback
@@ -1766,7 +1770,15 @@ function showWaitingScreen(){
     };
     // Third argument to on() is an error callback — fires on permission-denied or other
     // server-side rejections, which otherwise fail completely silently on screen.
-    _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
+    // IMPORTANT: in the Firebase compat SDK, ref.on(...) returns the callback function
+    // itself (used later as ref.off(eventType, thatSameCallback)) — it is NOT a ready-to-
+    // call unsubscribe function. Calling the returned value directly (as earlier code here
+    // did) invokes the snapshot handler with no snapshot argument, crashing on
+    // "snap.exists is not a function" — which is exactly the bug that left clients stuck.
+    // We keep an explicit reference to each (ref, handler) pair and call ref.off(...) on
+    // cleanup instead.
+    const gameStateRef = roomRef.child('gameState');
+    const gameStateHandler = gameStateRef.on('value', snap=>{
       if(!snap.exists()) return;
       tryStart(snap.val());
     }, err=>{
@@ -1782,12 +1794,9 @@ function showWaitingScreen(){
       console.error('meta/status listener error', err);
       showToast('שגיאת חיבור (status): '+err.message, 5000);
     });
-    const prevOff = _stateListenerOff;
     // Belt-and-suspenders: poll every 2.5s in addition to the two realtime listeners above.
-    // If a client somehow never receives a 'value' event (e.g. a listener silently failing
-    // to attach on some phone/browser combo — this shouldn't happen, but the earlier bug
-    // report showed a client stuck indefinitely with correct data already in the database),
-    // this guarantees the game still starts for them within a few seconds.
+    // If a client somehow never receives a 'value' event, this guarantees the game still
+    // starts for them within a few seconds.
     const pollInterval = setInterval(()=>{
       if(clientGameStarted){ clearInterval(pollInterval); return; }
       roomRef.child('gameState/phase').once('value').then(snap=>{
@@ -1797,7 +1806,11 @@ function showWaitingScreen(){
         }
       }).catch(e=>console.error('poll failed', e));
     }, 2500);
-    _stateListenerOff = ()=>{ prevOff(); statusRef.off('value', statusHandler); clearInterval(pollInterval); };
+    _stateListenerOff = ()=>{
+      gameStateRef.off('value', gameStateHandler);
+      statusRef.off('value', statusHandler);
+      clearInterval(pollInterval);
+    };
   }
 }
 
@@ -1866,8 +1879,10 @@ function startOnlineClientGame(remoteState, playersData){
   applyRemoteState(remoteState);
   beginMatchClientSide();
 
-  // Now listen for ongoing state updates
-  _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
+  // Now listen for ongoing state updates. As above: keep the ref + handler pair and clean
+  // up via ref.off(), never by calling the handler directly.
+  const ongoingStateRef = roomRef.child('gameState');
+  const ongoingStateHandler = ongoingStateRef.on('value', snap=>{
     if(!snap.exists()) return;
     const remote = snap.val();
     if(!remote || !remote.phase) return;
@@ -1886,6 +1901,7 @@ function startOnlineClientGame(remoteState, playersData){
 
     checkMyTurn();
   });
+  _stateListenerOff = ()=>ongoingStateRef.off('value', ongoingStateHandler);
 }
 
 function beginMatchClientSide(){
