@@ -27,26 +27,98 @@
     transition:.18s;
   }
   a.card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
-  .ic{font-size:34px;margin-bottom:10px;}
+  .ic{margin-bottom:10px;display:flex;align-items:center;justify-content:center;height:52px;}
+  .ic svg{height:100%;width:auto;overflow:visible;}
   a.card h3{margin:0 0 4px;font-size:18px;color:var(--cream);}
   a.card p{margin:0;font-size:12.5px;color:rgba(250,244,230,.6);}
+  h1.brand-title{display:flex;align-items:center;gap:12px;justify-content:center;}
+  h1.brand-title svg{height:40px;width:auto;}
 </style>
 </head>
 <body>
-  <h1>🎴 הלובי</h1>
+  <h1 class="brand-title">
+    <!-- Lobby emblem: a spade pip resting on a poker chip, gold-on-felt -->
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="34" r="26" fill="none" stroke="#d4af5a" stroke-width="3"/>
+      <circle cx="32" cy="34" r="19" fill="none" stroke="#d4af5a" stroke-width="2" stroke-dasharray="4 5"/>
+      <path d="M32 14c9 8 15 15 15 21a9 9 0 0 1-13 8 6 6 0 0 0 4 6h-12a6 6 0 0 0 4-6 9 9 0 0 1-13-8c0-6 6-13 15-21z"
+        fill="#f0d896" stroke="#211a10" stroke-width="1"/>
+    </svg>
+    הלובי
+  </h1>
   <div class="sub">בחרו משחק</div>
   <div class="grid">
     <a class="card" href="whist.html">
-      <div class="ic">♠️♥️</div>
+      <div class="ic">
+        <!-- Whist: a fanned hand of 13 card-backs -->
+        <svg viewBox="0 0 200 100" aria-hidden="true">
+          <g stroke="#d4af5a" stroke-width="1">
+            <!-- 13 cards fanned across ~100deg, drawn back-to-front -->
+            <g id="whist-fan"></g>
+          </g>
+        </svg>
+      </div>
       <h3>וויסט</h3>
       <p>חוזים, שליטים ולקיחות</p>
     </a>
     <a class="card" href="sheshiyot.html">
-      <div class="ic">🎴</div>
+      <div class="ic">
+        <!-- Sheshiyot: six face-up cards, 3 over 3 -->
+        <svg viewBox="0 0 150 70" aria-hidden="true">
+          <g stroke="#211a10" stroke-width="1.5">
+            <rect x="4"  y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="62" y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="120" y="2" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="4"  y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="62" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="120" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+          </g>
+          <g font-family="Heebo, sans-serif" font-weight="800" font-size="13" text-anchor="middle">
+            <text x="17"  y="19" fill="#c0272d">♥</text>
+            <text x="75"  y="19" fill="#1a1a1a">♠</text>
+            <text x="133" y="19" fill="#c0272d">♦</text>
+            <text x="17"  y="55" fill="#1a1a1a">♣</text>
+            <text x="75"  y="55" fill="#c0272d">♥</text>
+            <text x="133" y="55" fill="#1a1a1a">♠</text>
+          </g>
+        </svg>
+      </div>
       <h3>שישיות</h3>
       <p>שישה קלפים, כמה שפחות נקודות</p>
     </a>
     <!-- להוספת משחק חדש: פשוט מעתיקים כרטיס כזה ומצביעים ל-html החדש -->
   </div>
+  <script>
+    // Build the Whist fan programmatically: 13 card-backs rotated evenly across ~100deg,
+    // pivoting from a point below the fan so they spread like a real hand of cards.
+    (function(){
+      const g = document.getElementById('whist-fan');
+      const n = 13, spread = 108, pivotX = 100, pivotY = 150, cardW = 20, cardH = 36;
+      for(let i=0;i<n;i++){
+        const angle = -spread/2 + (spread/(n-1))*i;
+        const wrap = document.createElementNS('http://www.w3.org/2000/svg','g');
+        wrap.setAttribute('transform', `rotate(${angle} ${pivotX} ${pivotY})`);
+        const card = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        card.setAttribute('x', pivotX - cardW/2);
+        card.setAttribute('y', pivotY - cardH - 56);
+        card.setAttribute('width', cardW);
+        card.setAttribute('height', cardH);
+        card.setAttribute('rx', 3);
+        card.setAttribute('fill', i%2===0 ? '#8a1f2b' : '#6e1720');
+        card.setAttribute('stroke', '#f0d896');
+        card.setAttribute('stroke-width', '0.75');
+        wrap.appendChild(card);
+        // a small diamond motif on each card back, like a real card-back pattern
+        const motif = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        motif.setAttribute('cx', pivotX);
+        motif.setAttribute('cy', pivotY - 56 - cardH/2);
+        motif.setAttribute('r', 3.2);
+        motif.setAttribute('fill', '#f0d896');
+        motif.setAttribute('opacity', '0.85');
+        wrap.appendChild(motif);
+        g.appendChild(wrap);
+      }
+    })();
+  </script>
 </body>
 </html>

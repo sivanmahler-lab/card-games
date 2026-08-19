@@ -146,16 +146,16 @@ body{
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
 #reveal-results-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
 #reveal-results-overlay.show{display:block;}
-.results-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:420px;max-height:46vh;overflow-y:auto;
+.results-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:420px;max-height:38vh;overflow-y:auto;
   background:rgba(8,26,20,.96);border:2px solid var(--gold);border-radius:16px 16px 0 0;
-  padding:18px 16px 16px;z-index:850;display:none;box-shadow:0 -10px 34px rgba(0,0,0,.55);}
+  padding:0 16px 16px;z-index:850;display:none;box-shadow:0 -10px 34px rgba(0,0,0,.55);}
 .results-panel.show{display:block;}
-.results-panel .rp-head{cursor:grab;margin:-18px -16px 10px;padding:10px 16px 6px;border-radius:16px 16px 0 0;
-  user-select:none;touch-action:none;text-align:center;font-size:11.5px;color:rgba(250,244,230,.45);
-  background:rgba(255,255,255,.04);}
+.results-panel .rp-head{cursor:grab;margin:0 -16px 10px;padding:12px 16px;border-radius:16px 16px 0 0;
+  user-select:none;touch-action:none;text-align:center;font-size:13px;font-weight:700;color:var(--gold-bright);
+  background:rgba(212,175,90,.14);border-bottom:1px solid rgba(212,175,90,.3);}
 .results-panel .rp-head:active{cursor:grabbing;}
 .results-panel.dragging{transition:none;}
-.results-panel .rp-close{position:absolute;top:8px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
+.results-panel .rp-close{position:absolute;top:10px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
   color:var(--cream);border-radius:8px;width:26px;height:26px;font-size:14px;cursor:pointer;z-index:2;}
 @media(min-width:700px){ .results-panel{max-width:480px;} }
 
@@ -338,7 +338,7 @@ body{
      player keep looking at everyone's revealed cards on the felt above it while reading
      the score breakdown) -->
 <div class="results-panel" id="results-panel">
-  <div class="rp-head" id="rp-head">⠿ גררי כדי להזיז</div>
+  <div class="rp-head" id="rp-head">⠿⠿⠿ גררי כאן כדי להזיז ולראות את הקלפים ⠿⠿⠿</div>
   <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
   <div id="round-end-content"></div>
 </div>
@@ -863,10 +863,19 @@ function endRound(){
   const caller = S.finishCaller;
   const final = raw.slice();
   if(caller!==null){
-    if(raw[caller]===0) final[caller] = raw[caller]-10;
-    for(let p=0;p<4;p++){
-      if(p===caller) continue;
-      if(raw[p] < raw[caller]) final[p] = raw[p]+10;
+    if(raw[caller]===0){
+      // Caller legitimately finished (hand reduced to 0): they get a -10 bonus.
+      // Everyone else is scored on their own raw hand only — no penalty for anyone.
+      final[caller] = raw[caller]-10;
+    } else {
+      // Caller declared "finished" without reaching 0 — a failed declaration. The
+      // penalty applies ONLY if someone else beat them (strictly fewer points): each
+      // such player gets +10 added to their own raw score. Anyone who did NOT beat the
+      // caller (including the caller) just keeps their plain raw score, no penalty.
+      for(let p=0;p<4;p++){
+        if(p===caller) continue;
+        if(raw[p] < raw[caller]) final[p] = raw[p]+10;
+      }
     }
   }
   if(!S.matchHistory) S.matchHistory = [];
