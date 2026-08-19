@@ -766,8 +766,12 @@ function startRound(){
   document.getElementById('pill-round').className = 'pill round';
   document.getElementById('pill-trump').style.display='none';
   document.getElementById('tb-trump').style.display='none';
-  renderTable();
+  // Set the phase BEFORE the first render/push — renderTable() pushes the current S.phase
+  // to Firebase for online games, and clients ignore any push still showing 'idle'. Pushing
+  // 'idle' first (then 'trump-bidding' a moment later) could leave a client stuck watching
+  // the waiting room if that first push is the one their listener happens to catch.
   S.phase='trump-bidding';
+  renderTable();
   advanceTrumpBidding();
 }
 
@@ -1612,9 +1616,12 @@ function updateFirebaseStatus(ok){
 
 async function initOnlineSetup(){
   showScreen('screen-online-setup');
-  const savedName = await getSavedName();
+  // Intentionally not pre-filling from a previously saved name here: on a shared/borrowed
+  // device this silently carried over the last player's name into a new join, which is
+  // exactly the bug that got reported (a second player joining as "סיון"). Every player
+  // must type their own name explicitly for online play.
   const nameInput = document.getElementById('online-name');
-  if(nameInput && savedName) nameInput.value = savedName;
+  if(nameInput) nameInput.value = '';
   await initFirebaseAndUpdateStatus();
 }
 
@@ -1627,7 +1634,8 @@ function genRoomCode(){
 
 async function createRoom(){
   if(!fbDb){ showToast('יש להגדיר Firebase קודם'); return; }
-  const myName = (document.getElementById('online-name').value.trim()) || 'שחקן 1';
+  const myName = document.getElementById('online-name').value.trim();
+  if(!myName){ showToast('נא להזין את השם שלך'); document.getElementById('online-name').focus(); return; }
   saveMyName(myName);
 
   try{
@@ -1663,7 +1671,8 @@ async function joinRoom(){
   if(!fbDb){ showToast('יש להגדיר Firebase קודם'); return; }
   const code = (document.getElementById('join-code').value.trim().toUpperCase());
   if(code.length!==6){ showToast('קוד חדר חייב להיות 6 תווים'); return; }
-  const myName = (document.getElementById('online-name').value.trim()) || 'שחקן';
+  const myName = document.getElementById('online-name').value.trim();
+  if(!myName){ showToast('נא להזין את השם שלך'); document.getElementById('online-name').focus(); return; }
   saveMyName(myName);
 
   try{
@@ -1723,17 +1732,34 @@ function showWaitingScreen(){
     if(startBtn && isHost) startBtn.textContent = `התחל משחק (${count} אנשים + ${4-count} בוטים)`;
   });
 
-  // Non-host: listen for game to start
+  // Non-host: listen for game to start. Two independent triggers point at the same
+  // startOnlineClientGame() call — the gameState listener (normal path) and a fallback
+  // meta/status listener that does one manual fetch of gameState. The fallback exists so a
+  // client isn't left stuck on the waiting screen if it happens to catch the host's very
+  // first (possibly still-'idle') gameState write and never gets a later 'value' event for
+  // some reason. _clientGameStarted guards against firing the start twice.
   if(!isHost){
+    let clientGameStarted = false;
+    const tryStart = (remote)=>{
+      if(clientGameStarted) return;
+      if(!remote || !remote.phase || remote.phase==='idle') return;
+      clientGameStarted = true;
+      roomRef.child('players').once('value').then(pSnap=>{
+        startOnlineClientGame(remote, pSnap.val() || {});
+      });
+    };
     _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
       if(!snap.exists()) return;
-      const remote = snap.val();
-      if(remote && remote.phase && remote.phase!=='idle'){
-        roomRef.child('players').once('value').then(pSnap=>{
-          startOnlineClientGame(remote, pSnap.val() || {});
-        });
-      }
+      tryStart(snap.val());
     });
+    const statusRef = roomRef.child('meta/status');
+    const statusHandler = statusRef.on('value', snap=>{
+      if(clientGameStarted) return;
+      if(snap.val()!=='playing') return;
+      roomRef.child('gameState').once('value').then(gsSnap=>{ tryStart(gsSnap.val()); });
+    });
+    const prevOff = _stateListenerOff;
+    _stateListenerOff = ()=>{ prevOff(); statusRef.off('value', statusHandler); };
   }
 }
 
