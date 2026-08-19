@@ -319,6 +319,10 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 table.score-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px;}
 table.score-table th, table.score-table td{padding:6px 8px;text-align:center;border-bottom:1px solid rgba(212,175,90,.2);}
 table.score-table th{color:var(--gold-bright);font-weight:700;}
+table.match-table{font-size:12.5px;white-space:nowrap;}
+table.match-table th.sub{font-size:10.5px;font-weight:400;color:rgba(250,244,230,.55);padding:2px 6px;}
+table.match-table td{padding:5px 6px;}
+table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:800;color:var(--gold-bright);border-bottom:none;}
 .win-tag{color:#7be29a;font-weight:800;}
 .lose-tag{color:#e77a6d;font-weight:800;}
 
@@ -824,6 +828,7 @@ function beginMatch(){
   S.totals=[0,0,0,0];
   S.roundNum=1;
   S.starter=0;
+  S.roundHistory=[]; // one entry per finished round, for the cumulative match table
   showScreen('screen-game');
   for(let actual=0;actual<4;actual++){
     const disp = displayFor(actual);
@@ -1570,21 +1575,45 @@ function finishRound(){
     S.totals[p]+=pts;
     results.push({p, bid, won, pts, made});
   }
+  if(!S.roundHistory) S.roundHistory=[];
+  S.roundHistory.push({
+    roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit,
+    names: S.names.slice(), results
+  });
   showRoundEndModal(results);
 }
 function showRoundEndModal(results){
-  let rows = results.map(r=>`<tr>
-    <td>${S.names[r.p]}</td><td>${r.bid}</td><td>${r.won}</td>
-    <td class="${r.made?'win-tag':'lose-tag'}">${r.pts>0?'+':''}${r.pts}</td>
-    <td>${S.totals[r.p]}</td>
-  </tr>`).join('');
+  // Cumulative match table: one row per finished round (not just this one), with each
+  // player getting two sub-columns (bid | score) so the whole match's bidding history is
+  // visible at a glance — matches how a real Whist scoresheet is kept on paper.
+  const history = S.roundHistory && S.roundHistory.length ? S.roundHistory : [{
+    roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit, names: S.names.slice(), results
+  }];
+  const nameHeaderCells = S.names.map(n=>`<th colspan="2">${n}</th>`).join('');
+  const subHeaderCells = S.names.map(()=>`<th class="sub">הימור</th><th class="sub">ניקוד</th>`).join('');
+  const rowsHtml = history.map(h=>{
+    const typeLabel = h.roundType==='UP' ? 'UP ⬆' : (h.roundType==='UNDER' ? 'UNDER ⬇' : '');
+    const trumpInfo = h.trumpSuit!=null && SUITS[h.trumpSuit] ? SUITS[h.trumpSuit].sym : '';
+    const cells = h.results.map(r=>{
+      const scoreCell = r.made
+        ? `<span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${r.pts>0?'+':''}${r.pts}</span>`
+        : `${r.pts>0?'+':''}${r.pts}`;
+      return `<td>${r.bid}</td><td class="${r.made?'win-tag':'lose-tag'}">${scoreCell}</td>`;
+    }).join('');
+    return `<tr><td>${h.roundNum}<br><span style="font-size:10.5px;color:rgba(250,244,230,.55);">${typeLabel} ${trumpInfo}</span></td>${cells}</tr>`;
+  }).join('');
+  const totalsCells = S.totals.map(t=>`<td colspan="2">${t}</td>`).join('');
   const isHostOrLocal = !isOnline || isHost;
   document.getElementById('round-end-content').innerHTML = `
-    <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum} — ${S.roundType==='UP'?'UP ⬆':'UNDER ⬇'} (שליט ${SUITS[S.trumpSuit].sym} ${SUITS[S.trumpSuit].name})</h3>
-    <table class="score-table">
-      <tr><th>שחקן</th><th>הימור</th><th>לקח</th><th>ניקוד</th><th>סה"כ</th></tr>
-      ${rows}
+    <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
+    <div style="overflow-x:auto;">
+    <table class="score-table match-table">
+      <tr><th>סיבוב</th>${nameHeaderCells}</tr>
+      <tr><th class="sub"></th>${subHeaderCells}</tr>
+      ${rowsHtml}
+      <tr class="totals-row"><td>סה"כ</td>${totalsCells}</tr>
     </table>
+    </div>
     ${isHostOrLocal
       ? `<button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
          <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>`
@@ -2073,6 +2102,7 @@ function applyRemoteState(remote){
   S.totals = remote.totals || [0,0,0,0];
   S.starter = remote.starter || 0;
   S.roundType = remote.roundType || null;
+  S.roundHistory = remote.roundHistory || [];
   // Use received hands (clients only render their own face-up)
   if(remote.hands) S.hands = remote.hands;
 
@@ -2131,6 +2161,7 @@ function pushStateToFirebase(){
     starter: S.starter,
     roundType: S.roundType || null,
     hands: S.hands,
+    roundHistory: S.roundHistory || [],
   };
   roomRef.child('gameState').set(state).catch(e=>console.error('Firebase push failed',e));
 }
