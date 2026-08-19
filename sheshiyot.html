@@ -423,14 +423,12 @@ function doPeek(){
   if(isOnline && !isHost){
     S.peeked[myActual] = true; // optimistic local reveal for the peek animation
     renderAll();
-    showToast('זכור/י את שלושת הקלפים למטה!', 3500);
     submitRemoteAction('peek', {});
     setTimeout(()=>{ peekingNow=false; renderAll(); }, 3200);
     return;
   }
   S.peeked[myActual] = true;
   renderAll();
-  showToast('זכור/י את שלושת הקלפים למטה!', 3500);
   setTimeout(()=>{
     peekingNow = false;
     if(allPeeked()){
