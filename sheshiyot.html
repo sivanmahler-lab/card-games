@@ -46,7 +46,7 @@ body{
   transition:.18s; position:relative; overflow:hidden; cursor:pointer;
 }
 .mode-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
-.mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);}
+.mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);display:flex;align-items:center;justify-content:center;height:46px;}
 .mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
 .mode-card.online-card{border-color:var(--teal);}
@@ -122,6 +122,10 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
   padding:3px 12px;white-space:nowrap;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);}
 .p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
+.pgrid-inner{display:flex;flex-direction:column;align-items:center;gap:1px;}
+.active-row-arrow{font-size:11px;line-height:1;color:var(--gold-bright);font-weight:800;
+  text-shadow:0 0 6px rgba(240,216,150,.7);visibility:hidden;}
+.active-row-arrow.show{visibility:visible;}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
 .pgrid.small{transform:scale(.62);}
 @media(min-width:700px){
@@ -205,7 +209,14 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
 
 @media(max-width:480px){
   .pcell{width:38px;height:54px;}
-  .pile{width:46px;height:66px;}
+  .pile{width:42px;height:60px;}
+  /* Side players' card grids were visually overlapping the center piles on narrow
+     phones — .pgrid.small only scales the cards visually, the layout box itself stays
+     full width, so it needs to shrink AND sit further out for the piles to have room. */
+  .pgrid.small{transform:scale(.5);}
+  .pgrid-wrap.pos-1{left:-6px;}
+  .pgrid-wrap.pos-3{right:-6px;}
+  .center-pot > div{gap:10px !important;}
 }
 </style>
 </head>
@@ -248,12 +259,46 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
     <div class="hero-sub">שישה קלפים, כמה שפחות נקודות — משחק הקלפים הישראלי</div>
     <div class="mode-grid">
       <div class="mode-card" onclick="chooseMode('computer')">
-        <div class="ic">🤖</div>
+        <div class="ic">
+          <!-- vs computer: a player card facing off against three bot silhouettes -->
+          <svg viewBox="0 0 90 60" aria-hidden="true" style="width:52px;height:auto;">
+            <rect x="4" y="16" width="26" height="36" rx="4" fill="#faf4e6" stroke="#211a10" stroke-width="1.5"/>
+            <text x="17" y="39" font-family="Heebo, sans-serif" font-weight="800" font-size="15" text-anchor="middle" fill="#c0272d">♥</text>
+            <g stroke="#d4af5a" stroke-width="1.6" fill="none">
+              <path d="M40 30h10" stroke-dasharray="2 3"/>
+            </g>
+            <g fill="none" stroke="#d4af5a" stroke-width="1.8">
+              <rect x="56" y="10" width="16" height="14" rx="3"/>
+              <circle cx="61.5" cy="17" r="1.6" fill="#f0d896" stroke="none"/>
+              <circle cx="66.5" cy="17" r="1.6" fill="#f0d896" stroke="none"/>
+              <path d="M64 4v6M60 4l1.5 3M68 4l-1.5 3" stroke-linecap="round"/>
+              <rect x="52" y="28" width="14" height="12" rx="3"/>
+              <circle cx="56.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+              <circle cx="61.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+              <rect x="70" y="28" width="14" height="12" rx="3"/>
+              <circle cx="74.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+              <circle cx="79.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+            </g>
+          </svg>
+        </div>
         <h3>מול המחשב</h3>
         <p>את/ה מול שלושה בוטים. מתחילים מיד.</p>
       </div>
       <div class="mode-card online-card" onclick="chooseMode('online')">
-        <div class="ic">🌐</div>
+        <div class="ic">
+          <!-- online with friends: four connected player dots around a signal pulse -->
+          <svg viewBox="0 0 70 60" aria-hidden="true" style="width:44px;height:auto;">
+            <g stroke="#d4af5a" stroke-width="1.4" fill="none" opacity="0.75">
+              <path d="M35 30 L35 10 M35 30 L15 42 M35 30 L55 42 M35 30 L15 18 M35 30 L55 18"/>
+            </g>
+            <circle cx="35" cy="30" r="7" fill="#f0d896" stroke="#211a10" stroke-width="1"/>
+            <circle cx="35" cy="10" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+            <circle cx="15" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+            <circle cx="55" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+            <circle cx="15" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+            <circle cx="55" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+          </svg>
+        </div>
         <h3>אונליין עם חברים</h3>
         <p>כל שחקן על המכשיר שלו, בזמן אמת. אפשר להתחיל גם עם פחות מ-4 — המקומות הפנויים יתמלאו בבוטים.</p>
       </div>
@@ -323,10 +368,10 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
   <div id="final-round-banner"></div>
   <div id="table-wrap">
     <div id="felt">
-      <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid" id="pg-0"></div></div>
-      <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid small" id="pg-1"></div></div>
-      <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid small" id="pg-2"></div></div>
-      <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid small" id="pg-3"></div></div>
+      <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-0">▲</div><div class="pgrid" id="pg-0"></div></div></div>
+      <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-1">▲</div><div class="pgrid small" id="pg-1"></div></div></div>
+      <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-2">▲</div><div class="pgrid small" id="pg-2"></div></div></div>
+      <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-3">▲</div><div class="pgrid small" id="pg-3"></div></div></div>
       <div class="center-pot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
         <div style="display:flex;gap:18px;align-items:flex-start;">
           <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
@@ -945,9 +990,18 @@ function showRoundEndModal(){
 
   let headerCells = S.names.map(n=>`<th>${n}</th>`).join('');
   let rows = history.map((r,idx)=>{
+    // Just the round number — who came out ahead for THIS round is shown by circling
+    // their score below, not spelled out in the round label itself (which used to read
+    // like "סבב 1 בוט 1", as if bot 1 were literally the round's name).
     const roundLabel = 'סבב '+(idx+1) +
       (r.caller!==null ? `<br><span style="font-size:11px;font-weight:400;color:var(--gold-bright);">📣 ${r.names[r.caller]} אמר/ה "סיימתי"</span>` : '');
-    const cells = r.final.map(v=>`<td>${v}</td>`).join('');
+    const roundMin = Math.min(...r.final);
+    const cells = r.final.map(v=>{
+      // Circle the lowest (winning) score for this specific round.
+      return v===roundMin
+        ? `<td><span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${v}</span></td>`
+        : `<td>${v}</td>`;
+    }).join('');
     return `<tr><td>${roundLabel}</td>${cells}</tr>`;
   }).join('');
   let totalsCells = totals.map(t=>`<td>${t===minTotal?'<b>'+t+'</b>':t}</td>`).join('');
@@ -979,7 +1033,10 @@ function renderAll(){
     pill.textContent = roundPrefix + (allPeeked() ? 'מתחילים...' : 'שלב הצצה — כל שחקן מציץ בשלושת הקלפים התחתונים שלו');
   } else if(S.phase==='playing'){
     const turnName = S.names[S.turn];
-    pill.textContent = roundPrefix + (S.finishCaller!==null ? '🔔 סבב אחרון — ' : '') + 'תור: ' + (S.turn===myActual?'שלך':turnName);
+    const finishNote = S.finishCaller!==null
+      ? `🔔 ${S.finishCaller===myActual ? 'הכרזת' : (S.names[S.finishCaller]||('שחקן '+S.finishCaller))+' הכריז/ה'} "סיימתי" — סבב אחרון — `
+      : '';
+    pill.textContent = roundPrefix + finishNote + 'תור: ' + (S.turn===myActual?'שלך':turnName);
   } else if(S.phase==='ended'){
     pill.textContent = roundPrefix + 'הסתיים';
   }
@@ -1008,6 +1065,11 @@ function renderAll(){
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     nameEl.classList.toggle('declared-finish', declared);
     renderPlayerGrid(disp, actual);
+    // Once a player graduates, only their top row (the first 3 cells) is in play — mark
+    // that row with a small arrow so it's obvious at a glance who's playing which row,
+    // without having to remember who tapped a top-row card at some earlier point.
+    const arrowEl = document.getElementById('ar-'+disp);
+    if(arrowEl) arrowEl.classList.toggle('show', !!S.graduated[actual]);
   }
 
   // piles
