@@ -6,6 +6,9 @@
 <title>ויסט — משחק הקלפים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 <style>
 :root{
   --cp-h:0px;
@@ -60,7 +63,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .tb-btn:active{transform:scale(.96);}
 
 /* ---------- SCREENS ---------- */
-.screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow:auto;}
+.screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;}
 .screen.active{display:flex;}
 
 /* ---------- LOBBY ---------- */
@@ -69,17 +72,19 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .hero-suits{font-size:52px;letter-spacing:14px;margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);}
 .hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;}
 .hero-sub{color:rgba(250,244,230,.65);font-size:15px;margin-bottom:34px;letter-spacing:.5px;}
-.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;}
+.mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
 @media(max-width:640px){.mode-grid{grid-template-columns:1fr;}}
 .mode-card{
   background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
   border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
-  transition:.18s; position:relative; overflow:hidden;
+  transition:.18s; position:relative; overflow:hidden; cursor:pointer;
 }
 .mode-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
 .mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);}
 .mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
+.mode-card.online-card{border-color:var(--teal);grid-column:1/-1;}
+.mode-card.online-card .ic{color:var(--teal);}
 .note-strip{font-size:12px;color:rgba(250,244,230,.5);border-top:1px dashed rgba(212,175,90,.3);padding-top:14px;margin-top:8px;line-height:1.6;}
 
 /* ---------- SETUP ---------- */
@@ -99,10 +104,49 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   box-shadow:0 6px 18px rgba(212,175,90,.25);
 }
 .btn-primary:hover{filter:brightness(1.06);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;filter:none;}
 .btn-secondary{
   width:100%;padding:11px;border-radius:10px;margin-top:10px;border:1px solid rgba(212,175,90,.4);
   background:transparent;color:var(--gold-bright);font-weight:600;font-size:14px;
 }
+
+/* ---------- ONLINE SETUP ---------- */
+#screen-online-setup{justify-content:center;padding:24px;}
+.online-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:500px;width:92%;}
+.online-box h2{color:var(--teal);margin-bottom:6px;text-align:center;font-size:24px;}
+.online-box .sub{color:rgba(250,244,230,.55);font-size:13px;text-align:center;margin-bottom:22px;}
+.or-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:rgba(250,244,230,.4);font-size:13px;}
+.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:rgba(212,175,90,.2);}
+.join-row{display:flex;gap:8px;}
+.join-row input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);color:var(--cream);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
+.join-row input::placeholder{letter-spacing:0;font-weight:400;font-size:14px;}
+.join-row .btn-primary{width:auto;padding:10px 18px;margin-top:0;white-space:nowrap;}
+.firebase-hint{margin-top:18px;padding:12px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,90,.2);font-size:12px;color:rgba(250,244,230,.5);line-height:1.7;}
+.firebase-hint a{color:var(--teal);cursor:pointer;text-decoration:underline;}
+.firebase-status{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:16px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.25);}
+.firebase-status .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.firebase-status .dot.ok{background:#5be27a;}
+.firebase-status .dot.err{background:var(--danger);}
+
+/* ---------- WAITING ROOM ---------- */
+#screen-waiting{justify-content:center;padding:24px;}
+.waiting-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:420px;width:92%;text-align:center;}
+.waiting-box h2{color:var(--teal);margin-bottom:6px;font-size:22px;}
+.room-code-display{
+  font-size:42px;font-weight:900;letter-spacing:10px;color:var(--gold-bright);
+  background:rgba(0,0,0,.4);border:2px dashed rgba(212,175,90,.5);border-radius:14px;
+  padding:16px;margin:18px 0;font-family:'Frank Ruhl Libre',serif;
+  cursor:pointer;user-select:all;transition:.15s;
+}
+.room-code-display:hover{border-color:var(--gold-bright);}
+.room-code-hint{font-size:12px;color:rgba(250,244,230,.4);margin-top:-10px;margin-bottom:16px;}
+.players-list{list-style:none;padding:0;margin:14px 0;text-align:right;}
+.players-list li{padding:8px 12px;border-radius:8px;margin-bottom:6px;font-size:14px;background:rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;}
+.players-list li .seat-dot{width:8px;height:8px;border-radius:50%;background:rgba(250,244,230,.2);flex-shrink:0;}
+.players-list li.joined .seat-dot{background:#5be27a;}
+.waiting-status{font-size:13px;color:rgba(250,244,230,.55);margin-bottom:16px;min-height:20px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(212,175,90,.3);border-top-color:var(--gold-bright);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-inline-end:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
 
 /* ---------- GAME TABLE ---------- */
 #screen-game{padding:0;}
@@ -128,18 +172,16 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .pill.round{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 .pill.trump{background:rgba(0,0,0,.55);color:var(--cream);border-color:rgba(212,175,90,.6);}
 .pill.up{background:var(--amber);color:#241a05;}
-.pill.under{background:var(--teal);color:#04211c;}
+.pill.under{background:var(--teal);color:#04211c);}
+.pill.online{background:rgba(63,154,139,.25);color:var(--teal);border-color:rgba(63,154,139,.5);}
 
-/* seats — all kept fully inside the felt's own box so nothing ever depends on scrolling */
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:60;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
-/* Left/right badges and fans are positioned fully independently (not sharing a flex
-   row) — this avoids the RTL row-direction ambiguity that kept misplacing them. */
-.side-badge{position:absolute;z-index:20;}
+.side-badge{position:absolute;z-index:30;}
 .side-badge.left-badge{left:6px;top:14%;}
 .side-badge.right-badge{right:6px;top:14%;}
-.fan.side{position:absolute;z-index:20;}
+.fan.side{position:absolute;z-index:30;}
 .fan.left-fan{left:6px;top:14%;}
 .fan.right-fan{right:6px;top:14%;}
 
@@ -150,6 +192,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .name-badge .turn-dot{width:7px;height:7px;border-radius:50%;background:transparent;}
 .name-badge.active .turn-dot{background:#5be27a;box-shadow:0 0 8px #5be27a;}
 .name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);}
+.name-badge.me{border-color:var(--teal);box-shadow:0 0 10px rgba(63,154,139,.3);}
 .badge-stats{display:flex;flex-direction:column;gap:2px;align-items:center;}
 .bid-badge{font-size:10.5px;color:var(--teal);background:rgba(0,0,0,.4);border-radius:8px;padding:1px 7px;white-space:nowrap;}
 .tricks-badge{font-size:10.5px;color:var(--gold-bright);background:rgba(0,0,0,.4);border-radius:8px;padding:1px 7px;white-space:nowrap;}
@@ -171,7 +214,6 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .ds-rows{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:var(--cream);font-size:13px;}
 @keyframes dsPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.85);}10%{opacity:1;transform:translate(-50%,-50%) scale(1);}88%{opacity:1;}100%{opacity:0;}}
 
-/* hand fans */
 .fan{position:relative;height:clamp(78px,15vmin,124px);width:clamp(240px,80vmin,620px);}
 .fan.side{height:clamp(130px,30vmin,220px);width:clamp(44px,9vmin,64px);}
 .card{
@@ -199,15 +241,13 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .card.illegal{filter:brightness(.55) saturate(.6);}
 .card.selected{transform:translateY(-16px) scale(1.06);box-shadow:0 0 0 3px var(--gold-bright);}
 
-/* center trick area */
 #trick-area{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   width:80%;height:74%;z-index:25;
-  pointer-events:none; /* nothing inside is interactive — never intercept taps meant for hands beneath */
+  pointer-events:none;
 }
 .played-card{position:absolute;width:58px;height:82px;}
 
-/* bottom control panel */
 #control-panel{
   width:100%;flex-shrink:0;
   background:linear-gradient(0deg, rgba(6,17,13,.97), rgba(6,17,13,.85));
@@ -234,7 +274,6 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .count-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
 .count-row input[type=number]{width:70px;text-align:center;padding:8px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.08);color:var(--cream);font-size:16px;}
 
-/* modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:800;display:none;align-items:center;justify-content:center;padding:20px;}
 .modal-bg.show{display:flex;}
 .modal{background:var(--panel);border:1px solid rgba(212,175,90,.4);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 24px;}
@@ -243,6 +282,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .modal p, .modal li{font-size:13.5px;line-height:1.85;color:rgba(250,244,230,.9);}
 .modal ul,.modal ol{padding-inline-start:20px;margin:6px 0;}
 .modal .close-btn{margin-top:18px;}
+.modal textarea{width:100%;min-height:120px;padding:10px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);color:var(--cream);font-size:12px;font-family:monospace;resize:vertical;}
 
 .gate-bg{position:fixed;inset:0;background:#050c09;z-index:900;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;text-align:center;}
 .gate-bg.show{display:flex;}
@@ -291,7 +331,6 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
       <button class="tb-btn" onclick="newGame()">משחק חדש</button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
       <button class="tb-btn" onclick="goLobby()">לובי</button>
-      <button class="tb-btn" onclick="goHome()">בית</button>
     </div>
   </div>
 
@@ -304,29 +343,84 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
       <div class="mode-grid">
         <div class="mode-card" onclick="chooseMode('computer')">
           <div class="ic">🤖</div>
-          <h3>משחק מול המחשב</h3>
-          <p>את/ה מול שלושה בוטים. מתחילים מיד, בלי הרשמה.</p>
+          <h3>מול המחשב</h3>
+          <p>את/ה מול שלושה בוטים. מתחילים מיד.</p>
         </div>
         <div class="mode-card" onclick="chooseMode('friends')">
           <div class="ic">👥</div>
-          <h3>משחק מול חברים</h3>
-          <p>מצב "העברת מכשיר" — כולם סביב אותו מסך, כל אחד בתורו.</p>
+          <h3>העברת מכשיר</h3>
+          <p>כולם סביב אותו מסך, כל אחד בתורו.</p>
         </div>
         <div class="mode-card" onclick="chooseMode('mixed')">
           <div class="ic">🎭</div>
-          <h3>משחק משולב</h3>
-          <p>חבר אחד או שניים באותו מכשיר, השאר בוטים.</p>
+          <h3>משולב + בוטים</h3>
+          <p>חבר אחד או שניים + בוטים.</p>
         </div>
-      </div>
-      <div class="note-strip">
-        הערה: המשחק כאן פועל כדף אחד עצמאי בדפדפן, ללא שרת. לכן מצבי "חברים"/"משולב" הם במתכונת <b>העברת מכשיר</b> (Pass &amp; Play) ולא הזמנה חיה בוואטסאפ עם לינק בזמן אמת — זה ידרוש שרת (למשל Supabase + WebSocket), ואשמח לבנות את זה בנפרד אם תרצה גרסת אונליין אמיתית.
+        <div class="mode-card online-card" onclick="chooseMode('online')">
+          <div class="ic">🌐</div>
+          <h3>אונליין בזמן אמת</h3>
+          <p>שתפו קוד חדר עם חברים — כל אחד על המכשיר שלו. דורש Firebase Realtime Database.</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- SETUP -->
+  <!-- SETUP (local modes) -->
   <div class="screen" id="screen-setup">
     <div class="setup-box" id="setup-box"></div>
+  </div>
+
+  <!-- ONLINE SETUP -->
+  <div class="screen" id="screen-online-setup">
+    <div class="online-box">
+      <h2>🌐 משחק אונליין</h2>
+      <p class="sub">כל שחקן על המכשיר שלו — מחוברים בזמן אמת</p>
+
+      <div class="firebase-status" id="fb-status">
+        <span class="dot err" id="fb-dot"></span>
+        <span id="fb-status-text">Firebase לא מוגדר</span>
+        <button class="tb-btn" style="margin-inline-start:auto;padding:4px 10px;font-size:11px;" onclick="openFirebaseModal()">הגדרות</button>
+      </div>
+
+      <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..."></div>
+
+      <button class="btn-primary" id="create-room-btn" onclick="createRoom()" disabled>צור חדר חדש</button>
+
+      <div class="or-divider">או</div>
+
+      <div class="field"><label>הצטרף לחדר קיים</label>
+        <div class="join-row">
+          <input id="join-code" placeholder="קוד חדר (6 תווים)" maxlength="6" oninput="this.value=this.value.toUpperCase()">
+          <button class="btn-primary" onclick="joinRoom()">הצטרף</button>
+        </div>
+      </div>
+
+      <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>
+
+      <div class="firebase-hint">
+        <b>איך מגדירים Firebase?</b><br>
+        1. צור פרויקט ב-<a onclick="showToast('פתח: console.firebase.google.com')">Firebase Console</a><br>
+        2. הפעל <b>Realtime Database</b> (מצב test לפיתוח)<br>
+        3. לחץ על "הגדרות" למעלה והדבק את ה-config
+      </div>
+    </div>
+  </div>
+
+  <!-- WAITING ROOM -->
+  <div class="screen" id="screen-waiting">
+    <div class="waiting-box">
+      <h2>🃏 ממתינים לשחקנים</h2>
+      <p style="color:rgba(250,244,230,.55);font-size:13px;margin:4px 0 0;">שלחו את קוד החדר לחברים:</p>
+      <div class="room-code-display" id="waiting-code" onclick="copyRoomCode()" title="לחץ להעתקה">------</div>
+      <div class="room-code-hint">לחץ להעתקה • כל שחקן מזין את הקוד ומצטרף</div>
+
+      <ul class="players-list" id="waiting-players"></ul>
+
+      <div class="waiting-status" id="waiting-status"><span class="spinner"></span>ממתין לשחקנים...</div>
+
+      <button class="btn-primary" id="start-room-btn" onclick="startOnlineHostGame()" disabled style="display:none;">התחל משחק</button>
+      <button class="btn-secondary" onclick="leaveRoom()">עזוב חדר</button>
+    </div>
   </div>
 
   <!-- GAME -->
@@ -334,6 +428,7 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
     <div class="game-header" id="game-header">
       <div class="pill round" id="pill-round">סיבוב 1</div>
       <div class="pill trump" id="pill-trump" style="display:none;"></div>
+      <div class="pill online" id="pill-online" style="display:none;">🌐 אונליין</div>
     </div>
     <div id="table-wrap">
       <div id="felt">
@@ -377,11 +472,31 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
     </div>
   </div>
 
+  <!-- Firebase config modal -->
+  <div class="modal-bg" id="firebase-modal">
+    <div class="modal" style="max-width:520px;">
+      <h2>🔧 הגדרות Firebase</h2>
+      <p style="font-size:13px;color:rgba(250,244,230,.6);margin-bottom:14px;">
+        הדבק את אובייקט הקונפיגורציה מ-Firebase Console → Project Settings → Your apps:
+      </p>
+      <div class="field">
+        <label>Firebase Config (JSON)</label>
+        <textarea id="fb-config-textarea" placeholder='{"apiKey":"...","authDomain":"...","databaseURL":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+      </div>
+      <p style="font-size:11px;color:rgba(250,244,230,.4);margin-bottom:14px;">
+        ⚠️ ה-config נשמר בדפדפן זה בלבד (localStorage). אל תשתפ/י אותו ברשת.
+      </p>
+      <button class="btn-primary" onclick="saveFirebaseConfig()">שמור והתחבר</button>
+      <button class="btn-secondary" onclick="clearFirebaseConfig()" style="margin-top:8px;">נקה הגדרות</button>
+      <button class="tb-btn close-btn" onclick="document.getElementById('firebase-modal').classList.remove('show')">ביטול</button>
+    </div>
+  </div>
+
   <!-- pass-device gate -->
   <div class="gate-bg" id="gate">
     <div class="gs">♠ ♥</div>
     <h2 id="gate-title"></h2>
-    <p>המכשיר עובר אליך. לחצו "המשך" רק כשאתם רואים את המסך לבד — כדי לא לחשוף את הקלפים לשחקנים האחרים.</p>
+    <p>המכשיר עובר אליך. לחצו "המשך" רק כשאתם רואים את המסך לבד.</p>
     <button class="btn-primary" style="width:220px;" onclick="gateContinue()">המשך</button>
   </div>
 
@@ -409,7 +524,27 @@ function shuffle(arr){
 function sortHand(h){ return h.slice().sort((a,b)=> a.suit-b.suit || a.rank-b.rank); }
 
 /* ============================= STATE ============================= */
-let S = null; // full game state object
+let S = null;
+
+/* Online mode */
+let myOnlineSeat = 0;  // display seat: always 0 for local games; 0-3 for online
+let isOnline = false;
+let isHost = false;
+let roomCode = '';
+let roomRef = null;
+let fbApp = null;
+let fbDb = null;
+let _actionListenerOff = null;  // cleanup for pendingAction listener
+let _stateListenerOff = null;   // cleanup for gameState listener
+let _playersListenerOff = null; // cleanup for players listener
+
+/* Seat rotation helpers */
+function displayFor(actualSeat){
+  return (actualSeat - myOnlineSeat + 4) % 4;
+}
+function seatFor(displayPos){
+  return (displayPos + myOnlineSeat) % 4;
+}
 
 function freshState(){
   return {
@@ -421,7 +556,7 @@ function freshState(){
     roundNum:1,
     starter:0,
     phase:'idle',
-    trumpBid:null,        // {count,suit,player}
+    trumpBid:null,
     playerLastBid:[null,null,null,null],
     activeBidders:[0,1,2,3],
     passedBidders:[],
@@ -431,7 +566,7 @@ function freshState(){
     bids:[null,null,null,null],
     tricksWon:[0,0,0,0],
     leader:0,
-    currentTrick:[],      // {player,card}
+    currentTrick:[],
     turnInTrick:0,
     trumpBroken:false,
     trickHistory:[],
@@ -444,9 +579,9 @@ function freshState(){
 }
 
 /* ============================= HEARTBEAT WATCHDOG ============================= */
-/* Catches ANY stuck-bot situation (whatever the cause) and nudges the game forward. */
 function heartbeatCheck(){
   if(!S) return;
+  if(isOnline && !isHost) return; // clients don't drive logic
   if(S.phase!=='trump-bidding' && S.phase!=='trick-bidding' && S.phase!=='playing') return;
 
   if(S.phase==='playing' && S.currentTrick.length===4){
@@ -472,11 +607,7 @@ function heartbeatCheck(){
     return;
   }
   const sig = S.phase+':'+p+':'+(S.phase==='playing'?S.currentTrick.length:'');
-  if(sig!==S.turnSig){
-    S.turnSig = sig;
-    S.turnSigTime = Date.now();
-    return;
-  }
+  if(sig!==S.turnSig){ S.turnSig=sig; S.turnSigTime=Date.now(); return; }
   if(Date.now()-S.turnSigTime < 4000) return;
 
   S.turnSigTime = Date.now();
@@ -495,6 +626,8 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
 }
 function goLobby(){
+  cleanupOnlineListeners();
+  isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
   showScreen('screen-lobby');
   hideControlPanel();
   document.getElementById('round-end-modal').classList.remove('show');
@@ -502,7 +635,6 @@ function goLobby(){
   document.getElementById('gate').classList.remove('show');
   gateCallback=null;
 }
-function goHome(){ goLobby(); }
 function newGame(){
   showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
 }
@@ -530,25 +662,27 @@ function showToast(msg, duration=1800){
   setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, duration);
 }
 
-/* ============================= SAVED NAME (persists on this device) ============================= */
+/* ============================= SAVED NAME ============================= */
 async function getSavedName(){
   try{
-    const res = await window.storage.get('whist_player_name', false);
-    return (res && res.value) ? res.value : '';
-  } catch(e){
-    return '';
-  }
+    const v = localStorage.getItem('whist_player_name');
+    return v || '';
+  } catch(e){ return ''; }
 }
 async function saveMyName(name){
-  try{
-    await window.storage.set('whist_player_name', name, false);
-  } catch(e){ /* storage unavailable, ignore */ }
+  try{ localStorage.setItem('whist_player_name', name); } catch(e){}
 }
 
 /* ============================= LOBBY -> SETUP ============================= */
 async function chooseMode(mode){
+  if(mode==='online'){
+    await initOnlineSetup();
+    return;
+  }
   S = freshState();
   S.mode = mode;
+  myOnlineSeat = 0;
+  isOnline = false;
   const myName = (await getSavedName()) || 'את/ה';
   const box = document.getElementById('setup-box');
   if(mode==='computer'){
@@ -560,8 +694,8 @@ async function chooseMode(mode){
   } else if(mode==='friends'){
     box.innerHTML = `
       <h2>משחק מול חברים (העברת מכשיר)</h2>
-      <div class="field"><label>כמה שחקנים סה"כ? (כולל אותך)</label>
-        <select id="inp-count"><option value="4">4 שחקנים</option><option value="3">3 שחקנים (+ בוט אחד)</option></select>
+      <div class="field"><label>כמה שחקנים?</label>
+        <select id="inp-count"><option value="4">4 שחקנים</option><option value="3">3 שחקנים (+ בוט)</option></select>
       </div>
       <div id="name-fields"></div>
       <button class="btn-primary" onclick="startFriendsGame()">התחל משחק</button>
@@ -572,7 +706,7 @@ async function chooseMode(mode){
     box.innerHTML = `
       <h2>משחק משולב</h2>
       <div class="field"><label>כמה חברים באותו מכשיר? (מלבדך)</label>
-        <select id="inp-count"><option value="1">חבר אחד (+ 2 בוטים)</option><option value="2">שני חברים (+ בוט אחד)</option></select>
+        <select id="inp-count"><option value="1">חבר אחד (+ 2 בוטים)</option><option value="2">שני חברים (+ בוט)</option></select>
       </div>
       <div id="name-fields"></div>
       <button class="btn-primary" onclick="startMixedGame()">התחל משחק</button>
@@ -589,7 +723,6 @@ function renderNameFields(totalHumans, myName){
     html += `<div class="field"><label>שם שחקן ${i+1}</label><input id="inp-name-${i}" value="חבר ${i+1}" maxlength="12"></div>`;
   }
   wrap.innerHTML = html;
-  wrap.dataset.total = totalHumans;
 }
 function renderMixedNameFields(friendCount, myName){
   const wrap = document.getElementById('name-fields');
@@ -598,7 +731,6 @@ function renderMixedNameFields(friendCount, myName){
     html += `<div class="field"><label>שם חבר ${i}</label><input id="inp-name-${i}" value="חבר ${i}" maxlength="12"></div>`;
   }
   wrap.innerHTML = html;
-  wrap.dataset.friends = friendCount;
 }
 function startComputerGame(){
   S.names[0] = document.getElementById('inp-name').value.trim() || 'את/ה';
@@ -633,7 +765,12 @@ function beginMatch(){
   S.roundNum=1;
   S.starter=0;
   showScreen('screen-game');
-  for(let i=0;i<4;i++) document.getElementById('badge-'+i).querySelector('.nm').textContent = S.names[i];
+  document.getElementById('pill-online').style.display = isOnline ? 'inline-block' : 'none';
+  for(let actual=0;actual<4;actual++){
+    const disp = displayFor(actual);
+    document.getElementById('badge-'+disp).querySelector('.nm').textContent = S.names[actual];
+    document.getElementById('badge-'+disp).classList.toggle('me', isOnline && actual===myOnlineSeat);
+  }
   startRound();
 }
 
@@ -653,9 +790,8 @@ function startRound(){
   S.trickHistory=[];
   S.roundType=null;
   S.revealedHuman=-1;
-  const roundPill = document.getElementById('pill-round');
-  roundPill.textContent = 'סיבוב '+S.roundNum;
-  roundPill.className = 'pill round';
+  document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
+  document.getElementById('pill-round').className = 'pill round';
   document.getElementById('pill-trump').style.display='none';
   document.getElementById('tb-trump').style.display='none';
   renderTable();
@@ -665,30 +801,34 @@ function startRound(){
 
 /* ============================= RENDER: TABLE ============================= */
 function renderTable(){
-  for(let p=0;p<4;p++){
-    const badge = document.getElementById('badge-'+p);
-    badge.classList.toggle('active', isCurrentActor(p));
+  for(let actual=0;actual<4;actual++){
+    const disp = displayFor(actual);
+    const badge = document.getElementById('badge-'+disp);
+    badge.classList.toggle('active', isCurrentActor(actual));
     if(S.phase==='trump-bidding'){
-      document.getElementById('bid-'+p).textContent = S.playerLastBid[p] || '';
+      document.getElementById('bid-'+disp).textContent = S.playerLastBid[actual] || '';
     } else {
-      document.getElementById('bid-'+p).textContent = (S.bids[p]!==null && S.bids[p]!==undefined) ? ('הכריז/ה: '+S.bids[p]) : (S.playerLastBid[p]||'');
+      document.getElementById('bid-'+disp).textContent = (S.bids[actual]!==null && S.bids[actual]!==undefined) ? ('☆ '+S.bids[actual]) : (S.playerLastBid[actual]||'');
     }
-    document.getElementById('tricks-'+p).textContent = (S.phase==='playing') ? ('לקח/ה: '+S.tricksWon[p]) : '';
-    const fan = document.getElementById('fan-'+p);
+    document.getElementById('tricks-'+disp).textContent = (S.phase==='playing') ? ('לקח/ה: '+S.tricksWon[actual]) : '';
+    const fan = document.getElementById('fan-'+disp);
     fan.innerHTML='';
-    if(p===0){
-      renderOwnFan(fan, p);
+    if(disp===0){
+      renderOwnFan(fan, actual);
     } else {
-      renderBackFan(fan, p, S.hands[p].length);
+      const count = (S.hands[actual]||[]).length;
+      renderBackFan(fan, disp, count);
     }
   }
   renderTrickArea();
   positionSideBadges();
+  requestAnimationFrame(positionSideBadges);
+
+  // Host pushes state after every render so clients stay in sync
+  if(isOnline && isHost) pushStateToFirebase();
 }
+
 function positionSideBadges(){
-  // Places the left/right badge+fan as a single vertically-centered unit, computed
-  // directly from measured heights — more reliable than CSS percentage centering,
-  // which wasn't behaving as expected across different phone aspect ratios.
   try{
     const felt = document.getElementById('felt');
     const feltH = felt.clientHeight;
@@ -704,13 +844,14 @@ function positionSideBadges(){
       badgeWrap.style.top = startTop + 'px';
       fanEl.style.top = (startTop + badgeH + gap) + 'px';
     });
-  } catch(e){ /* non-fatal cosmetic positioning */ }
+  } catch(e){}
 }
 window.addEventListener('resize', ()=>{ if(S) positionSideBadges(); });
-function isCurrentActor(p){
-  if(S.phase==='trump-bidding') return S.bidTurn===p && !S.passedBidders.includes(p) && S.activeBidders.includes(p);
-  if(S.phase==='trick-bidding') return S.declareOrder[S.declareIdx]===p;
-  if(S.phase==='playing') return S.currentTrick.length<4 && currentTrickPlayer()===p;
+
+function isCurrentActor(actual){
+  if(S.phase==='trump-bidding') return S.bidTurn===actual && !S.passedBidders.includes(actual) && S.activeBidders.includes(actual);
+  if(S.phase==='trick-bidding') return S.declareOrder[S.declareIdx]===actual;
+  if(S.phase==='playing') return S.currentTrick.length<4 && currentTrickPlayer()===actual;
   return false;
 }
 function currentTrickPlayer(){
@@ -724,13 +865,12 @@ function cardHTML(c, extraClass){
     <div class="r-bot">${RANK_LABEL(c.rank)}<span class="s">${SUITS[c.suit].sym}</span></div>
   </div>`;
 }
-function renderOwnFan(fan, p){
-  const hand = S.hands[p];
+function renderOwnFan(fan, actual){
+  const hand = S.hands[actual];
   const n = hand.length;
   if(n===0) return;
   const legal = getLegalCardsForHuman();
 
-  // Measure real available space and real card size (no hardcoded pixel assumptions)
   const containerW = fan.clientWidth || 300;
   const containerH = fan.clientHeight || 100;
   const probe = document.createElement('div');
@@ -744,13 +884,13 @@ function renderOwnFan(fan, p){
   const totalWidth = cardW + spread*(n-1);
   const startX = Math.max(0, (containerW-totalWidth)/2);
   const mid = (n-1)/2;
-  const maxAngle = Math.min(26, 220/n); // total half-angle range, tames itself for larger hands
+  const maxAngle = Math.min(26, 220/n);
   const arcLift = Math.min(16, containerH*0.18);
-  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===0 && S.isHuman[0]);
 
-  // Click zones are derived from the ACTUAL visual card positions (midpoints between
-  // neighboring cards), not an independent even split — so they always stay aligned
-  // with what's shown, regardless of how much the hand has shrunk.
+  // Determine if this is a playable position for the current player
+  const myActual = seatFor(0); // actual seat at display pos 0
+  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===myActual && S.isHuman[myActual] && (!isOnline || isHost || myActual===myOnlineSeat));
+
   const boundaries = [0];
   for(let k=1;k<n;k++){
     boundaries.push(startX + (k-1)*spread + (cardW+spread)/2);
@@ -763,15 +903,15 @@ function renderOwnFan(fan, p){
     const cls = isPlayable ? (isLegal?'legal':'illegal') : '';
     div.innerHTML = cardHTML(c, cls);
     const el = div.firstElementChild;
-    const offsetFromMid = mid ? (i-mid)/mid : 0; // -1..1
+    const offsetFromMid = mid ? (i-mid)/mid : 0;
     const angle = offsetFromMid * maxAngle;
-    const lift = arcLift*(1-offsetFromMid*offsetFromMid); // arch: center cards lifted a bit
+    const lift = arcLift*(1-offsetFromMid*offsetFromMid);
     el.style.left = (startX + i*spread)+'px';
     el.style.top = (10 - lift)+'px';
     el.style.transformOrigin = '50% 120%';
     el.style.transform = `rotate(${angle.toFixed(1)}deg)`;
     el.style.zIndex = i;
-    el.style.pointerEvents = 'none'; // the invisible hit-zone below handles interaction, not the (overlapped) visual card
+    el.style.pointerEvents = 'none';
     fan.appendChild(el);
 
     if(cls==='legal'){
@@ -791,9 +931,9 @@ function renderOwnFan(fan, p){
     }
   });
 }
-function renderBackFan(fan, p, n){
+function renderBackFan(fan, disp, n){
   if(n===0) return;
-  const vertical = (p===1||p===3);
+  const vertical = (disp===1||disp===3);
   const probe = document.createElement('div');
   probe.className='card back'; probe.style.visibility='hidden'; probe.style.position='absolute';
   fan.appendChild(probe);
@@ -832,9 +972,10 @@ function renderBackFan(fan, p, n){
 function renderTrickArea(){
   const area = document.getElementById('trick-area');
   area.innerHTML='';
-  const positions = { 0:{left:'50%',top:'66%'}, 1:{left:'22%',top:'50%'}, 2:{left:'50%',top:'30%'}, 3:{left:'78%',top:'50%'} };
+  const dispPositions = { 0:{left:'50%',top:'66%'}, 1:{left:'22%',top:'50%'}, 2:{left:'50%',top:'30%'}, 3:{left:'78%',top:'50%'} };
   S.currentTrick.forEach(pc=>{
-    const pos = positions[pc.player];
+    const disp = displayFor(pc.player);
+    const pos = dispPositions[disp];
     const wrap = document.createElement('div');
     wrap.className='played-card';
     wrap.style.left = pos.left; wrap.style.top=pos.top; wrap.style.transform='translate(-50%,-50%)';
@@ -847,9 +988,7 @@ function renderTrickArea(){
 function highCardPts(c){ return c.rank===14?4:c.rank===13?3:c.rank===12?2:c.rank===11?1:c.rank===10?0.5:0; }
 function suitScore(hand, suit){
   const cards = hand.filter(c=>c.suit===suit);
-  const len = cards.length;
-  const pts = cards.reduce((s,c)=>s+highCardPts(c),0);
-  return len*1.4 + pts;
+  return cards.length*1.4 + cards.reduce((s,c)=>s+highCardPts(c),0);
 }
 function bestSuitFor(hand){
   let best=0, bestScore=-1;
@@ -858,20 +997,18 @@ function bestSuitFor(hand){
 }
 function estimateTricks(hand, trumpSuit){
   let est=0;
-  // Trump cards: only the top few in length are realistically likely to win a trick.
   const trumpCards = hand.filter(c=>c.suit===trumpSuit).sort((a,b)=>b.rank-a.rank);
   const trumpWeights = [0.9,0.6,0.4,0.25,0.15,0.1];
-  trumpCards.forEach((c,i)=>{ est += trumpWeights[i] !== undefined ? trumpWeights[i] : 0.05; });
-  // Non-trump: only genuinely strong cards (mainly Aces, sometimes a lone King) are likely winners.
+  trumpCards.forEach((c,i)=>{ est += trumpWeights[i]!==undefined ? trumpWeights[i] : 0.05; });
   const bySuit = {};
   hand.forEach(c=>{ if(c.suit!==trumpSuit){ (bySuit[c.suit]=bySuit[c.suit]||[]).push(c); } });
   Object.values(bySuit).forEach(cards=>{
     cards.sort((a,b)=>b.rank-a.rank);
     cards.forEach((c,i)=>{
-      if(c.rank===14) est += 0.6;
-      else if(c.rank===13 && i===0) est += 0.3;
-      else if(c.rank===13) est += 0.12;
-      else if(c.rank===12 && i<=1) est += 0.08;
+      if(c.rank===14) est+=0.6;
+      else if(c.rank===13 && i===0) est+=0.3;
+      else if(c.rank===13) est+=0.12;
+      else if(c.rank===12 && i<=1) est+=0.08;
     });
   });
   return Math.max(0, Math.min(13, est));
@@ -906,6 +1043,12 @@ function advanceTrumpBidding(){
     return;
   }
   if(S.isHuman[p]){
+    if(isOnline && isHost && p!==myOnlineSeat){
+      // Remote human's turn — push state and wait for their action
+      showToast(`⏳ מחכה ל-${S.names[p]}...`, 3000);
+      waitForRemoteAction(p);
+      return;
+    }
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
@@ -949,6 +1092,14 @@ function confirmTrumpBid(p){
   const count = parseInt(document.getElementById('bid-count-inp').value);
   const min = minCountForSuit(chosenBidSuit);
   if(isNaN(count) || count<min || count>13){ showToast('מספר לא חוקי — נדרש לפחות '+min); return; }
+
+  if(isOnline && !isHost){
+    submitRemoteAction('trump-bid', {count, suit:chosenBidSuit});
+    hideControlPanel();
+    showToast('✅ הצעה נשלחה...');
+    return;
+  }
+
   S.trumpBid = {count, suit:chosenBidSuit, player:p};
   S.playerLastBid[p] = count+' '+SUITS[chosenBidSuit].sym;
   chosenBidSuit=null;
@@ -957,6 +1108,13 @@ function confirmTrumpBid(p){
   advanceTrumpBidding();
 }
 function humanTrumpPass(p){
+  if(isOnline && !isHost){
+    submitRemoteAction('trump-pass', {});
+    hideControlPanel();
+    showToast('✅ PASS נשלח...');
+    return;
+  }
+
   S.passedBidders.push(p);
   S.playerLastBid[p] = 'PASS';
   chosenBidSuit=null;
@@ -978,11 +1136,8 @@ function botTrumpBid(p){
   } else {
     const sameCount = S.trumpBid.count;
     let candidate=null;
-    if(suit>S.trumpBid.suit && potential>=sameCount){
-      candidate = {count:sameCount, suit};
-    } else if(potential>=sameCount+1){
-      candidate = {count:sameCount+1, suit};
-    }
+    if(suit>S.trumpBid.suit && potential>=sameCount) candidate = {count:sameCount, suit};
+    else if(potential>=sameCount+1) candidate = {count:sameCount+1, suit};
     if(candidate && Math.random()<0.75){
       S.trumpBid = {count:candidate.count, suit:candidate.suit, player:p};
       S.playerLastBid[p] = candidate.count+' '+SUITS[candidate.suit].sym;
@@ -1014,7 +1169,7 @@ function finishTrumpBidding(winner){
   }, 400);
 }
 
-/* ============================= TRICK (TAKES) BIDDING ============================= */
+/* ============================= TRICK BIDDING ============================= */
 function advanceTrickBidding(){
   renderTable();
   if(S.declareIdx>=4){
@@ -1035,6 +1190,11 @@ function advanceTrickBidding(){
   }
   const p = S.declareOrder[S.declareIdx];
   if(S.isHuman[p]){
+    if(isOnline && isHost && p!==myOnlineSeat){
+      showToast(`⏳ מחכה ל-${S.names[p]}...`, 3000);
+      waitForRemoteAction(p);
+      return;
+    }
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
@@ -1073,6 +1233,13 @@ function showDeclareUI(p){
   `;
 }
 function confirmDeclare(p, v){
+  if(isOnline && !isHost){
+    submitRemoteAction('declare', {value:v});
+    hideControlPanel();
+    showToast('✅ הכרזה נשלחה...');
+    return;
+  }
+
   S.bids[p]=v;
   S.declareIdx++;
   hideControlPanel();
@@ -1086,22 +1253,15 @@ function botDeclare(p){
   } else {
     const est = estimateTricks(S.hands[p], S.trumpSuit);
     v = Math.max(0, Math.min(13, Math.round(est)));
-
-    // Stay aware of the table: nudge toward a total near 13, but only when the
-    // hand's own estimate has genuine wiggle room (a near-half fraction), never
-    // overriding a hand that clearly supports its rounded bid.
     const declaredSoFar = S.declareOrder.slice(0, S.declareIdx).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
-    const remainingAfterThis = 4 - (S.declareIdx+1);
-    const projectedTotal = declaredSoFar + v + remainingAfterThis*3.25;
+    const projectedTotal = declaredSoFar + v + (4-(S.declareIdx+1))*3.25;
     const diff = projectedTotal - 13;
     const frac = est - Math.floor(est);
-    if(diff > 3 && frac < 0.65 && v>0){ v -= 1; }
-    else if(diff < -3 && frac > 0.35 && v<13){ v += 1; }
+    if(diff > 3 && frac < 0.65 && v>0) v -= 1;
+    else if(diff < -3 && frac > 0.35 && v<13) v += 1;
   }
   const forbid = forbiddenLastValue();
-  if(forbid!==null && v===forbid){
-    v = v<13 ? v+1 : v-1;
-  }
+  if(forbid!==null && v===forbid){ v = v<13 ? v+1 : v-1; }
   v = Math.max(isTrumpWinner?S.trumpBid.count:0, Math.min(13, v));
   if(forbid!==null && v===forbid) v = v>0? v-1 : v+1;
   S.bids[p]=v;
@@ -1125,14 +1285,22 @@ function legalCardsFor(p){
 }
 function getLegalCardsForHuman(){
   if(S.phase!=='playing') return null;
-  if(currentTrickPlayer()!==0) return null;
-  if(!S.isHuman[0]) return null;
-  return legalCardsFor(0);
+  const myActual = seatFor(0);
+  if(currentTrickPlayer()!==myActual) return null;
+  if(!S.isHuman[myActual]) return null;
+  // In online mode, only show playable if it's our seat
+  if(isOnline && !isHost && myActual!==myOnlineSeat) return null;
+  return legalCardsFor(myActual);
 }
 function advancePlaying(){
   renderTable();
   const p = currentTrickPlayer();
   if(S.isHuman[p]){
+    if(isOnline && isHost && p!==myOnlineSeat){
+      showToast(`⏳ מחכה ל-${S.names[p]}...`, 3000);
+      waitForRemoteAction(p);
+      return;
+    }
     gateFor(p, ()=>{ hideControlPanel(); renderTable(); });
   } else {
     hideControlPanel();
@@ -1143,7 +1311,14 @@ function advancePlaying(){
   }
 }
 function playHumanCard(c){
-  playCard(0,c);
+  if(isOnline && !isHost){
+    submitRemoteAction('play', {card:{suit:c.suit, rank:c.rank}});
+    hideControlPanel();
+    showToast('✅ קלף נשלח...');
+    return;
+  }
+  const myActual = seatFor(0);
+  playCard(myActual, c);
 }
 function playCard(p, c){
   const hand=S.hands[p];
@@ -1167,18 +1342,12 @@ function botPlay(p){
   if(S.currentTrick.length===0){
     const needMore = S.tricksWon[p] < S.bids[p];
     const sorted = legal.slice().sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
-
-    // UNDER rounds: everyone tries to shed tricks, so don't lead strong early — probe first.
-    // If someone bid 0, there's a tacit agreement the table leads low cards early to try
-    // to strip out and expose that player's weak suits, forcing them into an unwanted trick.
     const iAmZero = (S.bids[p]===0);
     const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0) : [];
     const earlyInRound = S.trickHistory.length < 8;
-
     if(S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
-      choice = sorted[0]; // hunt: lead the lowest card, regardless of own need
+      choice = sorted[0];
     } else if(needMore){
-      // UP rounds especially reward locking in tricks early with strong cards.
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
       choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
     } else {
@@ -1220,17 +1389,17 @@ function resolveTrick(){
     }
     winnerPlayer = winning.player;
   } catch(err){
-    console.error('Trick winner calculation failed, defaulting to leader', err);
+    console.error('Trick winner calc failed', err);
     winnerPlayer = S.leader;
   }
 
   try{
-    const badge = document.getElementById('badge-'+winnerPlayer);
+    const badge = document.getElementById('badge-'+displayFor(winnerPlayer));
     if(badge) badge.classList.add('trick-winner');
     const area = document.getElementById('trick-area');
     const ann = document.createElement('div');
     ann.className='trick-winner-ann';
-    ann.textContent = '🏆 '+S.names[winnerPlayer]+' לוקח/ת את הלקיחה';
+    ann.textContent = '🏆 '+S.names[winnerPlayer]+' לוקח/ת';
     if(area) area.appendChild(ann);
   } catch(err){ console.error('Trick announcement failed', err); }
 
@@ -1239,7 +1408,7 @@ function resolveTrick(){
     if(finished) return;
     finished = true;
     clearTimeout(window.__trickWatchdog);
-    const badge = document.getElementById('badge-'+winnerPlayer);
+    const badge = document.getElementById('badge-'+displayFor(winnerPlayer));
     if(badge) badge.classList.remove('trick-winner');
     S.tricksWon[winnerPlayer]++;
     S.trickHistory.push({cards:S.currentTrick, winner:winnerPlayer});
@@ -1254,22 +1423,16 @@ function resolveTrick(){
     }
   };
 
-  try{
-    animateTrickToWinner(winnerPlayer, finishTrick);
-  } catch(err){
-    console.error('Trick animation failed, skipping straight to next trick', err);
-    finishTrick();
-  }
-  // Safety net: if for any reason the animation never calls back, force the game to continue.
+  try{ animateTrickToWinner(winnerPlayer, finishTrick); }
+  catch(err){ console.error('Animation failed', err); finishTrick(); }
+
   clearTimeout(window.__trickWatchdog);
-  window.__trickWatchdog = setTimeout(()=>{
-    if(!finished){ console.warn('Trick watchdog triggered — forcing resolution'); finishTrick(); }
-  }, 2600);
+  window.__trickWatchdog = setTimeout(()=>{ if(!finished){ finishTrick(); } }, 2600);
 }
 function animateTrickToWinner(winnerPlayer, cb){
   try{
     const area = document.getElementById('trick-area');
-    const seatEl = document.getElementById('seat-'+winnerPlayer);
+    const seatEl = document.getElementById('seat-'+displayFor(winnerPlayer));
     if(!area || !seatEl){ setTimeout(cb, 300); return; }
     const seatRect = seatEl.getBoundingClientRect();
     const targetX = seatRect.left + seatRect.width/2;
@@ -1277,30 +1440,16 @@ function animateTrickToWinner(winnerPlayer, cb){
     const cards = area.querySelectorAll('.played-card');
     if(cards.length===0){ setTimeout(cb, 300); return; }
     cards.forEach((el,i)=>{
-      // Each card starts at a DIFFERENT spot (top/left/right/bottom), so each needs
-      // its own path to the winner — a single shared offset would just slide the
-      // whole cross-shaped arrangement sideways instead of converging it.
       const cardRect = el.getBoundingClientRect();
-      const cardCenterX = cardRect.left + cardRect.width/2;
-      const cardCenterY = cardRect.top + cardRect.height/2;
-      const dx = targetX - cardCenterX;
-      const dy = targetY - cardCenterY;
-      const stackDx = i*2.5;
-      const stackDy = -i*2.5;
-      const stackAngle = (i-1.5)*4;
+      const dx = targetX - (cardRect.left + cardRect.width/2);
+      const dy = targetY - (cardRect.top + cardRect.height/2);
       el.style.transition = 'transform .55s cubic-bezier(.35,0,.25,1)';
       el.style.zIndex = 50+i;
-      el.style.transform = `translate(-50%,-50%) translate(${dx+stackDx}px, ${dy+stackDy}px) rotate(${stackAngle}deg) scale(.5)`;
+      el.style.transform = `translate(-50%,-50%) translate(${dx+i*2.5}px, ${dy-i*2.5}px) rotate(${(i-1.5)*4}deg) scale(.5)`;
     });
-    // hold briefly as a settled pile, then fade the whole pile together
-    setTimeout(()=>{
-      cards.forEach(el=>{ el.style.transition='opacity .35s ease'; el.style.opacity='0'; });
-    }, 700);
+    setTimeout(()=>{ cards.forEach(el=>{ el.style.transition='opacity .35s ease'; el.style.opacity='0'; }); }, 700);
     setTimeout(cb, 1050);
-  } catch(err){
-    console.error('animateTrickToWinner error', err);
-    setTimeout(cb, 300);
-  }
+  } catch(err){ console.error('animateTrickToWinner error', err); setTimeout(cb, 300); }
 }
 
 /* ============================= SCORING ============================= */
@@ -1310,36 +1459,35 @@ function finishRound(){
   for(let p=0;p<4;p++){
     const bid = S.bids[p], won = S.tricksWon[p];
     let pts;
-    let made = (bid===won);
+    const made = (bid===won);
     if(made){
-      if(bid===0){
-        pts = (S.roundType==='UP') ? 20 : 50;
-      } else {
-        pts = bid*bid + 10;
-      }
+      pts = bid===0 ? (S.roundType==='UP' ? 20 : 50) : bid*bid+10;
     } else {
-      if(bid===0){
-        pts = (S.roundType==='UP') ? -20 : -50;
-      } else {
-        pts = -10*Math.abs(bid-won);
-      }
+      pts = bid===0 ? (S.roundType==='UP' ? -20 : -50) : -10*Math.abs(bid-won);
     }
     S.totals[p]+=pts;
     results.push({p, bid, won, pts, made});
   }
+  showRoundEndModal(results);
+}
+function showRoundEndModal(results){
   let rows = results.map(r=>`<tr>
     <td>${S.names[r.p]}</td><td>${r.bid}</td><td>${r.won}</td>
     <td class="${r.made?'win-tag':'lose-tag'}">${r.pts>0?'+':''}${r.pts}</td>
     <td>${S.totals[r.p]}</td>
   </tr>`).join('');
+  const isHostOrLocal = !isOnline || isHost;
   document.getElementById('round-end-content').innerHTML = `
     <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum} — ${S.roundType==='UP'?'UP ⬆':'UNDER ⬇'} (שליט ${SUITS[S.trumpSuit].sym} ${SUITS[S.trumpSuit].name})</h3>
     <table class="score-table">
       <tr><th>שחקן</th><th>הימור</th><th>לקח</th><th>ניקוד</th><th>סה"כ</th></tr>
       ${rows}
     </table>
-    <button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
-    <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>
+    ${isHostOrLocal
+      ? `<button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
+         <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>`
+      : `<p style="color:rgba(250,244,230,.5);font-size:13px;margin-top:12px;">ממתין לבעל החדר להתחיל סיבוב הבא...</p>`
+    }
   `;
   document.getElementById('round-end-modal').classList.add('show');
 }
@@ -1351,9 +1499,7 @@ function nextRound(){
 }
 
 /* ============================= CONTROL PANEL / GATE ============================= */
-function showControlPanel(){
-  document.getElementById('control-panel').classList.add('show');
-}
+function showControlPanel(){ document.getElementById('control-panel').classList.add('show'); }
 function hideControlPanel(){
   document.getElementById('control-panel').classList.remove('show');
   document.getElementById('cp-inner').innerHTML='';
@@ -1361,7 +1507,7 @@ function hideControlPanel(){
 
 let gateCallback=null;
 function gateFor(p, cb){
-  if(S.mode==='computer' || S.revealedHuman===p){
+  if(S.mode==='computer' || S.revealedHuman===p || isOnline){
     cb();
     return;
   }
@@ -1386,27 +1532,469 @@ function openInstructions(){
     <h4>מטרת המשחק</h4>
     <p>4 שחקנים, 13 קלפים לכל אחד. המטרה: לחזות בדיוק כמה לקיחות תבצעו, ולקבל נקודות בהתאם.</p>
     <h4>שלב 1 — קביעת השליט</h4>
-    <p>סדר הצורות מהחלש לחזק: ${SUITS.map(s=>s.sym+' '+s.name).join(' ⬅ ')}. כל שחקן בתורו מציע "X לקיחות בצורה מסוימת" (מינ' 5), הצעה הבאה חייבת להיות גבוהה יותר (מספר גבוה יותר, או אותו מספר בצורה חזקה יותר). מי שאין לו הצעה — אומר PASS. מי שנשאר אחרון קובע את השליט, ומחויב להמר לפחות את המינימום שקבע.</p>
+    <p>סדר הצורות מהחלש לחזק: ${SUITS.map(s=>s.sym+' '+s.name).join(' ⬅ ')}. כל שחקן בתורו מציע "X לקיחות בצורה מסוימת" (מינ' 5). מי שנשאר אחרון קובע את השליט.</p>
     <h4>שלב 2 — הימור לקיחות</h4>
-    <p>כל שחקן מצהיר כמה לקיחות בדיוק הוא יקח. השחקן שקבע את השליט מצהיר ראשון (חייב לפחות את המספר שקבע). אסור שסכום כל ההצהרות יהיה 13 בדיוק — לשחקן האחרון תיחסם האפשרות המשלימה ל-13.</p>
-    <p><b>UP</b>: סכום ההצהרות גבוה מ-13 — מחסור בלקיחות, נלחמים על כל לקיחה.<br><b>UNDER</b>: סכום נמוך מ-13 — עודף לקיחות, מנסים "להיפטר" מקלפים.</p>
-    <h4>שלב 3 — מהלך המשחק</h4>
+    <p>כל שחקן מצהיר כמה לקיחות בדיוק. אסור שסכום כל ההצהרות יהיה 13.</p>
+    <p><b>UP</b>: סכום גבוה מ-13 — נלחמים על לקיחות.<br><b>UNDER</b>: סכום נמוך מ-13 — מנסים להיפטר מקלפים.</p>
+    <h4>שלב 3 — משחק</h4>
     <ul>
-      <li>מי שקבע את השליט פותח את המשחקון הראשון.</li>
-      <li>חובה לזרוק קלף מאותה צורה שנזרקה ראשונה, אם יש כזה ביד.</li>
-      <li>אם אין — אפשר לזרוק כל קלף, כולל שליט ("לחתוך").</li>
-      <li>הקלף השליט הגבוה ביותר בלקיחה מנצח; אם אין שליט — הקלף הגבוה ביותר מהצורה שנפתחה מנצח.</li>
-      <li>אסור לפתוח משחקון עם קלף שליט, עד שהשליט "נשבר" (מישהו זרק אותו במהלך המשחק) — אלא אם נותרו רק קלפי שליט ביד.</li>
-      <li>הזוכה בלקיחה פותח את המשחקון הבא.</li>
+      <li>חובה לזרוק קלף מאותה צורה, אם יש.</li>
+      <li>הקלף השליט הגבוה מנצח; בהיעדר שליט — הקלף הגבוה מהצורה שנפתחה.</li>
+      <li>אסור לפתוח עם שליט עד שהשליט "נשבר".</li>
     </ul>
     <h4>שלב 4 — ניקוד</h4>
-    <p>עמד בהימור: (הימור בריבוע) + 10 נקודות. הימור 0: ‎20+‎ ב-UP, ‎50+‎ ב-UNDER.</p>
-    <p>לא עמד בהימור: מינוס 10 על כל לקיחה של הפרש. הימור 0 שלא הצליח: ‎20-‎ ב-UP, ‎50-‎ ב-UNDER.</p>
+    <p>עמד בהימור: (הימור²) + 10. הימור 0: 20+ ב-UP, 50+ ב-UNDER.</p>
+    <p>לא עמד: מינוס 10 לכל לקיחת הפרש. הימור 0 שנכשל: 20- ב-UP, 50- ב-UNDER.</p>
+    <h4>🌐 מצב אונליין</h4>
+    <p>כל שחקן על המכשיר שלו. בעל החדר יוצר חדר, שולח קוד לחברים, והם מצטרפים. הקלפים מוצגים רק לשחקן הרלוונטי.</p>
   `;
   document.getElementById('instr-modal').classList.add('show');
 }
 function closeInstructions(){ document.getElementById('instr-modal').classList.remove('show'); }
 
+/* ============================= FIREBASE ONLINE MODE ============================= */
+
+function loadFirebaseConfig(){
+  try{
+    const s = localStorage.getItem('whist_firebase_config');
+    return s ? JSON.parse(s) : null;
+  } catch(e){ return null; }
+}
+
+function openFirebaseModal(){
+  const cfg = loadFirebaseConfig();
+  if(cfg) document.getElementById('fb-config-textarea').value = JSON.stringify(cfg, null, 2);
+  document.getElementById('firebase-modal').classList.add('show');
+}
+
+function saveFirebaseConfig(){
+  const raw = document.getElementById('fb-config-textarea').value.trim();
+  try{
+    const cfg = JSON.parse(raw);
+    if(!cfg.databaseURL){ showToast('חסר databaseURL בקונפיגורציה'); return; }
+    localStorage.setItem('whist_firebase_config', JSON.stringify(cfg));
+    document.getElementById('firebase-modal').classList.remove('show');
+    initFirebaseAndUpdateStatus();
+  } catch(e){ showToast('JSON לא תקין — בדוק את הקונפיג'); }
+}
+
+function clearFirebaseConfig(){
+  localStorage.removeItem('whist_firebase_config');
+  fbApp = null; fbDb = null;
+  document.getElementById('firebase-modal').classList.remove('show');
+  updateFirebaseStatus(false);
+}
+
+async function initFirebaseAndUpdateStatus(){
+  const ok = await tryInitFirebase();
+  updateFirebaseStatus(ok);
+  const btn = document.getElementById('create-room-btn');
+  if(btn) btn.disabled = !ok;
+}
+
+async function tryInitFirebase(){
+  const cfg = loadFirebaseConfig();
+  if(!cfg) return false;
+  try{
+    if(typeof firebase === 'undefined') return false;
+    // Re-init: delete existing app if config changed
+    if(fbApp){
+      try{ await fbApp.delete(); } catch(e){}
+      fbApp = null; fbDb = null;
+    }
+    fbApp = firebase.initializeApp(cfg, 'whist-app-'+Date.now());
+    fbDb = fbApp.database();
+    // Quick connectivity test
+    await fbDb.ref('.info/connected').once('value');
+    return true;
+  } catch(e){
+    console.error('Firebase init error:', e);
+    fbApp = null; fbDb = null;
+    return false;
+  }
+}
+
+function updateFirebaseStatus(ok){
+  const dot = document.getElementById('fb-dot');
+  const text = document.getElementById('fb-status-text');
+  if(!dot || !text) return;
+  dot.className = 'dot ' + (ok ? 'ok' : 'err');
+  text.textContent = ok ? 'Firebase מחובר ✓' : 'Firebase לא מוגדר';
+}
+
+async function initOnlineSetup(){
+  showScreen('screen-online-setup');
+  const savedName = await getSavedName();
+  const nameInput = document.getElementById('online-name');
+  if(nameInput && savedName) nameInput.value = savedName;
+  await initFirebaseAndUpdateStatus();
+}
+
+function genRoomCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+async function createRoom(){
+  if(!fbDb){ showToast('יש להגדיר Firebase קודם'); return; }
+  const myName = (document.getElementById('online-name').value.trim()) || 'שחקן 1';
+  saveMyName(myName);
+
+  try{
+    let code, snap;
+    do{
+      code = genRoomCode();
+      snap = await fbDb.ref('rooms/'+code).once('value');
+    } while(snap.exists());
+
+    roomCode = code;
+    myOnlineSeat = 0;
+    isHost = true;
+    isOnline = true;
+
+    await fbDb.ref('rooms/'+code).set({
+      meta: { status:'waiting', created:Date.now(), host:0 },
+      players: { 0: { name:myName, joined:true } }
+    });
+
+    // Auto-cleanup on disconnect
+    fbDb.ref('rooms/'+code+'/meta/hostOnline').onDisconnect().set(false);
+    fbDb.ref('rooms/'+code+'/meta/hostOnline').set(true);
+
+    roomRef = fbDb.ref('rooms/'+code);
+    showWaitingScreen();
+  } catch(e){
+    console.error('createRoom error', e);
+    showToast('שגיאה ביצירת חדר: '+e.message);
+  }
+}
+
+async function joinRoom(){
+  if(!fbDb){ showToast('יש להגדיר Firebase קודם'); return; }
+  const code = (document.getElementById('join-code').value.trim().toUpperCase());
+  if(code.length!==6){ showToast('קוד חדר חייב להיות 6 תווים'); return; }
+  const myName = (document.getElementById('online-name').value.trim()) || 'שחקן';
+  saveMyName(myName);
+
+  try{
+    const snap = await fbDb.ref('rooms/'+code).once('value');
+    if(!snap.exists()){ showToast('חדר לא נמצא: '+code); return; }
+    const data = snap.val();
+    if(data.meta.status!=='waiting'){ showToast('המשחק כבר התחיל בחדר זה'); return; }
+
+    const players = data.players || {};
+    let seat = -1;
+    for(let s=0;s<4;s++){
+      if(!players[s] || !players[s].joined){ seat=s; break; }
+    }
+    if(seat===-1){ showToast('החדר מלא (4/4 שחקנים)'); return; }
+
+    roomCode = code;
+    myOnlineSeat = seat;
+    isHost = false;
+    isOnline = true;
+
+    await fbDb.ref('rooms/'+code+'/players/'+seat).set({ name:myName, joined:true });
+    roomRef = fbDb.ref('rooms/'+code);
+    showWaitingScreen();
+  } catch(e){
+    console.error('joinRoom error', e);
+    showToast('שגיאה בהצטרפות: '+e.message);
+  }
+}
+
+function showWaitingScreen(){
+  showScreen('screen-waiting');
+  document.getElementById('waiting-code').textContent = roomCode;
+  document.getElementById('start-room-btn').style.display = isHost ? 'block' : 'none';
+
+  // Listen for player changes
+  cleanupOnlineListeners();
+  _playersListenerOff = roomRef.child('players').on('value', snap=>{
+    const players = snap.val() || {};
+    const list = document.getElementById('waiting-players');
+    if(!list) return;
+    list.innerHTML = '';
+    for(let s=0;s<4;s++){
+      const p = players[s];
+      const li = document.createElement('li');
+      li.className = p ? 'joined' : '';
+      const youTag = (s===myOnlineSeat) ? ' (את/ה)' : '';
+      li.innerHTML = `<span class="seat-dot"></span> מושב ${s+1}: ${p ? p.name+youTag : '<span style="opacity:.4">ממתין...</span>'}`;
+      list.appendChild(li);
+    }
+    const count = Object.values(players).filter(p=>p&&p.joined).length;
+    const statusEl = document.getElementById('waiting-status');
+    const startBtn = document.getElementById('start-room-btn');
+    if(statusEl) statusEl.innerHTML = count<4
+      ? `<span class="spinner"></span>${count}/4 שחקנים הצטרפו`
+      : '✅ כל השחקנים הצטרפו — אפשר להתחיל!';
+    if(startBtn) startBtn.disabled = !isHost || count<2;
+    if(startBtn && isHost) startBtn.textContent = `התחל משחק (${count} אנשים + ${4-count} בוטים)`;
+  });
+
+  // Non-host: listen for game to start
+  if(!isHost){
+    _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
+      if(!snap.exists()) return;
+      const remote = snap.val();
+      if(remote && remote.phase && remote.phase!=='idle'){
+        roomRef.child('players').once('value').then(pSnap=>{
+          startOnlineClientGame(remote, pSnap.val() || {});
+        });
+      }
+    });
+  }
+}
+
+function copyRoomCode(){
+  try{
+    navigator.clipboard.writeText(roomCode);
+    showToast('קוד הועתק: '+roomCode);
+  } catch(e){
+    showToast('קוד החדר: '+roomCode, 3000);
+  }
+}
+
+function leaveRoom(){
+  if(roomRef){
+    if(isHost){
+      roomRef.child('meta/status').set('closed').catch(()=>{});
+    } else {
+      roomRef.child('players/'+myOnlineSeat).remove().catch(()=>{});
+    }
+  }
+  goLobby();
+}
+
+function startOnlineHostGame(){
+  if(!isHost) return;
+  roomRef.child('players').once('value').then(snap=>{
+    const players = snap.val() || {};
+    S = freshState();
+    S.mode = 'online';
+    for(let s=0;s<4;s++){
+      if(players[s] && players[s].joined){
+        S.names[s] = players[s].name;
+        S.isHuman[s] = true;
+      } else {
+        S.names[s] = 'בוט '+(s+1);
+        S.isHuman[s] = false;
+      }
+    }
+    cleanupOnlineListeners();
+
+    // Listen for pending actions from remote players
+    listenForPendingActions();
+
+    roomRef.child('meta/status').set('playing');
+    beginMatch();
+  });
+}
+
+function startOnlineClientGame(remoteState, playersData){
+  // Stop the one-time startup listener
+  if(_stateListenerOff){ _stateListenerOff(); _stateListenerOff=null; }
+  if(_playersListenerOff){ _playersListenerOff(); _playersListenerOff=null; }
+
+  S = freshState();
+  S.mode = 'online';
+  for(let s=0;s<4;s++){
+    if(playersData[s] && playersData[s].joined){
+      S.names[s] = playersData[s].name;
+      S.isHuman[s] = true;
+    } else {
+      S.names[s] = 'בוט '+(s+1);
+      S.isHuman[s] = false;
+    }
+  }
+
+  applyRemoteState(remoteState);
+  beginMatchClientSide();
+
+  // Now listen for ongoing state updates
+  _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
+    if(!snap.exists()) return;
+    const remote = snap.val();
+    if(!remote || !remote.phase) return;
+
+    const wasRoundEnd = (remote.phase==='round-end');
+    applyRemoteState(remote);
+    renderTable();
+
+    if(wasRoundEnd && remote.roundEndData){
+      showRoundEndModal(remote.roundEndData.results.map(r=>({
+        ...r, pts: remote.roundEndData.totalsAfter[r.p] - S.totals[r.p]
+      })));
+    } else {
+      document.getElementById('round-end-modal').classList.remove('show');
+    }
+
+    checkMyTurn();
+  });
+}
+
+function beginMatchClientSide(){
+  showScreen('screen-game');
+  document.getElementById('pill-online').style.display = 'inline-block';
+  for(let actual=0;actual<4;actual++){
+    const disp = displayFor(actual);
+    document.getElementById('badge-'+disp).querySelector('.nm').textContent = S.names[actual];
+    document.getElementById('badge-'+disp).classList.toggle('me', actual===myOnlineSeat);
+  }
+  renderTable();
+}
+
+function applyRemoteState(remote){
+  if(!remote) return;
+  S.phase = remote.phase || 'idle';
+  S.trumpBid = remote.trumpBid || null;
+  S.trumpSuit = remote.trumpSuit !== undefined ? remote.trumpSuit : null;
+  S.trumpBroken = remote.trumpBroken || false;
+  S.playerLastBid = remote.playerLastBid || ['','','',''];
+  S.activeBidders = remote.activeBidders || [0,1,2,3];
+  S.passedBidders = remote.passedBidders || [];
+  S.bidTurn = remote.bidTurn !== undefined ? remote.bidTurn : 0;
+  S.declareOrder = remote.declareOrder || [];
+  S.declareIdx = remote.declareIdx !== undefined ? remote.declareIdx : 0;
+  S.bids = remote.bids || [null,null,null,null];
+  S.tricksWon = remote.tricksWon || [0,0,0,0];
+  S.leader = remote.leader !== undefined ? remote.leader : 0;
+  S.currentTrick = remote.currentTrick || [];
+  S.turnInTrick = remote.turnInTrick !== undefined ? remote.turnInTrick : 0;
+  S.roundNum = remote.roundNum || 1;
+  S.totals = remote.totals || [0,0,0,0];
+  S.starter = remote.starter || 0;
+  S.roundType = remote.roundType || null;
+  // Use received hands (clients only render their own face-up)
+  if(remote.hands) S.hands = remote.hands;
+
+  // Update pills
+  if(S.trumpSuit!==null){
+    const pillTrump = document.getElementById('pill-trump');
+    if(pillTrump){ pillTrump.style.display='inline-block'; pillTrump.textContent=SUITS[S.trumpSuit].sym+(S.trumpBid?' ('+S.names[S.trumpBid.player]+')':''); }
+    const tbTrump = document.getElementById('tb-trump');
+    if(tbTrump){ tbTrump.style.display='inline-block'; tbTrump.textContent=SUITS[S.trumpSuit].sym+' שליט'; }
+  }
+  if(S.roundType){
+    const rp = document.getElementById('pill-round');
+    if(rp){ rp.textContent='סיבוב '+S.roundNum+' — '+(S.roundType==='UP'?'UP ⬆':'UNDER ⬇'); rp.className='pill round '+(S.roundType==='UP'?'up':'under'); }
+  } else {
+    const rp = document.getElementById('pill-round');
+    if(rp){ rp.textContent='סיבוב '+S.roundNum; rp.className='pill round'; }
+  }
+}
+
+function checkMyTurn(){
+  if(!isOnline || isHost) return;
+  let myTurn = false;
+  if(S.phase==='trump-bidding' && S.bidTurn===myOnlineSeat && !S.passedBidders.includes(myOnlineSeat)) myTurn=true;
+  if(S.phase==='trick-bidding' && S.declareOrder[S.declareIdx]===myOnlineSeat) myTurn=true;
+  if(S.phase==='playing' && currentTrickPlayer()===myOnlineSeat) myTurn=true;
+
+  if(myTurn){
+    if(S.phase==='trump-bidding') showTrumpBidUI(myOnlineSeat);
+    else if(S.phase==='trick-bidding') showDeclareUI(myOnlineSeat);
+    else if(S.phase==='playing'){ hideControlPanel(); renderTable(); } // cards become clickable via renderTable
+  } else {
+    hideControlPanel();
+  }
+}
+
+function pushStateToFirebase(){
+  if(!isOnline || !isHost || !roomRef) return;
+  const state = {
+    phase: S.phase,
+    trumpBid: S.trumpBid || null,
+    trumpSuit: S.trumpSuit !== undefined ? S.trumpSuit : null,
+    trumpBroken: S.trumpBroken,
+    playerLastBid: S.playerLastBid,
+    activeBidders: S.activeBidders,
+    passedBidders: S.passedBidders,
+    bidTurn: S.bidTurn,
+    declareOrder: S.declareOrder || null,
+    declareIdx: S.declareIdx,
+    bids: S.bids,
+    tricksWon: S.tricksWon,
+    leader: S.leader,
+    currentTrick: S.currentTrick,
+    turnInTrick: S.turnInTrick,
+    roundNum: S.roundNum,
+    totals: S.totals,
+    starter: S.starter,
+    roundType: S.roundType || null,
+    hands: S.hands,
+  };
+  roomRef.child('gameState').set(state).catch(e=>console.error('Firebase push failed',e));
+}
+
+function listenForPendingActions(){
+  if(!roomRef) return;
+  const actRef = roomRef.child('pendingAction');
+  const handler = actRef.on('value', snap=>{
+    if(!snap.exists()) return;
+    const action = snap.val();
+    if(!action || !action.type) return;
+    actRef.remove();
+    processRemoteAction(action);
+  });
+  _actionListenerOff = ()=>actRef.off('value', handler);
+}
+
+// Host waits for a specific player's action (called before returning from advance* functions)
+function waitForRemoteAction(seat){
+  // The listenForPendingActions() listener already handles this globally.
+  // Just update the state so clients see it's their turn.
+  pushStateToFirebase();
+}
+
+function processRemoteAction(action){
+  if(!isHost) return;
+  const seat = action.seat;
+  if(action.type==='trump-bid'){
+    const {count, suit} = action.data;
+    S.trumpBid = {count, suit, player:seat};
+    S.playerLastBid[seat] = count+' '+SUITS[suit].sym;
+    S.bidTurn = nextActiveBidder(seat);
+    advanceTrumpBidding();
+  } else if(action.type==='trump-pass'){
+    S.passedBidders.push(seat);
+    S.playerLastBid[seat] = 'PASS';
+    S.bidTurn = nextActiveBidder(seat);
+    advanceTrumpBidding();
+  } else if(action.type==='declare'){
+    S.bids[seat] = action.data.value;
+    S.declareIdx++;
+    advanceTrickBidding();
+  } else if(action.type==='play'){
+    const {suit, rank} = action.data.card;
+    playCard(seat, {suit, rank});
+  }
+}
+
+function submitRemoteAction(type, data){
+  if(!roomRef) return;
+  roomRef.child('pendingAction').set({
+    seat: myOnlineSeat,
+    type,
+    data,
+    ts: Date.now()
+  }).catch(e=>showToast('שגיאת שליחה: '+e.message));
+}
+
+function cleanupOnlineListeners(){
+  if(_actionListenerOff){ try{ _actionListenerOff(); }catch(e){} _actionListenerOff=null; }
+  if(_stateListenerOff){ try{ _stateListenerOff(); }catch(e){} _stateListenerOff=null; }
+  if(_playersListenerOff){ try{ _playersListenerOff(); }catch(e){} _playersListenerOff=null; }
+}
+
+// Init Firebase status when page loads
+window.addEventListener('load', ()=>{
+  const cfg = loadFirebaseConfig();
+  if(cfg) tryInitFirebase().then(ok=>updateFirebaseStatus(ok));
+});
 </script>
 </body>
 </html>
