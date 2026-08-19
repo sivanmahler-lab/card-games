@@ -310,7 +310,20 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
 <!-- ONLINE SETUP -->
 <div class="screen" id="screen-online-setup">
   <div class="online-box">
-    <h2>🌐 משחק אונליין</h2>
+    <h2 style="display:flex;align-items:center;justify-content:center;gap:10px;">
+      <svg viewBox="0 0 70 60" aria-hidden="true" style="width:32px;height:auto;">
+        <g stroke="#d4af5a" stroke-width="1.4" fill="none" opacity="0.75">
+          <path d="M35 30 L35 10 M35 30 L15 42 M35 30 L55 42 M35 30 L15 18 M35 30 L55 18"/>
+        </g>
+        <circle cx="35" cy="30" r="7" fill="#f0d896" stroke="#211a10" stroke-width="1"/>
+        <circle cx="35" cy="10" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+        <circle cx="15" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+        <circle cx="55" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+        <circle cx="15" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+        <circle cx="55" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+      </svg>
+      משחק אונליין
+    </h2>
     <p class="sub">כל שחקן על המכשיר שלו — מחוברים בזמן אמת</p>
 
     <div class="firebase-status" id="fb-status">
@@ -991,10 +1004,9 @@ function showRoundEndModal(){
   let headerCells = S.names.map(n=>`<th>${n}</th>`).join('');
   let rows = history.map((r,idx)=>{
     // Just the round number — who came out ahead for THIS round is shown by circling
-    // their score below, not spelled out in the round label itself (which used to read
-    // like "סבב 1 בוט 1", as if bot 1 were literally the round's name).
-    const roundLabel = 'סבב '+(idx+1) +
-      (r.caller!==null ? `<br><span style="font-size:11px;font-weight:400;color:var(--gold-bright);">📣 ${r.names[r.caller]} אמר/ה "סיימתי"</span>` : '');
+    // their score below; who declared "finished" isn't repeated here since the circle
+    // already makes the round's outcome clear at a glance.
+    const roundLabel = 'סבב '+(idx+1);
     const roundMin = Math.min(...r.final);
     const cells = r.final.map(v=>{
       // Circle the lowest (winning) score for this specific round.

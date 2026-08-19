@@ -371,7 +371,7 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
     <div class="tb-btns">
       <button class="tb-btn" onclick="newGame()">משחק חדש</button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
-      <button class="tb-btn" onclick="goLobby()">לובי</button>
+      <button class="tb-btn" onclick="goHub()">לובי</button>
     </div>
   </div>
 
@@ -451,7 +451,20 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
   <!-- ONLINE SETUP -->
   <div class="screen" id="screen-online-setup">
     <div class="online-box">
-      <h2>🌐 משחק אונליין</h2>
+      <h2 style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <svg viewBox="0 0 70 60" aria-hidden="true" style="width:32px;height:auto;">
+          <g stroke="#d4af5a" stroke-width="1.4" fill="none" opacity="0.75">
+            <path d="M35 30 L35 10 M35 30 L15 42 M35 30 L55 42 M35 30 L15 18 M35 30 L55 18"/>
+          </g>
+          <circle cx="35" cy="30" r="7" fill="#f0d896" stroke="#211a10" stroke-width="1"/>
+          <circle cx="35" cy="10" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+          <circle cx="15" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+          <circle cx="55" cy="18" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+          <circle cx="15" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+          <circle cx="55" cy="42" r="5.5" fill="#faf4e6" stroke="#211a10" stroke-width="1"/>
+        </svg>
+        משחק אונליין
+      </h2>
       <p class="sub">כל שחקן על המכשיר שלו — מחוברים בזמן אמת</p>
 
       <div class="firebase-status" id="fb-status">
@@ -769,7 +782,26 @@ async function chooseMode(mode){
   const box = document.getElementById('setup-box');
   if(mode==='computer'){
     box.innerHTML = `
-      <h2>משחק מול המחשב</h2>
+      <h2 style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <svg viewBox="0 0 90 60" aria-hidden="true" style="width:38px;height:auto;">
+          <rect x="4" y="16" width="26" height="36" rx="4" fill="#faf4e6" stroke="#211a10" stroke-width="1.5"/>
+          <text x="17" y="39" font-family="Heebo, sans-serif" font-weight="800" font-size="15" text-anchor="middle" fill="#c0272d">♥</text>
+          <g stroke="#d4af5a" stroke-width="1.6" fill="none"><path d="M40 30h10" stroke-dasharray="2 3"/></g>
+          <g fill="none" stroke="#d4af5a" stroke-width="1.8">
+            <rect x="56" y="10" width="16" height="14" rx="3"/>
+            <circle cx="61.5" cy="17" r="1.6" fill="#f0d896" stroke="none"/>
+            <circle cx="66.5" cy="17" r="1.6" fill="#f0d896" stroke="none"/>
+            <path d="M64 4v6M60 4l1.5 3M68 4l-1.5 3" stroke-linecap="round"/>
+            <rect x="52" y="28" width="14" height="12" rx="3"/>
+            <circle cx="56.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+            <circle cx="61.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+            <rect x="70" y="28" width="14" height="12" rx="3"/>
+            <circle cx="74.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+            <circle cx="79.5" cy="34" r="1.4" fill="#f0d896" stroke="none"/>
+          </g>
+        </svg>
+        משחק מול המחשב
+      </h2>
       <div class="field"><label>השם שלך</label><input id="inp-name" value="${myName}" maxlength="12"></div>
       <button class="btn-primary" onclick="startComputerGame()">התחל משחק</button>
       <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>`;
