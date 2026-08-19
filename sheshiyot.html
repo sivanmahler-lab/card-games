@@ -130,6 +130,9 @@ body{
 .pcell.selectable{cursor:pointer;box-shadow:0 0 0 2px var(--gold-bright);}
 .pcell.selectable:hover{transform:translateY(-4px);}
 .pcell.justswapped{box-shadow:0 0 0 3px var(--teal);}
+.pcell.reorderable{cursor:pointer;}
+.pcell.reorderable:hover{transform:translateY(-3px);}
+.pcell.reorder-selected{box-shadow:0 0 0 3px var(--teal);transform:translateY(-6px);}
 
 .center-pot{display:flex;align-items:center;gap:18px;}
 .pile{width:52px;height:74px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
@@ -144,8 +147,8 @@ body{
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
 .pile.closed.drawn.disabled{opacity:1;}
 
-.action-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);border-top:1px solid rgba(212,175,90,.25);
-  padding:10px 14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;}
+.action-bar{width:100%;max-width:520px;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
+  padding:10px 14px;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;flex-shrink:0;}
 .action-bar button{padding:9px 16px;border-radius:10px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);
   color:var(--cream);font-size:13px;font-weight:700;cursor:pointer;}
 .action-bar button.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
@@ -281,11 +284,10 @@ body{
       </div>
     </div>
   </div>
-</div>
-
-<div class="action-bar" id="action-bar" style="display:none;">
-  <button id="btn-finish" onclick="declareFinished()" title="לכל שאר השחקנים יהיה עוד תור אחד בלבד, ואז המשחק נגמר">סיימתי!</button>
-  <button id="btn-endturn" class="hot" onclick="endMyTurn()">המשך</button>
+  <div class="action-bar" id="action-bar" style="display:none;">
+    <button id="btn-finish" onclick="declareFinished()" title="לכל שאר השחקנים יהיה עוד תור אחד בלבד, ואז המשחק נגמר">סיימתי!</button>
+    <button id="btn-endturn" class="hot" onclick="endMyTurn()">המשך</button>
+  </div>
 </div>
 
 <!-- INSTRUCTIONS -->
@@ -351,28 +353,49 @@ function seatFor(disp){ return (disp + myOnlineSeat) % 4; }
 function displayFor(actual){ return (actual - myOnlineSeat + 4) % 4; }
 
 function newRound(){
+  // Fresh match: brand-new names/seats and an empty score history.
+  buildRoundState(['את/ה','בוט 1','בוט 2','בוט 3'], [true,false,false,false], [], 1, 0);
+}
+function buildRoundState(names, isHuman, matchHistory, roundNum, starter){
   const deck = shuffle(buildDeck());
   S = {
     phase:'peek',
-    names:['את/ה','בוט 1','בוט 2','בוט 3'],
-    isHuman:[true,false,false,false],
+    names: names.slice(),
+    isHuman: isHuman.slice(),
     hands:[[],[],[],[]],
     graduated:[false,false,false,false],
     peeked:[false,false,false,false],
     drawPile:[],
     discardPile:[],
-    turn:0,
-    starter:0,
+    turn:starter,
+    starter:starter,
     finishCaller:null,
     finalOrder:[],
     pendingDraw:null,
     turnActed:false,
+    matchHistory: matchHistory.slice(),
+    roundNum: roundNum,
   };
   for(let p=0;p<4;p++){
     S.hands[p] = deck.splice(0,6);
+    if(!isHuman[p]) S.peeked[p] = true;
   }
   S.drawPile = deck;
   S.discardPile = [S.drawPile.pop()];
+}
+function startNextRound(){
+  const nextStarter = (S.starter+1)%4;
+  const nextRoundNum = (S.roundNum||1)+1;
+  buildRoundState(S.names, S.isHuman, S.matchHistory||[], nextRoundNum, nextStarter);
+  document.getElementById('round-end-modal').classList.remove('show');
+  showScreen('screen-game');
+  renderAll();
+  maybeBotTurn();
+}
+function onClickNextRound(){
+  document.getElementById('round-end-modal').classList.remove('show');
+  if(isOnline && !isHost){ submitRemoteAction('startNextRound', {}); return; }
+  startNextRound();
 }
 
 function ensureDrawPile(){
@@ -403,6 +426,7 @@ function startLocalGame(numHumans){
 
 /* ============================= PEEK PHASE ============================= */
 let peekingNow = false;
+let reorderSelectedIdx = null;
 function doPeek(){
   const myActual = seatFor(0);
   if(S.peeked[myActual]) return;
@@ -410,10 +434,31 @@ function doPeek(){
   renderAll();
   // Cards stay face-up until the player explicitly closes the peek — no auto-timeout.
 }
+function onReorderTap(i){
+  const myActual = seatFor(0);
+  if(reorderSelectedIdx===null){
+    reorderSelectedIdx = i;
+  } else if(reorderSelectedIdx===i){
+    reorderSelectedIdx = null;
+  } else {
+    const a = reorderSelectedIdx, b = i;
+    reorderSelectedIdx = null;
+    if(isOnline && !isHost){
+      const hand = S.hands[myActual];
+      [hand[a], hand[b]] = [hand[b], hand[a]];
+      submitRemoteAction('reorderBottom', {a, b});
+    } else {
+      const hand = S.hands[myActual];
+      [hand[a], hand[b]] = [hand[b], hand[a]];
+    }
+  }
+  renderAll();
+}
 function closePeek(){
   const myActual = seatFor(0);
   if(!peekingNow) return;
   peekingNow = false;
+  reorderSelectedIdx = null;
   if(S.peeked[myActual]) { renderAll(); return; }
   S.peeked[myActual] = true;
   if(isOnline && !isHost){
@@ -429,6 +474,37 @@ function closePeek(){
   maybeBotTurn();
 }
 function allPeeked(){ return S.peeked.every(Boolean); }
+
+/* ============================= FLY ANIMATION ============================= */
+// A short-lived cloned "ghost" card that visually flies from one element's position to
+// another's, then fades out and removes itself. Purely cosmetic — the real state change
+// already happened (or is about to), this just makes the transition feel intentional.
+function flyGhostCard(card, fromRect, toRect){
+  if(!fromRect || !toRect) return;
+  const info = SUITS_INFO[card.suit];
+  const ghost = document.createElement('div');
+  ghost.className = 'pcell face ' + info.color;
+  ghost.style.position = 'fixed';
+  ghost.style.left = fromRect.left+'px';
+  ghost.style.top = fromRect.top+'px';
+  ghost.style.width = fromRect.width+'px';
+  ghost.style.height = fromRect.height+'px';
+  ghost.style.margin = '0';
+  ghost.style.zIndex = 999;
+  ghost.style.pointerEvents = 'none';
+  ghost.innerHTML = `<div class="r">${rankLabel(card.rank)}</div><div class="sym">${info.sym}</div>`;
+  document.body.appendChild(ghost);
+  const dx = toRect.left - fromRect.left;
+  const dy = toRect.top - fromRect.top;
+  const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
+  const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
+  void ghost.offsetHeight; // force a reflow so the transition actually animates
+  ghost.style.transition = 'transform .45s cubic-bezier(.35,0,.25,1), opacity .45s ease';
+  ghost.style.transformOrigin = 'top right';
+  ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+  setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
+  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
+}
 
 /* ============================= TURN ACTIONS ============================= */
 function isMyTurnLocal(){
@@ -459,17 +535,40 @@ function onTakeOpen(){
 }
 function discardDrawn(){
   if(!pendingDraw || pendingDraw.source!=='closed') return;
-  if(isOnline && !isHost){ submitRemoteAction('discardDrawn', {}); pendingDraw=null; renderAll(); return; }
+  const closedEl = document.getElementById('pile-closed');
+  const openEl = document.getElementById('pile-open');
+  const fromRect = closedEl ? closedEl.getBoundingClientRect() : null;
+  const toRect = openEl ? openEl.getBoundingClientRect() : null;
+  const flownCard = pendingDraw.card;
+  if(isOnline && !isHost){
+    submitRemoteAction('discardDrawn', {});
+    pendingDraw=null;
+    renderAll();
+    flyGhostCard(flownCard, fromRect, toRect);
+    return;
+  }
   S.discardPile.push(pendingDraw.card);
   pendingDraw = null;
   finishTurnAction();
+  flyGhostCard(flownCard, fromRect, toRect);
 }
 function useDrawnOnSlot(slotIdx){
   const myActual = seatFor(0);
   if(!pendingDraw) return;
   if(S.graduated[myActual] && slotIdx>2){ showToast('כבר עברת לשחק עם השורה העליונה'); return; }
   const isTopSlot = slotIdx<=2;
-  if(isOnline && !isHost){ submitRemoteAction('useSlot', {slot:slotIdx}); pendingDraw=null; renderAll(); return; }
+  const closedEl = document.getElementById('pile-closed');
+  const slotEl = document.getElementById('pg-0').children[slotIdx];
+  const fromRect = closedEl ? closedEl.getBoundingClientRect() : null;
+  const toRect = slotEl ? slotEl.getBoundingClientRect() : null;
+  const flownCard = pendingDraw.card;
+  if(isOnline && !isHost){
+    submitRemoteAction('useSlot', {slot:slotIdx});
+    pendingDraw=null;
+    renderAll();
+    flyGhostCard(flownCard, fromRect, toRect);
+    return;
+  }
   const old = S.hands[myActual][slotIdx];
   S.hands[myActual][slotIdx] = pendingDraw.card;
   S.discardPile.push(old);
@@ -479,6 +578,7 @@ function useDrawnOnSlot(slotIdx){
     showToast('עברת לשחק עם השורה העליונה — אי אפשר לחזור לשורה התחתונה');
   }
   finishTurnAction();
+  flyGhostCard(flownCard, fromRect, toRect);
 }
 function declareFinished(){
   const myActual = seatFor(0);
@@ -532,67 +632,82 @@ function maybeBotTurn(){
 /* ============================= BOT AI ============================= */
 function botTakeTurn(p){
   if(S===null || S.turn!==p) return;
-  const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
-  const hand = S.hands[p];
-  const rankCounts = {};
-  hand.forEach(c=>{ rankCounts[c.rank]=(rankCounts[c.rank]||0)+1; });
-  // worst card in active row (by value, deprioritizing ones already matched)
-  function worstSlot(){
-    let worst=-1, worstVal=-1;
-    for(const idx of activeRow){
-      const c = hand[idx];
-      const matched = rankCounts[c.rank]>=2;
-      const val = matched ? -1 : cardValue(c.rank);
-      if(val>worstVal){ worstVal=val; worst=idx; }
+  try{
+    const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
+    const hand = S.hands[p];
+    const rankCounts = {};
+    hand.forEach(c=>{ rankCounts[c.rank]=(rankCounts[c.rank]||0)+1; });
+    // worst card in active row (by value, deprioritizing ones already matched)
+    function worstSlot(){
+      let worst=-1, worstVal=-1;
+      for(const idx of activeRow){
+        const c = hand[idx];
+        const matched = rankCounts[c.rank]>=2;
+        const val = matched ? -1 : cardValue(c.rank);
+        if(val>worstVal){ worstVal=val; worst=idx; }
+      }
+      return {idx:worst, val:worstVal};
     }
-    return {idx:worst, val:worstVal};
-  }
-  const w = worstSlot();
-  const top = S.discardPile[S.discardPile.length-1];
-  let useOpen = false;
-  if(top){
-    const topMatchesHand = rankCounts[top.rank]>=1;
-    if(cardValue(top.rank) < w.val || topMatchesHand) useOpen = true;
-  }
-  let drawn;
-  if(useOpen && top){
-    drawn = S.discardPile.pop();
-  } else {
-    ensureDrawPile();
-    drawn = S.drawPile.pop();
-  }
-  const matched = rankCounts[drawn.rank]>=1;
-  const improves = matched || cardValue(drawn.rank) < w.val;
-  if(improves){
-    const old = hand[w.idx];
-    hand[w.idx] = drawn;
-    S.discardPile.push(old);
-    rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
-    rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
-  } else {
-    S.discardPile.push(drawn);
-  }
-  S.turnActed = true;
-
-  // graduation heuristic
-  if(!S.graduated[p]){
-    const bottomVals = [3,4,5].map(i=>{
-      const c = hand[i];
-      return rankCounts[c.rank]>=2 ? 0 : cardValue(c.rank);
-    });
-    const avg = bottomVals.reduce((a,b)=>a+b,0)/3;
-    if(avg<=4 || S.discardPile.length>10){ S.graduated[p]=true; }
-  }
-
-  // finish heuristic
-  if(S.finishCaller===null){
-    const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
-    if(total<=4 && S.graduated[p]){
-      doDeclareFinished(p);
+    const w = worstSlot();
+    const top = S.discardPile[S.discardPile.length-1];
+    let useOpen = false;
+    if(top){
+      const topMatchesHand = rankCounts[top.rank]>=1;
+      if(cardValue(top.rank) < w.val || topMatchesHand) useOpen = true;
     }
-  }
+    let drawn;
+    if(useOpen && top){
+      drawn = S.discardPile.pop();
+    } else {
+      ensureDrawPile();
+      drawn = S.drawPile.pop();
+    }
+    if(!drawn){
+      // Defensive fallback: both piles were somehow empty (shouldn't happen, but this
+      // guarantees the bot's turn always produces a legal outcome instead of crashing).
+      S.turnActed = true;
+    } else {
+      const matched = rankCounts[drawn.rank]>=1;
+      const improves = w.idx>=0 && (matched || cardValue(drawn.rank) < w.val);
+      if(improves){
+        const old = hand[w.idx];
+        hand[w.idx] = drawn;
+        S.discardPile.push(old);
+        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
+        rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+      } else {
+        S.discardPile.push(drawn);
+      }
+      S.turnActed = true;
 
-  renderAll();
+      // graduation heuristic
+      if(!S.graduated[p]){
+        const bottomVals = [3,4,5].map(i=>{
+          const c = hand[i];
+          return rankCounts[c.rank]>=2 ? 0 : cardValue(c.rank);
+        });
+        const avg = bottomVals.reduce((a,b)=>a+b,0)/3;
+        if(avg<=4 || S.discardPile.length>10){ S.graduated[p]=true; }
+      }
+
+      // finish heuristic
+      if(S.finishCaller===null){
+        const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
+        if(total<=4 && S.graduated[p]){
+          doDeclareFinished(p);
+        }
+      }
+    }
+    renderAll();
+  } catch(err){
+    // A bot AI bug should never be able to freeze the whole game — log it, tell the
+    // player something went wrong (with enough detail to report back), and still let
+    // the turn move on below.
+    console.error('botTakeTurn failed for player '+p, err);
+    showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
+    S.turnActed = true;
+    try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
+  }
   if(isOnline && isHost) pushStateToFirebase();
   setTimeout(advanceTurn, 900);
 }
@@ -620,26 +735,35 @@ function endRound(){
       if(raw[p] < raw[caller]) final[p] = raw[p]+10;
     }
   }
+  if(!S.matchHistory) S.matchHistory = [];
+  S.matchHistory.push({raw, final, caller, names:S.names.slice()});
   renderAll();
-  showRoundEndModal(raw, final, caller);
-  if(isOnline && isHost) pushStateToFirebase();
+  showRoundEndModal();
 }
-function showRoundEndModal(raw, final, caller){
-  const minScore = Math.min(...final);
-  let rows = '';
-  for(let p=0;p<4;p++){
-    const isWinner = final[p]===minScore;
-    rows += `<tr class="${isWinner?'winner':''}"><td>${S.names[p]}${p===caller?' 📣':''}</td><td>${raw[p]}</td><td>${final[p]}</td></tr>`;
-  }
+function showRoundEndModal(){
+  const history = S.matchHistory || [];
+  const totals = [0,0,0,0];
+  history.forEach(r=>{ r.final.forEach((v,i)=>totals[i]+=v); });
+  const minTotal = Math.min(...totals);
+
+  let headerCells = S.names.map(n=>`<th>${n}</th>`).join('');
+  let rows = history.map((r,idx)=>{
+    const roundLabel = 'סבב '+(idx+1) + (r.caller!==null ? ' 📣'+r.names[r.caller] : '');
+    const cells = r.final.map(v=>`<td>${v}</td>`).join('');
+    return `<tr><td>${roundLabel}</td>${cells}</tr>`;
+  }).join('');
+  let totalsCells = totals.map(t=>`<td>${t===minTotal?'<b>'+t+'</b>':t}</td>`).join('');
+
   const box = document.getElementById('round-end-content');
   box.innerHTML = `
-    <h2>🏆 סיום המשחק</h2>
+    <h2>🏆 סוף סבב ${S.roundNum||1}</h2>
     <table class="score-table">
-      <tr><th>שחקן</th><th>נקודות גולמיות</th><th>סופי</th></tr>
+      <tr><th>סבב</th>${headerCells}</tr>
       ${rows}
+      <tr class="winner" style="border-top:2px solid var(--gold);"><td>סה"כ</td>${totalsCells}</tr>
     </table>
-    <button class="btn-primary" onclick="document.getElementById('round-end-modal').classList.remove('show'); newGame();">משחק חדש</button>
-    <button class="tb-btn close-btn" onclick="document.getElementById('round-end-modal').classList.remove('show')">סגור</button>
+    <button class="btn-primary" onclick="onClickNextRound()">סבב חדש</button>
+    <button class="btn-secondary" onclick="document.getElementById('round-end-modal').classList.remove('show'); newGame();">סיום המשחק</button>
   `;
   document.getElementById('round-end-modal').classList.add('show');
 }
@@ -650,19 +774,22 @@ function renderAll(){
   const myActual = seatFor(0);
   // status pill
   const pill = document.getElementById('pill-status');
+  const roundPrefix = 'סבב '+(S.roundNum||1)+' — ';
   if(S.phase==='peek'){
-    pill.textContent = allPeeked() ? 'מתחילים...' : 'שלב הצצה — כל שחקן מציץ בשלושת הקלפים התחתונים שלו';
+    pill.textContent = roundPrefix + (allPeeked() ? 'מתחילים...' : 'שלב הצצה — כל שחקן מציץ בשלושת הקלפים התחתונים שלו');
   } else if(S.phase==='playing'){
     const turnName = S.names[S.turn];
-    pill.textContent = (S.finishCaller!==null ? '🔔 סבב אחרון — ' : '') + 'תור: ' + (S.turn===myActual?'שלך':turnName);
+    pill.textContent = roundPrefix + (S.finishCaller!==null ? '🔔 סבב אחרון — ' : '') + 'תור: ' + (S.turn===myActual?'שלך':turnName);
   } else if(S.phase==='ended'){
-    pill.textContent = 'המשחק הסתיים';
+    pill.textContent = roundPrefix + 'הסתיים';
   }
 
   for(let disp=0; disp<4; disp++){
     const actual = seatFor(disp);
-    document.getElementById('pn-'+disp).textContent = S.names[actual] + (S.graduated[actual]?' ⬆':'');
-    document.getElementById('pn-'+disp).classList.toggle('active', S.phase==='playing' && S.turn===actual);
+    const nameEl = document.getElementById('pn-'+disp);
+    nameEl.textContent = S.names[actual] + (S.graduated[actual]?' ⬆':'');
+    nameEl.title = S.graduated[actual] ? 'עבר/ה לשחק עם השורה העליונה' : '';
+    nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     renderPlayerGrid(disp, actual);
   }
 
@@ -753,6 +880,13 @@ function renderPlayerGrid(disp, actual){
     if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
       cellEl.classList.add('selectable');
       cellEl.onclick = ()=>useDrawnOnSlot(i);
+    }
+    if(showFace){
+      // During the peek window the player may freely reorder their bottom-row cards —
+      // tap one, then tap another, to swap their positions (no re-peeking involved).
+      cellEl.classList.add('reorderable');
+      if(reorderSelectedIdx===i) cellEl.classList.add('reorder-selected');
+      cellEl.onclick = ()=>onReorderTap(i);
     }
     el.appendChild(cellEl);
   }
@@ -1033,6 +1167,20 @@ function applyHostAction(act){
     S.peeked[p]=true;
     if(allPeeked()){ S.phase='playing'; S.turn=S.starter; }
     renderAll(); pushStateToFirebase();
+    return;
+  }
+  if(act.type==='reorderBottom'){
+    if(S.peeked[p]) return; // reordering is only meaningful during the peek window
+    const hand = S.hands[p];
+    const {a,b} = act.payload;
+    if([a,b].some(x=>x<3||x>5)) return; // bottom row only
+    [hand[a], hand[b]] = [hand[b], hand[a]];
+    renderAll(); pushStateToFirebase();
+    return;
+  }
+  if(act.type==='startNextRound'){
+    if(S.phase!=='ended') return;
+    startNextRound();
     return;
   }
   if(S.phase!=='playing' || S.turn!==p) return;
