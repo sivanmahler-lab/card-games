@@ -96,7 +96,12 @@ body{
 /* ---------- TABLE ---------- */
 #screen-game{justify-content:flex-start;padding:8px;}
 .game-header{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0;flex-wrap:wrap;}
+#final-round-banner{display:none;text-align:center;font-size:13.5px;font-weight:700;color:#fff;
+  background:linear-gradient(160deg,#c0272d,#8a1f2b);border:1px solid var(--gold-bright);border-radius:10px;
+  padding:8px 14px;margin:0 12px 6px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
+#final-round-banner.show{display:block;}
 .pill{padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
+button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:rgba(212,175,90,.16);}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 #table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;overflow-y:auto;}
 @media(min-width:700px){ #table-wrap{max-width:640px;} }
@@ -116,6 +121,7 @@ body{
 .p-name{font-size:12.5px;font-weight:700;background:rgba(0,0,0,.6);border:1px solid rgba(212,175,90,.4);border-radius:14px;
   padding:3px 12px;white-space:nowrap;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);}
+.p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
 .pgrid.small{transform:scale(.62);}
 @media(min-width:700px){
@@ -206,7 +212,10 @@ body{
 <body>
 
 <div class="topbar">
-  <div class="brand"><span class="suits">🎴</span> שישיות</div>
+  <div class="brand"><svg viewBox="0 0 40 34" aria-hidden="true" style="width:26px;height:auto;">
+        <rect x="2" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(-8 12 17)"/>
+        <rect x="18" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(8 28 17)"/>
+      </svg> שישיות</div>
   <div class="tb-btns">
     <button class="tb-btn" onclick="newGame()">משחק חדש</button>
     <button class="tb-btn" onclick="openInstructions()">הוראות</button>
@@ -217,7 +226,24 @@ body{
 <!-- LOBBY -->
 <div class="screen active" id="screen-lobby">
   <div class="lobby-card">
-    <div class="hero-suits">🎴 ♣ ♦ ♥ ♠</div>
+    <svg class="hero-svg" viewBox="0 0 150 70" aria-hidden="true" style="width:clamp(110px,26vw,170px);height:auto;margin-bottom:10px;">
+        <g stroke="#211a10" stroke-width="1.5">
+            <rect x="4"  y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="62" y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="120" y="2" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="4"  y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="62" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+            <rect x="120" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
+          </g>
+          <g font-family="Heebo, sans-serif" font-weight="800" font-size="13" text-anchor="middle">
+            <text x="17"  y="19" fill="#c0272d">♥</text>
+            <text x="75"  y="19" fill="#1a1a1a">♠</text>
+            <text x="133" y="19" fill="#c0272d">♦</text>
+            <text x="17"  y="55" fill="#1a1a1a">♣</text>
+            <text x="75"  y="55" fill="#c0272d">♥</text>
+            <text x="133" y="55" fill="#1a1a1a">♠</text>
+          </g>
+      </svg>
     <div class="hero-title">שישיות</div>
     <div class="hero-sub">שישה קלפים, כמה שפחות נקודות — משחק הקלפים הישראלי</div>
     <div class="mode-grid">
@@ -292,7 +318,9 @@ body{
 <div class="screen" id="screen-game">
   <div class="game-header">
     <div class="pill status" id="pill-status">מכינים משחק...</div>
+    <button class="pill" id="reopen-results-pill" style="display:none;cursor:pointer;" onclick="showRoundEndModal()">📊 תוצאות</button>
   </div>
+  <div id="final-round-banner"></div>
   <div id="table-wrap">
     <div id="felt">
       <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid" id="pg-0"></div></div>
@@ -392,6 +420,7 @@ function newRound(){
   buildRoundState(['את/ה','בוט 1','בוט 2','בוט 3'], [true,false,false,false], [], 1, 0);
 }
 function buildRoundState(names, isHuman, matchHistory, roundNum, starter){
+  resultsShownThisRound = false;
   const deck = shuffle(buildDeck());
   S = {
     phase:'peek',
@@ -461,6 +490,7 @@ function startLocalGame(numHumans){
 
 /* ============================= PEEK PHASE ============================= */
 let peekingNow = false;
+let resultsShownThisRound = false; // local-only: hides "הצג תוצאות" once this player has opened it, so it stops covering their cards
 function doPeek(){
   const myActual = seatFor(0);
   if(S.peeked[myActual]) return;
@@ -688,12 +718,9 @@ function endMyTurn(){
 function doDeclareFinished(p){
   S.finishCaller = p;
   S.finalTurnsRemaining = 3; // the other 3 players each get exactly one more turn
-  const myActual = seatFor(0);
-  const name = S.names[p] || ('שחקן '+p);
-  const msg = (p===myActual)
-    ? 'הכרזת "סיימתי"! לכל שאר השחקנים יש עוד תור אחד, ואז הסבב נגמר.'
-    : `${name} הכריז/ה "סיימתי"! זה הסבב האחרון — לכולם עוד תור אחד.`;
-  showToast(msg, 4000);
+  // Who declared and that it's the last round is shown via the persistent
+  // #final-round-banner (driven by renderAll off S.finishCaller) rather than a toast —
+  // a toast auto-hides and can be missed; the banner stays up for the whole final round.
 }
 function finishTurnAction(){
   S.turnActed = true;
@@ -728,19 +755,23 @@ function maybeBotTurn(){
   if(S.isHuman[S.turn]) return;
   setTimeout(()=>botTakeTurn(S.turn), 700);
 }
+// Card shown face-up in a pile slot while a bot's turn is "thinking" — set during phase 1
+// of botTakeTurn, read by renderAll()/pile rendering, cleared once phase 2 resolves it.
+let botRevealedDraw = null; // {source:'closed'|'open', card}
 
 /* ============================= BOT AI ============================= */
+// Phase 1: decide what to draw, pop it off the pile, and show it face-up in the pile
+// slot for a beat — so anyone watching (this is a local/bot turn, no hidden information
+// between real players here) can see exactly what the bot drew before it moves anywhere.
+// Phase 2 (botResolveTurn) applies the actual swap/discard decision after the pause and
+// animates the card flying to its real destination.
 function botTakeTurn(p){
   if(S===null || S.turn!==p) return;
-  // Anim plan is filled in during the try block and consumed just after renderAll(), so the
-  // ghost flies over the already-updated table (same pattern as the human player's own moves).
-  let animPlan = null;
   try{
     const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
     const hand = S.hands[p];
     const rankCounts = {};
     hand.forEach(c=>{ rankCounts[c.rank]=(rankCounts[c.rank]||0)+1; });
-    // worst card in active row (by value, deprioritizing ones already matched)
     function worstSlot(){
       let worst=-1, worstVal=-1;
       for(const idx of activeRow){
@@ -758,14 +789,6 @@ function botTakeTurn(p){
       const topMatchesHand = rankCounts[top.rank]>=1;
       if(cardValue(top.rank) < w.val || topMatchesHand) useOpen = true;
     }
-    // Capture the source rect (closed or open pile) BEFORE any state mutation.
-    const closedEl = document.getElementById('pile-closed');
-    const openEl = document.getElementById('pile-open');
-    const disp = displayFor(p);
-    const gridEl = document.getElementById('pg-'+disp);
-    const sourceRect = (useOpen && top)
-      ? (openEl ? openEl.getBoundingClientRect() : null)
-      : (closedEl ? closedEl.getBoundingClientRect() : null);
     let drawn;
     if(useOpen && top){
       drawn = S.discardPile.pop();
@@ -777,69 +800,96 @@ function botTakeTurn(p){
       // Defensive fallback: both piles were somehow empty (shouldn't happen, but this
       // guarantees the bot's turn always produces a legal outcome instead of crashing).
       S.turnActed = true;
+      renderAll();
+      if(isOnline && isHost) pushStateToFirebase();
+      setTimeout(advanceTurn, 900);
+      return;
+    }
+    // Reveal it face-up in the pile slot it came from, and pause before resolving.
+    botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
+    renderAll();
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 1600);
+  } catch(err){
+    console.error('botTakeTurn (phase 1) failed for player '+p, err);
+    showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
+    S.turnActed = true;
+    botRevealedDraw = null;
+    try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
+    if(isOnline && isHost) pushStateToFirebase();
+    setTimeout(advanceTurn, 900);
+  }
+}
+function botResolveTurn(p, ctx){
+  if(S===null || S.turn!==p){ botRevealedDraw = null; return; }
+  // Anim plan is filled in during the try block and consumed just after renderAll(), so the
+  // ghost flies over the already-updated table (same pattern as the human player's own moves).
+  let animPlan = null;
+  try{
+    const { drawn, worst: w, rankCounts } = ctx;
+    const hand = S.hands[p];
+    const top = botRevealedDraw ? botRevealedDraw.source : null;
+    const useOpen = top==='open';
+    botRevealedDraw = null;
+    // Capture the source rect (closed or open pile) and target slot rect while the
+    // revealed-card render is still on screen, right before mutating state.
+    const closedEl = document.getElementById('pile-closed');
+    const openEl = document.getElementById('pile-open');
+    const disp = displayFor(p);
+    const gridEl = document.getElementById('pg-'+disp);
+    const sourceRect = (useOpen ? openEl : closedEl) ? (useOpen ? openEl : closedEl).getBoundingClientRect() : null;
+    const matched = rankCounts[drawn.rank]>=1;
+    const improves = w.idx>=0 && (matched || cardValue(drawn.rank) < w.val);
+    const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
+    const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
+    if(improves){
+      const old = hand[w.idx];
+      hand[w.idx] = drawn;
+      S.discardPile.push(old);
+      rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
+      rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+      // The card was already revealed face-up above, so both legs of the animation fly
+      // it visibly: the drawn card into the hand slot, the discarded card out to the pile.
+      animPlan = {
+        incoming: {card: drawn, fromRect: sourceRect, toRect: slotRect},
+        outgoing: {card: old, fromRect: slotRect, toRect: openEl ? openEl.getBoundingClientRect() : null}
+      };
     } else {
-      const matched = rankCounts[drawn.rank]>=1;
-      const improves = w.idx>=0 && (matched || cardValue(drawn.rank) < w.val);
-      // Capture the target slot rect before the DOM re-renders.
-      const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
-      const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
-      if(improves){
-        const old = hand[w.idx];
-        hand[w.idx] = drawn;
-        S.discardPile.push(old);
-        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
-        rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
-        // The drawn card's identity stays hidden (face-down ghost) flying into the bot's
-        // hand slot; the card it discarded is public, so it flies face-up into the open pile.
-        animPlan = {
-          incoming: {fromRect: sourceRect, toRect: slotRect},
-          outgoing: {card: old, fromRect: slotRect, toRect: openEl ? openEl.getBoundingClientRect() : null}
-        };
-      } else {
-        S.discardPile.push(drawn);
-        // Declined without swapping: whatever was drawn just flies straight to the open pile.
-        // If it came from the open pile itself it's already public knowledge (face-up ghost);
-        // if it came from the closed pile it stays hidden (face-down ghost).
-        const toRect = openEl ? openEl.getBoundingClientRect() : null;
-        if(useOpen && top){
-          animPlan = {outgoing: {card: drawn, fromRect: sourceRect, toRect}};
-        } else {
-          animPlan = {declinedHidden: {fromRect: sourceRect, toRect}};
-        }
-      }
-      S.turnActed = true;
+      S.discardPile.push(drawn);
+      const toRect = openEl ? openEl.getBoundingClientRect() : null;
+      animPlan = {outgoing: {card: drawn, fromRect: sourceRect, toRect}};
+    }
+    S.turnActed = true;
 
-      // graduation heuristic
-      if(!S.graduated[p]){
-        const bottomVals = [3,4,5].map(i=>{
-          const c = hand[i];
-          return rankCounts[c.rank]>=2 ? 0 : cardValue(c.rank);
-        });
-        const avg = bottomVals.reduce((a,b)=>a+b,0)/3;
-        if(avg<=4 || S.discardPile.length>10){ S.graduated[p]=true; }
-      }
+    // graduation heuristic
+    if(!S.graduated[p]){
+      const bottomVals = [3,4,5].map(i=>{
+        const c = hand[i];
+        return rankCounts[c.rank]>=2 ? 0 : cardValue(c.rank);
+      });
+      const avg = bottomVals.reduce((a,b)=>a+b,0)/3;
+      if(avg<=4 || S.discardPile.length>10){ S.graduated[p]=true; }
+    }
 
-      // finish heuristic
-      if(S.finishCaller===null){
-        const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
-        if(total<=4 && S.graduated[p]){
-          doDeclareFinished(p);
-        }
+    // finish heuristic
+    if(S.finishCaller===null){
+      const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
+      if(total<=4 && S.graduated[p]){
+        doDeclareFinished(p);
       }
     }
     renderAll();
     if(animPlan){
-      if(animPlan.incoming) flyGhostBack(animPlan.incoming.fromRect, animPlan.incoming.toRect);
+      if(animPlan.incoming) flyGhostCard(animPlan.incoming.card, animPlan.incoming.fromRect, animPlan.incoming.toRect);
       if(animPlan.outgoing) flyGhostCard(animPlan.outgoing.card, animPlan.outgoing.fromRect, animPlan.outgoing.toRect);
-      if(animPlan.declinedHidden) flyGhostBack(animPlan.declinedHidden.fromRect, animPlan.declinedHidden.toRect);
     }
   } catch(err){
     // A bot AI bug should never be able to freeze the whole game — log it, tell the
     // player something went wrong (with enough detail to report back), and still let
     // the turn move on below.
-    console.error('botTakeTurn failed for player '+p, err);
+    console.error('botTakeTurn (phase 2) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
     S.turnActed = true;
+    botRevealedDraw = null;
     try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
   }
   if(isOnline && isHost) pushStateToFirebase();
@@ -895,7 +945,8 @@ function showRoundEndModal(){
 
   let headerCells = S.names.map(n=>`<th>${n}</th>`).join('');
   let rows = history.map((r,idx)=>{
-    const roundLabel = 'סבב '+(idx+1) + (r.caller!==null ? ' 📣'+r.names[r.caller] : '');
+    const roundLabel = 'סבב '+(idx+1) +
+      (r.caller!==null ? `<br><span style="font-size:11px;font-weight:400;color:var(--gold-bright);">📣 ${r.names[r.caller]} אמר/ה "סיימתי"</span>` : '');
     const cells = r.final.map(v=>`<td>${v}</td>`).join('');
     return `<tr><td>${roundLabel}</td>${cells}</tr>`;
   }).join('');
@@ -913,6 +964,8 @@ function showRoundEndModal(){
     <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">סיום המשחק</button>
   `;
   document.getElementById('results-panel').classList.add('show');
+  resultsShownThisRound = true;
+  renderAll();
 }
 
 /* ============================= RENDER ============================= */
@@ -931,11 +984,29 @@ function renderAll(){
     pill.textContent = roundPrefix + 'הסתיים';
   }
 
+  // Persistent (not auto-hiding) banner naming who declared "finished" and reminding
+  // everyone this is the last round — state-driven off S.finishCaller so it's always
+  // correct no matter when a player looks, unlike a transient toast that can be missed.
+  const banner = document.getElementById('final-round-banner');
+  if(S.phase==='playing' && S.finishCaller!==null){
+    const callerName = S.names[S.finishCaller] || ('שחקן '+S.finishCaller);
+    const callerIsMe = S.finishCaller===myActual;
+    const turnIsMine = S.turn===myActual;
+    let extra = '';
+    if(turnIsMine && !callerIsMe) extra = ' — זה התור האחרון שלך!';
+    banner.textContent = `📣 ${callerIsMe ? 'הכרזת' : callerName+' הכריז/ה'} "סיימתי"! לכולם עוד תור אחד ואז הסבב נגמר.${extra}`;
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+
   for(let disp=0; disp<4; disp++){
     const actual = seatFor(disp);
     const nameEl = document.getElementById('pn-'+disp);
-    nameEl.textContent = S.names[actual];
+    const declared = S.finishCaller===actual;
+    nameEl.textContent = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
+    nameEl.classList.toggle('declared-finish', declared);
     renderPlayerGrid(disp, actual);
   }
 
@@ -950,6 +1021,14 @@ function renderAll(){
     closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     closedEl.classList.add('drawn','disabled');
     closedEl.onclick = null;
+  } else if(botRevealedDraw && botRevealedDraw.source==='closed'){
+    // A bot is "thinking" mid-turn with a card drawn from the closed pile — reveal it
+    // face-up so everyone watching can see what it took, same as the player's own draw.
+    const info = SUITS_INFO[botRevealedDraw.card.suit];
+    closedEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
+    closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
+    closedEl.classList.add('drawn','disabled');
+    closedEl.onclick = null;
   } else {
     closedEl.innerHTML = '🎴';
     closedEl.style.color = '';
@@ -957,13 +1036,22 @@ function renderAll(){
     closedEl.classList.toggle('disabled', !isMyTurnLocal());
     closedEl.onclick = onDrawClosed;
   }
-  const top = S.discardPile[S.discardPile.length-1];
-  if(top){
-    const info = SUITS_INFO[top.suit];
-    openEl.innerHTML = `<div class="r">${rankLabel(top.rank)}</div><div class="sym">${info.sym}</div>`;
+  if(botRevealedDraw && botRevealedDraw.source==='open'){
+    // A bot took the open pile's top card — keep showing that same card face-up in the
+    // open-pile slot during the pause (it hasn't gone anywhere yet from the viewer's
+    // perspective), instead of jumping straight to whatever's now underneath it.
+    const info = SUITS_INFO[botRevealedDraw.card.suit];
+    openEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
     openEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
   } else {
-    openEl.innerHTML = '';
+    const top = S.discardPile[S.discardPile.length-1];
+    if(top){
+      const info = SUITS_INFO[top.suit];
+      openEl.innerHTML = `<div class="r">${rankLabel(top.rank)}</div><div class="sym">${info.sym}</div>`;
+      openEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
+    } else {
+      openEl.innerHTML = '';
+    }
   }
   if(pendingDraw){
     // With a card pending: only a closed-pile draw can be declined by tapping the open
@@ -986,9 +1074,15 @@ function renderAll(){
   }
 
   // once the round ends, hands are revealed on the felt and each player opens the score
-  // panel at their own pace via this button (the panel itself never auto-opens)
+  // panel at their own pace via this button (the panel itself never auto-opens). Once
+  // they've opened it at least once this round the button disappears for good — it was
+  // sitting right over the player's own cards and had no reason to stick around after
+  // its job (opening the panel) was done; the panel can still be reopened via the small
+  // "תוצאות" pill in the status bar.
   const revealOverlay = document.getElementById('reveal-results-overlay');
-  revealOverlay.classList.toggle('show', S.phase==='ended');
+  revealOverlay.classList.toggle('show', S.phase==='ended' && !resultsShownThisRound);
+  const reopenPill = document.getElementById('reopen-results-pill');
+  if(reopenPill) reopenPill.style.display = (S.phase==='ended' && resultsShownThisRound) ? 'inline-block' : 'none';
 
   // action bar
   const bar = document.getElementById('action-bar');
@@ -1385,21 +1479,12 @@ function startOnlineClientGame(remoteState, players){
         animFire = prepareTurnAnim(actor, prevHand, prevDiscardTop);
       }
     }
-    // Someone just declared "finished" — announce it here too, since this client didn't
-    // go through doDeclareFinished() locally and would otherwise never see the toast.
-    const justDeclared = S && newRemote && S.finishCaller===null && newRemote.finishCaller!==null && newRemote.finishCaller!==undefined;
+    // Who declared "finished" (if anyone) is shown via the persistent #final-round-banner,
+    // which renderAll() below derives straight from S.finishCaller — correct for every
+    // client automatically, no separate toast/announcement needed here.
     applyRemoteState(newRemote);
     renderAll();
     if(animFire) animFire();
-    if(justDeclared){
-      const myActual = seatFor(0);
-      const caller = newRemote.finishCaller;
-      const name = newRemote.names[caller] || ('שחקן '+caller);
-      const msg = (caller===myActual)
-        ? 'הכרזת "סיימתי"! לכל שאר השחקנים יש עוד תור אחד, ואז הסבב נגמר.'
-        : `${name} הכריז/ה "סיימתי"! זה הסבב האחרון — לכולם עוד תור אחד.`;
-      showToast(msg, 4000);
-    }
   }, err=>console.error('ongoing state listener error', err));
   _stateListenerOff = ()=>ongoingStateRef.off('value', ongoingStateHandler);
 }
