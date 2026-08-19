@@ -360,6 +360,7 @@ let mode = null; // 'computer' | 'online'
 let isOnline=false, isHost=false, myOnlineSeat=0, roomCode='', roomRef=null;
 let firebaseApp=null, fbDB=null, fbReady=false;
 let _playersListenerOff=null, _stateListenerOff=null, _actionListenerOff=null;
+let _pendingAnim=null; // set by applyHostAction right before renderAll(), fired right after
 let pendingDraw = null; // {source, card} — locally held while deciding (host or local human)
 let botCountChoice = 3;
 
@@ -522,6 +523,58 @@ function flyGhostBack(fromRect, toRect){
   ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
   setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
   setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
+}
+
+// Compares a player's hand/discard-pile BEFORE and AFTER a single action (a plain
+// snapshot taken just before mutating S, vs S itself right after), figures out what
+// visibly happened, captures the DOM rects while the OLD render is still on screen,
+// and returns a closure that fires the right ghost animation(s) once renderAll() has
+// drawn the new state. Used for animating actions the local client didn't perform
+// itself — a bot's turn (already handled inline in botTakeTurn), or another human's
+// turn arriving via applyHostAction / the online state listener.
+function prepareTurnAnim(p, prevHand, prevDiscardTop){
+  const disp = displayFor(p);
+  const gridEl = document.getElementById('pg-'+disp);
+  const closedEl = document.getElementById('pile-closed');
+  const openEl = document.getElementById('pile-open');
+  const closedRect = closedEl ? closedEl.getBoundingClientRect() : null;
+  const openRect = openEl ? openEl.getBoundingClientRect() : null;
+  const slotRects = gridEl ? Array.from(gridEl.children).map(c=>c.getBoundingClientRect()) : [];
+  return function(){
+    const newHand = S.hands[p];
+    let changedSlot = -1;
+    for(let i=0;i<6;i++){
+      if(!prevHand[i] || !newHand[i]) continue;
+      if(prevHand[i].rank!==newHand[i].rank || prevHand[i].suit!==newHand[i].suit){ changedSlot=i; break; }
+    }
+    const newDiscardTop = S.discardPile[S.discardPile.length-1];
+    const discardGrew = S.discardPile.length > (prevDiscardTop.len||0);
+    if(changedSlot>=0){
+      // A swap happened: something flew in from a pile into that slot, and the old
+      // card that was there flew out to the open pile.
+      const toRect = slotRects[changedSlot];
+      // We can't know for certain whether the incoming card came from the closed or
+      // open pile after the fact, so infer it: if the open pile's new top is the OLD
+      // card (i.e. what got discarded), the draw could have come from either pile —
+      // default to closed (hidden) unless the previous open top is now gone AND equals
+      // the new hand card, which means it came from the open pile (public).
+      const cameFromOpen = prevDiscardTop.card && newHand[changedSlot] &&
+        prevDiscardTop.card.rank===newHand[changedSlot].rank && prevDiscardTop.card.suit===newHand[changedSlot].suit &&
+        !discardGrew;
+      if(cameFromOpen){
+        flyGhostCard(newHand[changedSlot], openRect, toRect);
+      } else {
+        flyGhostBack(closedRect, toRect);
+      }
+      flyGhostCard(prevHand[changedSlot], toRect, openRect);
+    } else if(discardGrew && newDiscardTop){
+      // No hand slot changed but the discard pile grew: the player drew and declined.
+      // If it grew by exactly the previous open-pile top disappearing then reappearing,
+      // it was a no-op open-pile peek (shouldn't normally happen); otherwise treat the
+      // draw as having come from the closed pile and stayed hidden en route.
+      flyGhostBack(closedRect, openRect);
+    }
+  };
 }
 
 /* ============================= TURN ACTIONS ============================= */
@@ -1249,8 +1302,22 @@ function startOnlineClientGame(remoteState, players){
   const ongoingStateRef = roomRef.child('gameState');
   const ongoingStateHandler = ongoingStateRef.on('value', snap=>{
     if(!snap.exists()) return;
-    applyRemoteState(snap.val());
+    const newRemote = snap.val();
+    // Figure out whose hand actually changed (if any) before overwriting S, so the
+    // player watching can see who acted and what flew where — same experience as
+    // watching a bot's turn locally.
+    let animFire = null;
+    if(S && newRemote && S.phase==='playing' && newRemote.turn!==undefined){
+      const actor = S.turn; // the player whose turn it was in the OLD state is who just acted
+      if(actor!==undefined && S.hands && S.hands[actor] && S.isHuman && S.isHuman[actor]){
+        const prevHand = S.hands[actor].slice();
+        const prevDiscardTop = {card: S.discardPile[S.discardPile.length-1], len: S.discardPile.length};
+        animFire = prepareTurnAnim(actor, prevHand, prevDiscardTop);
+      }
+    }
+    applyRemoteState(newRemote);
     renderAll();
+    if(animFire) animFire();
   }, err=>console.error('ongoing state listener error', err));
   _stateListenerOff = ()=>ongoingStateRef.off('value', ongoingStateHandler);
 }
@@ -1322,17 +1389,42 @@ function applyHostAction(act){
     if(!S.pendingDraw || S.pendingDraw.owner!==p) return;
     const slot = act.payload.slot;
     if(S.graduated[p] && slot>2) return;
+    // Capture rects BEFORE mutating, same pattern as botTakeTurn — the drawn card's
+    // identity flies in hidden (or face-up, if it came from the open pile), and the
+    // card it replaces flies out face-up to the open pile.
+    const disp = displayFor(p);
+    const gridEl = document.getElementById('pg-'+disp);
+    const slotEl = gridEl && gridEl.children[slot] ? gridEl.children[slot] : null;
+    const closedEl = document.getElementById('pile-closed');
+    const openEl = document.getElementById('pile-open');
+    const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
+    const openRect = openEl ? openEl.getBoundingClientRect() : null;
+    const sourceRect = S.pendingDraw.source==='open'
+      ? openRect
+      : (closedEl ? closedEl.getBoundingClientRect() : null);
+    const incomingCard = S.pendingDraw.card;
+    const incomingFromOpen = S.pendingDraw.source==='open';
     const old = S.hands[p][slot];
     S.hands[p][slot] = S.pendingDraw.card;
     S.discardPile.push(old);
     S.pendingDraw = null;
     if(slot<=2 && !S.graduated[p]) S.graduated[p] = true;
     S.turnActed = true;
+    _pendingAnim = ()=>{
+      if(incomingFromOpen) flyGhostCard(incomingCard, sourceRect, slotRect);
+      else flyGhostBack(sourceRect, slotRect);
+      flyGhostCard(old, slotRect, openRect);
+    };
   } else if(act.type==='discardDrawn'){
     if(!S.pendingDraw || S.pendingDraw.owner!==p || S.pendingDraw.source!=='closed') return;
+    const closedEl = document.getElementById('pile-closed');
+    const openEl = document.getElementById('pile-open');
+    const fromRect = closedEl ? closedEl.getBoundingClientRect() : null;
+    const toRect = openEl ? openEl.getBoundingClientRect() : null;
     S.discardPile.push(S.pendingDraw.card);
     S.pendingDraw = null;
     S.turnActed = true;
+    _pendingAnim = ()=>flyGhostBack(fromRect, toRect);
   } else if(act.type==='graduate'){
     if(S.graduated[p]) return;
     S.graduated[p] = true;
@@ -1348,6 +1440,7 @@ function applyHostAction(act){
     return;
   }
   renderAll();
+  if(_pendingAnim){ const fn=_pendingAnim; _pendingAnim=null; fn(); }
   pushStateToFirebase();
 }
 function cleanupOnlineListeners(){
