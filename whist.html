@@ -359,29 +359,8 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
     </div>
   </div>
 
-  <!-- GAME HUB (choose which card game) -->
-  <div class="screen active" id="screen-hub">
-    <div class="lobby-card">
-      <div class="hero-suits">♣ ♦ ♥ ♠</div>
-      <div class="hero-title">משחקי קלפים</div>
-      <div class="hero-sub">בחר/י משחק</div>
-      <div class="game-grid">
-        <div class="game-card" onclick="goLobby()">
-          <div class="ic">🃏</div>
-          <h3>וויסט</h3>
-          <p>חוזים, שליטים ולקיחות — משחק הקלפים הקלאסי</p>
-        </div>
-        <div class="game-card" onclick="window.location.href='sheshiyot.html'">
-          <div class="ic">🎴</div>
-          <h3>שישיות</h3>
-          <p>שישה קלפים, כמה שפחות נקודות — משחק הקלפים הישראלי</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- LOBBY (whist menu) -->
-  <div class="screen" id="screen-lobby">
+  <div class="screen active" id="screen-lobby">
     <div class="lobby-card">
       <div class="hero-suits">♣ ♦ ♥ ♠</div>
       <div class="hero-title">וויסט</div>
@@ -398,7 +377,7 @@ table.score-table th{color:var(--gold-bright);font-weight:700;}
           <p>כל שחקן על המכשיר שלו, בזמן אמת. אפשר להתחיל גם עם פחות מ-4 — המקומות הפנויים יתמלאו בבוטים.</p>
         </div>
       </div>
-      <button class="btn-secondary" onclick="goHub()" style="margin-top:18px;">חזרה לבחירת משחק</button>
+      <button class="btn-secondary" onclick="goHub()" style="margin-top:18px;">כל המשחקים</button>
     </div>
   </div>
 
@@ -674,13 +653,7 @@ function goLobby(){
 }
 function goHub(){
   cleanupOnlineListeners();
-  isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
-  showScreen('screen-hub');
-  hideControlPanel();
-  document.getElementById('round-end-modal').classList.remove('show');
-  document.getElementById('instr-modal').classList.remove('show');
-  document.getElementById('gate').classList.remove('show');
-  gateCallback=null;
+  window.location.href = 'index.html';
 }
 function newGame(){
   showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
