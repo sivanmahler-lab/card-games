@@ -141,18 +141,8 @@ body{
 .pile.open.disabled{cursor:default;opacity:.6;}
 .pile .r{position:absolute;top:3px;right:4px;font-size:11px;font-weight:800;line-height:1;}
 .pile .sym{font-size:18px;}
-.pile-label{font-size:10.5px;color:rgba(250,244,230,.5);text-align:center;margin-top:3px;}
-
-.pending-card{position:fixed;bottom:150px;left:50%;transform:translateX(-50%);z-index:400;
-  background:rgba(0,0,0,.9);border:2px solid var(--gold-bright);border-radius:14px;padding:14px 18px;text-align:center;display:none;}
-.pending-card.show{display:block;}
-.pending-card .pc-card{width:60px;height:84px;border-radius:8px;background:#fdfaf1;color:#222;margin:0 auto 10px;
-  display:flex;align-items:center;justify-content:center;position:relative;font-size:20px;}
-.pending-card .pc-card .r{position:absolute;top:4px;right:5px;font-size:12px;font-weight:800;}
-.pending-card .hint{font-size:12px;color:rgba(250,244,230,.7);margin-bottom:8px;}
-.pending-card .pc-btns{display:flex;gap:8px;}
-.pending-card .pc-btns button{flex:1;padding:8px 10px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:12.5px;}
-.pending-card .pc-discard{background:rgba(255,255,255,.15);color:var(--cream);}
+.pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
+.pile.closed.drawn.disabled{opacity:1;}
 
 .action-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);border-top:1px solid rgba(212,175,90,.25);
   padding:10px 14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;}
@@ -285,24 +275,17 @@ body{
           <div class="pile open" id="pile-open" onclick="onTakeOpen()"></div>
         </div>
       </div>
-      <div id="peek-overlay"><button class="btn-primary" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button></div>
+      <div id="peek-overlay">
+        <button class="btn-primary" id="peek-start-btn" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button>
+        <button class="btn-primary" id="peek-close-btn" onclick="closePeek()" style="display:none;">סגור</button>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="pending-card" id="pending-card">
-  <div class="hint">הקלף שמשכת:</div>
-  <div class="pc-card" id="pc-card"></div>
-  <div class="pc-btns">
-    <button class="pc-discard" onclick="discardDrawn()">זרוק לקופה הפתוחה</button>
-  </div>
-  <div class="hint" style="margin-top:8px;">או הקש על אחד מהקלפים שלך למטה כדי להחליף</div>
-</div>
-
 <div class="action-bar" id="action-bar" style="display:none;">
-  <button id="btn-graduate" onclick="graduateNow()">אני מוכן/ה — עובר לשורה העליונה</button>
-  <button id="btn-finish" class="hot" onclick="declareFinished()">סיימתי!</button>
-  <button id="btn-endturn" class="hot" onclick="endMyTurn()">סיום תור</button>
+  <button id="btn-finish" onclick="declareFinished()" title="לכל שאר השחקנים יהיה עוד תור אחד בלבד, ואז המשחק נגמר">סיימתי!</button>
+  <button id="btn-endturn" class="hot" onclick="endMyTurn()">המשך</button>
 </div>
 
 <!-- INSTRUCTIONS -->
@@ -312,7 +295,7 @@ body{
     <p><b>מטרה:</b> לסיים עם כמה שפחות נקודות. אס=1, 2–10=לפי המספר, נסיך/מלכה=10, מלך=0. זוג/שלישייה/רביעייה זהים אצל אותו שחקן שווים ביחד 0.</p>
     <p><b>התחלה:</b> כל שחקן מקבל 6 קלפים הפוכים (2 שורות של 3). מציצים פעם אחת בשורה התחתונה בלבד וזוכרים אותה.</p>
     <p><b>תור:</b> שולפים קלף מהקופה הסגורה (אפשר לבחור שלא להשתמש בו — לזרוק לקופה הפתוחה) או לוקחים את הקלף העליון בקופה הפתוחה (חובה להשתמש בו). אם משתמשים — מחליפים עם קלף באחת מהשורות הפעילות שלכם (בהתחלה: השורה התחתונה בלבד).</p>
-    <p><b>מעבר שורה:</b> כשמרוצים מהשורה התחתונה, אפשר לעבור לשחק עם השורה העליונה (שלא ראיתם מעולם) — ואי אפשר לחזור אחורה.</p>
+    <p><b>מעבר שורה:</b> ברגע שמחליפים קלף בשורה העליונה (שלא ראיתם מעולם), עוברים לשחק איתה מכאן והלאה — ואי אפשר לחזור לשורה התחתונה.</p>
     <p><b>סיום:</b> כשחושבים שיש לכם הכי מעט נקודות, מכריזים "סיימתי!" (רק בתורכם, אחרי שביצעתם פעולה). לכל שאר השחקנים יש תור אחרון אחד, ואז סופרים נקודות.</p>
     <p><b>ניקוד סופי:</b> מי שהכריז ויש לו 0 נקודות מקבל בונוס של 10-. מי שאין לו 0 ולמישהו אחר יש פחות נקודות ממנו — אותו שחקן מקבל קנס של 10+.</p>
     <button class="tb-btn close-btn" onclick="document.getElementById('instr-modal').classList.remove('show')">סגור</button>
@@ -424,24 +407,26 @@ function doPeek(){
   const myActual = seatFor(0);
   if(S.peeked[myActual]) return;
   peekingNow = true;
+  renderAll();
+  // Cards stay face-up until the player explicitly closes the peek — no auto-timeout.
+}
+function closePeek(){
+  const myActual = seatFor(0);
+  if(!peekingNow) return;
+  peekingNow = false;
+  if(S.peeked[myActual]) { renderAll(); return; }
+  S.peeked[myActual] = true;
   if(isOnline && !isHost){
-    S.peeked[myActual] = true; // optimistic local reveal for the peek animation
     renderAll();
     submitRemoteAction('peek', {});
-    setTimeout(()=>{ peekingNow=false; renderAll(); }, 3200);
     return;
   }
-  S.peeked[myActual] = true;
+  if(allPeeked()){
+    S.phase='playing';
+    S.turn = S.starter;
+  }
   renderAll();
-  setTimeout(()=>{
-    peekingNow = false;
-    if(allPeeked()){
-      S.phase='playing';
-      S.turn = S.starter;
-    }
-    renderAll();
-    maybeBotTurn();
-  }, 3200);
+  maybeBotTurn();
 }
 function allPeeked(){ return S.peeked.every(Boolean); }
 
@@ -456,57 +441,44 @@ function onDrawClosed(){
   ensureDrawPile();
   const card = S.drawPile.pop();
   pendingDraw = {source:'closed', card};
-  showPendingCardUI();
+  renderAll();
 }
 function onTakeOpen(){
+  if(pendingDraw){
+    // A card is already pending: this click means "discard it to the open pile"
+    // rather than "take the open pile" — only legal for a closed-pile draw.
+    discardDrawn();
+    return;
+  }
   if(isOnline && !isHost){ submitRemoteAction('takeOpen', {}); return; }
   if(!isMyTurnLocal()) return;
   if(S.discardPile.length===0) return;
   const card = S.discardPile.pop();
   pendingDraw = {source:'open', card};
   renderAll();
-  showPendingCardUI();
-}
-function showPendingCardUI(){
-  const box = document.getElementById('pending-card');
-  const cc = document.getElementById('pc-card');
-  const info = SUITS_INFO[pendingDraw.card.suit];
-  cc.innerHTML = `<div class="r" style="color:${info.color==='red'?'#c0272d':'#1a1a1a'}">${rankLabel(pendingDraw.card.rank)}</div><div class="sym" style="color:${info.color==='red'?'#c0272d':'#1a1a1a'}">${info.sym}</div>`;
-  box.classList.add('show');
-  document.querySelector('.pc-discard').style.display = pendingDraw.source==='closed' ? 'block' : 'none';
-  renderAll();
-}
-function hidePendingCardUI(){
-  document.getElementById('pending-card').classList.remove('show');
 }
 function discardDrawn(){
   if(!pendingDraw || pendingDraw.source!=='closed') return;
-  if(isOnline && !isHost){ submitRemoteAction('discardDrawn', {}); pendingDraw=null; hidePendingCardUI(); return; }
+  if(isOnline && !isHost){ submitRemoteAction('discardDrawn', {}); pendingDraw=null; renderAll(); return; }
   S.discardPile.push(pendingDraw.card);
   pendingDraw = null;
-  hidePendingCardUI();
   finishTurnAction();
 }
 function useDrawnOnSlot(slotIdx){
   const myActual = seatFor(0);
   if(!pendingDraw) return;
-  const activeRow = S.graduated[myActual] ? [0,1,2] : [3,4,5];
-  if(!activeRow.includes(slotIdx)) { showToast('אפשר להחליף רק בשורה הפעילה שלך'); return; }
-  if(isOnline && !isHost){ submitRemoteAction('useSlot', {slot:slotIdx}); pendingDraw=null; hidePendingCardUI(); return; }
+  if(S.graduated[myActual] && slotIdx>2){ showToast('כבר עברת לשחק עם השורה העליונה'); return; }
+  const isTopSlot = slotIdx<=2;
+  if(isOnline && !isHost){ submitRemoteAction('useSlot', {slot:slotIdx}); pendingDraw=null; renderAll(); return; }
   const old = S.hands[myActual][slotIdx];
   S.hands[myActual][slotIdx] = pendingDraw.card;
   S.discardPile.push(old);
   pendingDraw = null;
-  hidePendingCardUI();
+  if(isTopSlot && !S.graduated[myActual]){
+    S.graduated[myActual] = true;
+    showToast('עברת לשחק עם השורה העליונה — אי אפשר לחזור לשורה התחתונה');
+  }
   finishTurnAction();
-}
-function graduateNow(){
-  const myActual = seatFor(0);
-  if(isOnline && !isHost){ submitRemoteAction('graduate', {}); return; }
-  if(S.turn!==myActual || S.graduated[myActual]) return;
-  S.graduated[myActual] = true;
-  showToast('עברת לשחק עם השורה העליונה');
-  renderAll();
 }
 function declareFinished(){
   const myActual = seatFor(0);
@@ -696,8 +668,22 @@ function renderAll(){
 
   // piles
   const closedEl = document.getElementById('pile-closed');
-  closedEl.classList.toggle('disabled', !isMyTurnLocal());
   const openEl = document.getElementById('pile-open');
+  if(pendingDraw){
+    // Show the drawn card face-up in place of the closed-pile back — this is the
+    // player's own private decision, so it's only ever populated on their own screen.
+    const info = SUITS_INFO[pendingDraw.card.suit];
+    closedEl.innerHTML = `<div class="r">${rankLabel(pendingDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
+    closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
+    closedEl.classList.add('drawn','disabled');
+    closedEl.onclick = null;
+  } else {
+    closedEl.innerHTML = '🎴';
+    closedEl.style.color = '';
+    closedEl.classList.remove('drawn');
+    closedEl.classList.toggle('disabled', !isMyTurnLocal());
+    closedEl.onclick = onDrawClosed;
+  }
   const top = S.discardPile[S.discardPile.length-1];
   if(top){
     const info = SUITS_INFO[top.suit];
@@ -706,22 +692,35 @@ function renderAll(){
   } else {
     openEl.innerHTML = '';
   }
-  openEl.classList.toggle('disabled', !isMyTurnLocal() || !!pendingDraw);
+  if(pendingDraw){
+    // With a card pending: only a closed-pile draw can be declined by tapping the open
+    // pile (throwing it there); a mandatory open-pile draw has nowhere else to go.
+    openEl.classList.toggle('disabled', pendingDraw.source!=='closed');
+  } else {
+    openEl.classList.toggle('disabled', !isMyTurnLocal());
+  }
+  openEl.onclick = onTakeOpen;
 
   // peek prompt overlaid centered on the felt, doesn't push any layout around
   const peekOverlay = document.getElementById('peek-overlay');
-  peekOverlay.classList.toggle('show', S.phase==='peek' && !S.peeked[myActual]);
+  const startBtn = document.getElementById('peek-start-btn');
+  const closeBtn = document.getElementById('peek-close-btn');
+  const inPeekWindow = S.phase==='peek' && !S.peeked[myActual];
+  peekOverlay.classList.toggle('show', inPeekWindow);
+  if(inPeekWindow){
+    startBtn.style.display = peekingNow ? 'none' : 'inline-block';
+    closeBtn.style.display = peekingNow ? 'inline-block' : 'none';
+  }
 
   // action bar
   const bar = document.getElementById('action-bar');
-  const gradBtn = document.getElementById('btn-graduate');
   const finBtn = document.getElementById('btn-finish');
+  const endBtn = document.getElementById('btn-endturn');
   const myTurnNow = S.phase==='playing' && S.turn===myActual && S.isHuman[myActual];
   bar.style.display = myTurnNow ? 'flex' : 'none';
   if(myTurnNow){
-    gradBtn.style.display = S.graduated[myActual] ? 'none' : 'inline-block';
-    gradBtn.disabled = !!pendingDraw;
     finBtn.disabled = !S.turnActed || S.finishCaller!==null || !!pendingDraw;
+    endBtn.disabled = !S.turnActed || !!pendingDraw;
   }
 
   if(isOnline && isHost) pushStateToFirebase();
@@ -732,7 +731,9 @@ function renderPlayerGrid(disp, actual){
   el.innerHTML = '';
   const myActual = seatFor(0);
   const isSelf = actual===myActual;
-  const activeRow = S.graduated[actual] ? [0,1,2] : [3,4,5];
+  // Before graduating, either row can be swapped into (choosing a top-row card graduates
+  // you on the spot). After graduating, only the top row remains available.
+  const activeRow = S.graduated[actual] ? [0,1,2] : [0,1,2,3,4,5];
   const bottomRow = [3,4,5];
   for(let i=0;i<6;i++){
     const card = S.hands[actual][i];
@@ -999,10 +1000,8 @@ function applyRemoteState(remote){
   const myActual = seatFor(0);
   if(S.pendingDraw && S.pendingDraw.owner===myActual){
     pendingDraw = {source:S.pendingDraw.source, card:S.pendingDraw.card};
-    showPendingCardUI();
   } else {
     pendingDraw = null;
-    hidePendingCardUI();
   }
 }
 function pushStateToFirebase(){
@@ -1047,12 +1046,13 @@ function applyHostAction(act){
     S.pendingDraw = {source:'open', card, owner:p};
   } else if(act.type==='useSlot'){
     if(!S.pendingDraw || S.pendingDraw.owner!==p) return;
-    const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
-    if(!activeRow.includes(act.payload.slot)) return;
-    const old = S.hands[p][act.payload.slot];
-    S.hands[p][act.payload.slot] = S.pendingDraw.card;
+    const slot = act.payload.slot;
+    if(S.graduated[p] && slot>2) return;
+    const old = S.hands[p][slot];
+    S.hands[p][slot] = S.pendingDraw.card;
     S.discardPile.push(old);
     S.pendingDraw = null;
+    if(slot<=2 && !S.graduated[p]) S.graduated[p] = true;
     S.turnActed = true;
   } else if(act.type==='discardDrawn'){
     if(!S.pendingDraw || S.pendingDraw.owner!==p || S.pendingDraw.source!=='closed') return;
