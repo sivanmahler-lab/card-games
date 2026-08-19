@@ -1741,25 +1741,63 @@ function showWaitingScreen(){
   if(!isHost){
     let clientGameStarted = false;
     const tryStart = (remote)=>{
-      if(clientGameStarted) return;
-      if(!remote || !remote.phase || remote.phase==='idle') return;
-      clientGameStarted = true;
-      roomRef.child('players').once('value').then(pSnap=>{
-        startOnlineClientGame(remote, pSnap.val() || {});
-      });
+      try{
+        if(clientGameStarted) return;
+        if(!remote || !remote.phase || remote.phase==='idle') return;
+        clientGameStarted = true;
+        showToast('המשחק מתחיל...', 1200);
+        roomRef.child('players').once('value').then(pSnap=>{
+          try{
+            startOnlineClientGame(remote, pSnap.val() || {});
+          } catch(e){
+            console.error('startOnlineClientGame failed', e);
+            showToast('שגיאה בהתחלת המשחק: '+e.message, 5000);
+            clientGameStarted = false;
+          }
+        }).catch(e=>{
+          console.error('players fetch failed', e);
+          showToast('שגיאה בטעינת שחקנים: '+e.message, 5000);
+          clientGameStarted = false;
+        });
+      } catch(e){
+        console.error('tryStart failed', e);
+        showToast('שגיאה: '+e.message, 5000);
+      }
     };
+    // Third argument to on() is an error callback — fires on permission-denied or other
+    // server-side rejections, which otherwise fail completely silently on screen.
     _stateListenerOff = roomRef.child('gameState').on('value', snap=>{
       if(!snap.exists()) return;
       tryStart(snap.val());
+    }, err=>{
+      console.error('gameState listener error', err);
+      showToast('שגיאת חיבור (gameState): '+err.message, 5000);
     });
     const statusRef = roomRef.child('meta/status');
     const statusHandler = statusRef.on('value', snap=>{
       if(clientGameStarted) return;
       if(snap.val()!=='playing') return;
       roomRef.child('gameState').once('value').then(gsSnap=>{ tryStart(gsSnap.val()); });
+    }, err=>{
+      console.error('meta/status listener error', err);
+      showToast('שגיאת חיבור (status): '+err.message, 5000);
     });
     const prevOff = _stateListenerOff;
-    _stateListenerOff = ()=>{ prevOff(); statusRef.off('value', statusHandler); };
+    // Belt-and-suspenders: poll every 2.5s in addition to the two realtime listeners above.
+    // If a client somehow never receives a 'value' event (e.g. a listener silently failing
+    // to attach on some phone/browser combo — this shouldn't happen, but the earlier bug
+    // report showed a client stuck indefinitely with correct data already in the database),
+    // this guarantees the game still starts for them within a few seconds.
+    const pollInterval = setInterval(()=>{
+      if(clientGameStarted){ clearInterval(pollInterval); return; }
+      roomRef.child('gameState/phase').once('value').then(snap=>{
+        const phase = snap.val();
+        if(phase && phase!=='idle'){
+          roomRef.child('gameState').once('value').then(gsSnap=>{ tryStart(gsSnap.val()); });
+        }
+      }).catch(e=>console.error('poll failed', e));
+    }, 2500);
+    _stateListenerOff = ()=>{ prevOff(); statusRef.off('value', statusHandler); clearInterval(pollInterval); };
   }
 }
 
