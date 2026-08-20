@@ -1330,7 +1330,11 @@ function renderPlayerGrid(disp, actual){
     cellEl.dataset.slotIdx = i;
     if(inOwnPeekWindow && bottomRow.includes(i)){
       cellEl.classList.add('selectable');
-      cellEl.onclick = ()=>togglePeekCard(i);
+      // Both interactions apply to these 3 cards at once: a plain tap toggles that
+      // card face-up/down (the peek), while a drag still swaps it with another card
+      // in the same row — reordering shouldn't stop being possible just because the
+      // player hasn't clicked "התחל" yet.
+      attachReorderDrag(cellEl, i, ()=>togglePeekCard(i));
     } else if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
       cellEl.classList.add('selectable');
       cellEl.onclick = ()=>useDrawnOnSlot(i);
@@ -1343,7 +1347,7 @@ function renderPlayerGrid(disp, actual){
 
 /* ============================= DRAG-TO-REORDER (own hand only) ============================= */
 let dragReorder = null; // {slotIdx, cellEl, startX, moved}
-function attachReorderDrag(cellEl, i){
+function attachReorderDrag(cellEl, i, onTap){
   cellEl.classList.add('reorderable');
   cellEl.addEventListener('pointerdown', (ev)=>{
     ev.preventDefault();
@@ -1379,6 +1383,8 @@ function attachReorderDrag(cellEl, i){
       if(Math.floor(targetIdx/3)===Math.floor(i/3)){
         doReorderSwap(i, targetIdx);
       }
+    } else if(!moved && onTap){
+      onTap();
     }
   };
   cellEl.addEventListener('pointerup', finishDrag);
