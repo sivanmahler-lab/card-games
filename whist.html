@@ -54,6 +54,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   font-family:'Heebo',sans-serif;font-size:13px;font-weight:800;color:var(--ink);
   background:var(--gold-bright);border-radius:8px;padding:3px 10px;margin-inline-start:6px;white-space:nowrap;
 }
+.tb-room{
+  font-family:'Heebo',sans-serif;font-size:12px;font-weight:800;color:var(--teal);
+  background:rgba(63,154,139,.15);border:1px solid rgba(63,154,139,.5);border-radius:8px;
+  padding:3px 9px;margin-inline-start:6px;white-space:nowrap;letter-spacing:2px;cursor:pointer;
+}
+.tb-room:hover{background:rgba(63,154,139,.3);}
 #topbar .tb-btns{display:flex;gap:6px;flex-shrink:0;}
 .tb-btn{
   background:rgba(212,175,90,0.10);border:1px solid rgba(212,175,90,0.4);color:var(--gold-bright);
@@ -315,7 +321,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .gate-bg h2{font-size:26px;color:var(--cream);}
 .gate-bg p{color:rgba(250,244,230,.6);font-size:13px;max-width:320px;}
 
-.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:420px;width:92%;}
+.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;}
 table.score-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px;}
 table.score-table th, table.score-table td{padding:6px 8px;text-align:center;border-bottom:1px solid rgba(212,175,90,.2);}
 table.score-table th{color:var(--gold-bright);font-weight:700;}
@@ -323,6 +329,9 @@ table.match-table{font-size:12.5px;white-space:nowrap;}
 table.match-table th.sub{font-size:10.5px;font-weight:400;color:rgba(250,244,230,.55);padding:2px 6px;}
 table.match-table td{padding:5px 6px;}
 table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:800;color:var(--gold-bright);border-bottom:none;}
+.re-scroll-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.re-scroll-hint{font-size:11px;color:rgba(250,244,230,.4);text-align:center;margin-top:4px;display:none;}
+.re-scroll-hint.show{display:block;}
 .win-tag{color:#7be29a;font-weight:800;}
 .lose-tag{color:#e77a6d;font-weight:800;}
 
@@ -367,7 +376,7 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
 <g transform="rotate(27.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#6e1720" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
 <g transform="rotate(36.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
 <g transform="rotate(45.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#6e1720" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
-<g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span></div>
+<g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span><span class="tb-room" id="tb-room" style="display:none;" onclick="copyRoomCode()" title="לחץ להעתקת קוד החדר"></span></div>
     <div class="tb-btns">
       <button class="tb-btn" onclick="newGame()">משחק חדש</button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
@@ -596,6 +605,11 @@ const SUITS = [
   {sym:'♠', name:'עלה',  color:'dark'},
 ];
 const RANK_LABEL = r => r<=10 ? String(r) : ({11:'J',12:'Q',13:'K',14:'A'}[r]);
+// Display order only (does NOT affect trump-bidding strength, which still uses the SUITS
+// array index: תלתן < מעוין < לב < עלה). This controls the order cards are sorted/shown in a
+// hand and in the suit-choice buttons, so black/red alternate: עלה, לב, תלתן, מעוין.
+const SUIT_DISPLAY_ORDER = [3,2,0,1];
+function suitDisplayRank(suitIdx){ return SUIT_DISPLAY_ORDER.indexOf(suitIdx); }
 
 function makeDeck(){
   const d=[];
@@ -606,7 +620,7 @@ function shuffle(arr){
   for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
   return arr;
 }
-function sortHand(h){ return h.slice().sort((a,b)=> a.suit-b.suit || a.rank-b.rank); }
+function sortHand(h){ return h.slice().sort((a,b)=> suitDisplayRank(a.suit)-suitDisplayRank(b.suit) || a.rank-b.rank); }
 
 /* ============================= STATE ============================= */
 let S = null;
@@ -716,6 +730,19 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
+// Small persistent room-code badge in the topbar during an online match, so if a friend's
+// device disconnects/refreshes, whoever is left can immediately see and resend the code
+// instead of the game just looking "stuck".
+function updateRoomBadge(){
+  const el = document.getElementById('tb-room');
+  if(!el) return;
+  if(isOnline && roomCode){
+    el.textContent = roomCode;
+    el.style.display = 'inline-block';
+  } else {
+    el.style.display = 'none';
+  }
+}
 function goLobby(){
   cleanupOnlineListeners();
   isOnline=false; isHost=false; myOnlineSeat=0; roomCode=''; roomRef=null;
@@ -725,6 +752,7 @@ function goLobby(){
   document.getElementById('instr-modal').classList.remove('show');
   document.getElementById('gate').classList.remove('show');
   gateCallback=null;
+  updateRoomBadge();
 }
 function goHub(){
   cleanupOnlineListeners();
@@ -867,6 +895,7 @@ function beginMatch(){
     document.getElementById('badge-'+disp).querySelector('.nm').textContent = S.names[actual];
     document.getElementById('badge-'+disp).classList.toggle('me', isOnline && actual===myOnlineSeat);
   }
+  updateRoomBadge();
   startRound();
 }
 
@@ -886,6 +915,7 @@ function startRound(){
   S.trickHistory=[];
   S.roundType=null;
   S.revealedHuman=-1;
+  S.roundEndData=null;
   document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
   document.getElementById('pill-round').className = 'pill round';
   document.getElementById('pill-trump').style.display='none';
@@ -1612,6 +1642,15 @@ function finishRound(){
     roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit,
     names: S.names.slice(), results
   });
+  // Mark phase so the round-end screen syncs to every online client, not just the host: the
+  // client's gameState listener only shows the round-end modal when it sees phase==='round-end'
+  // plus a roundEndData payload (see startOnlineClientGame). Previously neither was ever set,
+  // so only the host — who calls showRoundEndModal() directly below — ever saw the results.
+  if(isOnline && isHost){
+    S.phase = 'round-end';
+    S.roundEndData = { results, totalsAfter: S.totals.slice() };
+    pushStateToFirebase();
+  }
   showRoundEndModal(results);
 }
 function showRoundEndModal(results){
@@ -1638,7 +1677,7 @@ function showRoundEndModal(results){
   const isHostOrLocal = !isOnline || isHost;
   document.getElementById('round-end-content').innerHTML = `
     <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
-    <div style="overflow-x:auto;">
+    <div class="re-scroll-wrap" id="re-scroll-wrap">
     <table class="score-table match-table">
       <tr><th>סיבוב</th>${nameHeaderCells}</tr>
       <tr><th class="sub"></th>${subHeaderCells}</tr>
@@ -1646,6 +1685,7 @@ function showRoundEndModal(results){
       <tr class="totals-row"><td>סה"כ</td>${totalsCells}</tr>
     </table>
     </div>
+    <div class="re-scroll-hint" id="re-scroll-hint">↔ החליקו כדי לראות את כל 4 השחקנים</div>
     ${isHostOrLocal
       ? `<button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
          <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>`
@@ -1653,6 +1693,14 @@ function showRoundEndModal(results){
     }
   `;
   document.getElementById('round-end-modal').classList.add('show');
+  // If the 4-player table is wider than its wrapper, the columns for the last player(s) get
+  // scrolled out of view with no visual cue — this was reported as "only 2 players show up".
+  // Surface an explicit scroll hint whenever that's the case.
+  requestAnimationFrame(()=>{
+    const wrap = document.getElementById('re-scroll-wrap');
+    const hint = document.getElementById('re-scroll-hint');
+    if(wrap && hint) hint.classList.toggle('show', wrap.scrollWidth > wrap.clientWidth + 2);
+  });
 }
 function closeRoundEnd(){ document.getElementById('round-end-modal').classList.remove('show'); }
 function nextRound(){
@@ -2110,6 +2158,7 @@ function beginMatchClientSide(){
     document.getElementById('badge-'+disp).querySelector('.nm').textContent = S.names[actual];
     document.getElementById('badge-'+disp).classList.toggle('me', actual===myOnlineSeat);
   }
+  updateRoomBadge();
   renderTable();
 }
 
@@ -2135,6 +2184,7 @@ function applyRemoteState(remote){
   S.starter = remote.starter || 0;
   S.roundType = remote.roundType || null;
   S.roundHistory = remote.roundHistory || [];
+  S.roundEndData = remote.roundEndData || null;
   // Use received hands (clients only render their own face-up)
   if(remote.hands) S.hands = remote.hands;
 
@@ -2194,6 +2244,7 @@ function pushStateToFirebase(){
     roundType: S.roundType || null,
     hands: S.hands,
     roundHistory: S.roundHistory || [],
+    roundEndData: S.roundEndData || null,
   };
   roomRef.child('gameState').set(state).catch(e=>console.error('Firebase push failed',e));
 }
