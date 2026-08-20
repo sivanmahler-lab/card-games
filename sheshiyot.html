@@ -135,7 +135,10 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   border-radius:20px;border:4px solid var(--gold);border-image:linear-gradient(160deg,#8a6a2e,#d4af5a,#3a2a14) 1;
   box-shadow:inset 0 0 40px rgba(0,0,0,.5), inset 0 0 0 2px rgba(212,175,90,.12);overflow:visible;}
 @media(max-width:480px){ #felt{min-height:400px;} }
-#peek-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
+/* In normal document flow, between the final-round banner and the table — not
+   positioned over the felt at all — so it never floats on top of the player's own
+   cards regardless of how tall/short the table ends up being. */
+#peek-overlay{display:none;text-align:center;padding:4px 0 8px;}
 #peek-overlay.show{display:block;}
 #peek-overlay button{white-space:nowrap;}
 
@@ -419,6 +422,10 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <button class="pill" id="reopen-results-pill" style="display:none;cursor:pointer;" onclick="showRoundEndModal()">📊 תוצאות</button>
   </div>
   <div id="final-round-banner"></div>
+  <div id="peek-overlay">
+    <button class="btn-primary" id="peek-start-btn" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button>
+    <button class="btn-primary" id="peek-close-btn" onclick="closePeek()" style="display:none;">סגור</button>
+  </div>
   <div id="table-wrap">
     <div id="felt">
       <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-0">▲</div><div class="pgrid" id="pg-0"></div></div></div>
@@ -430,10 +437,6 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
           <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
           <div class="pile open" id="pile-open" onclick="onTakeOpen()"></div>
         </div>
-      </div>
-      <div id="peek-overlay">
-        <button class="btn-primary" id="peek-start-btn" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button>
-        <button class="btn-primary" id="peek-close-btn" onclick="closePeek()" style="display:none;">סגור</button>
       </div>
       <div id="reveal-results-overlay">
         <button class="btn-primary" onclick="showRoundEndModal()">הצג תוצאות</button>
