@@ -458,6 +458,20 @@ let _pendingAnim=null; // set by applyHostAction right before renderAll(), fired
 let pendingDraw = null; // {source, card} — locally held while deciding (host or local human)
 function seatFor(disp){ return (disp + myOnlineSeat) % 4; }
 function displayFor(actual){ return (actual - myOnlineSeat + 4) % 4; }
+// Seat layout: disp 0/1/2/3 = bottom(me)/left/top/right DOM positions (pw-0/pn-0/pg-0, etc).
+// With 3 or 4 active seats the natural rotation already spreads players sensibly around the
+// table. With exactly 2 active seats, the single opponent should always sit directly across
+// from you (top, slot 2) rather than wherever the raw rotation happens to place them (which
+// side depends on which actual seat index they hold) — this is the one place that mapping
+// is decided, so every renderer/animation that looks up a per-seat DOM id by disp must route
+// it through here instead of using raw disp/displayFor() directly, or 2-player games will
+// write to the wrong (hidden) seat element.
+function layoutSlotFor(disp){
+  if(!S || !S.active) return disp;
+  const activeCount = S.active.filter(Boolean).length;
+  if(activeCount===2 && disp!==0) return 2;
+  return disp;
+}
 
 function newRound(){
   // Fresh match: brand-new names/seats and an empty score history.
@@ -658,7 +672,7 @@ function flyGhostBack(fromRect, toRect){
 // itself — a bot's turn (already handled inline in botTakeTurn), or another human's
 // turn arriving via applyHostAction / the online state listener.
 function prepareTurnAnim(p, prevHand, prevDiscardTop){
-  const disp = displayFor(p);
+  const disp = layoutSlotFor(displayFor(p));
   const gridEl = document.getElementById('pg-'+disp);
   const closedEl = document.getElementById('pile-closed');
   const openEl = document.getElementById('pile-open');
@@ -909,7 +923,7 @@ function botResolveTurn(p, ctx){
     // revealed-card render is still on screen, right before mutating state.
     const closedEl = document.getElementById('pile-closed');
     const openEl = document.getElementById('pile-open');
-    const disp = displayFor(p);
+    const disp = layoutSlotFor(displayFor(p));
     const gridEl = document.getElementById('pg-'+disp);
     const sourceRect = (useOpen ? openEl : closedEl) ? (useOpen ? openEl : closedEl).getBoundingClientRect() : null;
     const matched = rankCounts[drawn.rank]>=1;
@@ -1092,22 +1106,31 @@ function renderAll(){
     banner.classList.remove('show');
   }
 
-  for(let disp=0; disp<4; disp++){
+  // See layoutSlotFor() (top of file) for why disp and "which DOM position this seat
+  // renders into" aren't always the same thing in a 2-player game.
+  const activeDisps = [0,1,2,3].filter(d => !S.active || S.active[seatFor(d)]);
+  // Hide every position slot not actually used this match (recomputed each render since
+  // the active-seat count is fixed for a whole match, but this is cheap and keeps the
+  // logic in one place rather than special-casing it at game-start time too).
+  const usedSlots = new Set(activeDisps.map(layoutSlotFor));
+  for(let slot=0; slot<4; slot++){
+    const wrapEl = document.getElementById('pw-'+slot);
+    if(wrapEl) wrapEl.style.display = usedSlots.has(slot) ? '' : 'none';
+  }
+
+  for(const disp of activeDisps){
     const actual = seatFor(disp);
-    const wrapEl = document.getElementById('pw-'+disp);
-    const isActive = !S.active || S.active[actual];
-    if(wrapEl) wrapEl.style.display = isActive ? '' : 'none';
-    if(!isActive) continue;
-    const nameEl = document.getElementById('pn-'+disp);
+    const slot = layoutSlotFor(disp);
+    const nameEl = document.getElementById('pn-'+slot);
     const declared = S.finishCaller===actual;
     nameEl.textContent = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     nameEl.classList.toggle('declared-finish', declared);
-    renderPlayerGrid(disp, actual);
+    renderPlayerGrid(slot, actual);
     // Once a player graduates, only their top row (the first 3 cells) is in play — mark
     // that row with a small arrow so it's obvious at a glance who's playing which row,
     // without having to remember who tapped a top-row card at some earlier point.
-    const arrowEl = document.getElementById('ar-'+disp);
+    const arrowEl = document.getElementById('ar-'+slot);
     if(arrowEl) arrowEl.classList.toggle('show', !!S.graduated[actual]);
   }
 
@@ -1668,7 +1691,7 @@ function applyHostAction(act){
     // Capture rects BEFORE mutating, same pattern as botTakeTurn — the drawn card's
     // identity flies in hidden (or face-up, if it came from the open pile), and the
     // card it replaces flies out face-up to the open pile.
-    const disp = displayFor(p);
+    const disp = layoutSlotFor(displayFor(p));
     const gridEl = document.getElementById('pg-'+disp);
     const slotEl = gridEl && gridEl.children[slot] ? gridEl.children[slot] : null;
     const closedEl = document.getElementById('pile-closed');
