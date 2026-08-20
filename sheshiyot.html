@@ -138,7 +138,9 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 /* In normal document flow, between the final-round banner and the table — not
    positioned over the felt at all — so it never floats on top of the player's own
    cards regardless of how tall/short the table ends up being. */
-#peek-overlay{display:none;text-align:center;padding:4px 0 8px;}
+#peek-overlay{display:none;text-align:center;padding:4px 16px 8px;}
+#peek-overlay .peek-hint{font-size:12.5px;color:rgba(250,244,230,.7);margin-bottom:8px;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;}
+#peek-overlay .btn-primary{max-width:200px;margin-left:auto;margin-right:auto;}
 #peek-overlay.show{display:block;}
 #peek-overlay button{white-space:nowrap;}
 
@@ -423,8 +425,8 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
   <div id="final-round-banner"></div>
   <div id="peek-overlay">
-    <button class="btn-primary" id="peek-start-btn" onclick="doPeek()">הצץ בשלושת הקלפים התחתונים</button>
-    <button class="btn-primary" id="peek-close-btn" onclick="closePeek()" style="display:none;">סגור</button>
+    <div class="peek-hint">לחצו על שלושת הקלפים התחתונים שלכם כדי להציץ בהם — אפשר כמה פעמים שרוצים, קלף קלף או כולם יחד</div>
+    <button class="btn-primary" id="peek-go-btn" onclick="startFromPeek()">התחל</button>
   </div>
   <div id="table-wrap">
     <div id="felt">
@@ -540,6 +542,7 @@ function newRound(){
 // activeSeats(), endRound(), renderAll()).
 function buildRoundState(names, isHuman, matchHistory, roundNum, starter, active){
   resultsShownThisRound = false;
+  peekedCards = [false,false,false];
   const deck = shuffle(buildDeck());
   S = {
     phase:'peek',
@@ -633,20 +636,25 @@ function startLocalGame(numHumans){
 }
 
 /* ============================= PEEK PHASE ============================= */
-let peekingNow = false;
+// Local-only, per-card toggle state for the player's own bottom row (slots 3,4,5)
+// during their peek window — each card can be flipped face-up/down independently,
+// any number of times, in any order, right up until they click "התחל".
+let peekedCards = [false,false,false];
 let resultsShownThisRound = false; // local-only: hides "הצג תוצאות" once this player has opened it, so it stops covering their cards
-function doPeek(){
+function togglePeekCard(slotIdx){
   const myActual = seatFor(0);
-  if(S.peeked[myActual]) return;
-  peekingNow = true;
+  if(S.phase!=='peek' || S.peeked[myActual]) return;
+  const idx = slotIdx-3;
+  if(idx<0 || idx>2) return;
+  peekedCards[idx] = !peekedCards[idx];
   renderAll();
-  // Cards stay face-up until the player explicitly closes the peek — no auto-timeout.
 }
-function closePeek(){
+function startFromPeek(){
   const myActual = seatFor(0);
-  if(!peekingNow) return;
-  peekingNow = false;
-  if(S.peeked[myActual]) { renderAll(); return; }
+  if(S.phase!=='peek' || S.peeked[myActual]) return;
+  // Whatever is still face-up flips back down right here, for good — once "התחל" is
+  // clicked there's no way back into this player's own peek window.
+  peekedCards = [false,false,false];
   S.peeked[myActual] = true;
   if(isOnline && !isHost){
     renderAll();
@@ -1241,16 +1249,11 @@ function renderAll(){
   }
   openEl.onclick = onTakeOpen;
 
-  // peek prompt overlaid centered on the felt, doesn't push any layout around
+  // peek prompt: a hint plus a single "התחל" button — the cards themselves are what's
+  // clickable now, so there's nothing else here to toggle between two button states.
   const peekOverlay = document.getElementById('peek-overlay');
-  const startBtn = document.getElementById('peek-start-btn');
-  const closeBtn = document.getElementById('peek-close-btn');
   const inPeekWindow = S.phase==='peek' && !S.peeked[myActual];
   peekOverlay.classList.toggle('show', inPeekWindow);
-  if(inPeekWindow){
-    startBtn.style.display = peekingNow ? 'none' : 'inline-block';
-    closeBtn.style.display = peekingNow ? 'inline-block' : 'none';
-  }
 
   // Once the round ends, hands are revealed on the felt and each player opens the score
   // panel at their own pace via the "תוצאות" pill in the status bar (up top, never over
@@ -1298,16 +1301,18 @@ function renderPlayerGrid(disp, actual){
   const activeRow = S.graduated[actual] ? [0,1,2] : [0,1,2,3,4,5];
   const bottomRow = [3,4,5];
   // Cards are always face-down to everyone, with two exceptions: the player's own bottom
-  // row during their initial peek window, and everyone's full hand once the round ends
-  // (so the score breakdown can actually be checked against what people were holding).
+  // row during their initial peek window (each of the 3 cards toggled individually by
+  // clicking it — see peekedCards), and everyone's full hand once the round ends (so the
+  // score breakdown can actually be checked against what people were holding).
   const revealAll = S.phase==='ended';
+  const inOwnPeekWindow = isSelf && S.phase==='peek' && !S.peeked[actual];
   // Reordering your own hand (either row, independent of the other) is purely a private
   // memory aid with no effect on game state, so it's allowed any time it's not mid-decision
   // on a drawn card — during the peek window, during normal play, even after the round ends.
   const canReorderOwnHand = isSelf && !pendingDraw;
   for(let i=0;i<6;i++){
     const card = S.hands[actual][i];
-    const showFace = revealAll || (isSelf && peekingNow && S.phase==='peek' && bottomRow.includes(i));
+    const showFace = revealAll || (inOwnPeekWindow && bottomRow.includes(i) && peekedCards[i-3]);
     let html;
     if(showFace){
       html = cardHTML(card);
@@ -1318,7 +1323,10 @@ function renderPlayerGrid(disp, actual){
     wrap.innerHTML = html;
     const cellEl = wrap.firstElementChild;
     cellEl.dataset.slotIdx = i;
-    if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
+    if(inOwnPeekWindow && bottomRow.includes(i)){
+      cellEl.classList.add('selectable');
+      cellEl.onclick = ()=>togglePeekCard(i);
+    } else if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
       cellEl.classList.add('selectable');
       cellEl.onclick = ()=>useDrawnOnSlot(i);
     } else if(canReorderOwnHand && S.phase!=='ended'){
