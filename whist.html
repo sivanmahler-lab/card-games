@@ -30,12 +30,24 @@
 html,body{margin:0;padding:0;height:100%;background:var(--felt-1);color:var(--cream);font-family:'Heebo',sans-serif;overflow-y:auto;overflow-x:hidden;}
 body{
   background:
-    radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.05), transparent 55%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 5px),
+    radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.06), transparent 55%),
     radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
 }
 h1,h2,h3{font-family:'Frank Ruhl Libre',serif;margin:0;}
 button{font-family:'Heebo',sans-serif;cursor:pointer;}
 ::selection{background:var(--gold);color:var(--ink);}
+@keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes modalIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
+@keyframes glowPulse{0%,100%{text-shadow:0 0 18px rgba(240,216,150,.3);}50%{text-shadow:0 0 30px rgba(240,216,150,.6);}}
+@keyframes codePulse{0%,100%{box-shadow:0 0 0 rgba(240,216,150,0);}50%{box-shadow:0 0 22px rgba(240,216,150,.35);}}
+.mode-card,.game-card,.btn-primary,.tb-btn,.opt-btn,.btn-secondary{position:relative;overflow:hidden;}
+.mode-card::after,.game-card::after,.btn-primary::after,.tb-btn::after,.opt-btn::after,.btn-secondary::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.16) 50%,transparent 60%);
+  transform:translateX(-130%);transition:transform .55s ease;
+}
+.mode-card:hover::after,.game-card:hover::after,.btn-primary:hover::after,.tb-btn:hover::after,.opt-btn:hover::after,.btn-secondary:hover::after{transform:translateX(130%);}
 
 #app{position:relative;width:100%;height:100%;}
 
@@ -75,7 +87,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 /* ---------- LOBBY ---------- */
 #screen-lobby{justify-content:center;padding:20px;text-align:center;}
 .lobby-card{max-width:640px;width:100%;}
-.hero-suits{font-size:clamp(28px,9vw,52px);letter-spacing:clamp(4px,2.5vw,14px);margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);white-space:nowrap;}
+.hero-suits{font-size:clamp(28px,9vw,52px);letter-spacing:clamp(4px,2.5vw,14px);margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);white-space:nowrap;animation:glowPulse 3.4s ease-in-out infinite;}
 .hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;}
 .hero-sub{color:rgba(250,244,230,.65);font-size:15px;margin-bottom:34px;letter-spacing:.5px;}
 .mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
@@ -112,7 +124,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 /* ---------- SETUP ---------- */
 #screen-setup{justify-content:center;padding:24px;}
-.setup-box{background:rgba(0,0,0,.25);border:1px solid rgba(212,175,90,.35);border-radius:16px;padding:28px;max-width:480px;width:92%;}
+.setup-box{background:rgba(0,0,0,.25);border:1px solid rgba(212,175,90,.35);border-radius:16px;padding:28px;max-width:480px;width:92%;animation:cardIn .35s ease;}
 .setup-box h2{color:var(--gold-bright);margin-bottom:18px;text-align:center;font-size:24px;}
 .field{margin-bottom:14px;}
 .field label{display:block;font-size:13px;margin-bottom:6px;color:rgba(250,244,230,.75);}
@@ -135,7 +147,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 /* ---------- ONLINE SETUP ---------- */
 #screen-online-setup{justify-content:center;padding:24px;}
-.online-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:500px;width:92%;}
+.online-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:500px;width:92%;animation:cardIn .35s ease;}
 .online-box h2{color:var(--teal);margin-bottom:6px;text-align:center;font-size:24px;}
 .online-box .sub{color:rgba(250,244,230,.55);font-size:13px;text-align:center;margin-bottom:22px;}
 .or-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:rgba(250,244,230,.4);font-size:13px;}
@@ -154,13 +166,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 /* ---------- WAITING ROOM ---------- */
 #screen-waiting{justify-content:center;padding:24px;}
-.waiting-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:420px;width:92%;text-align:center;}
+.waiting-box{background:rgba(0,0,0,.25);border:1px solid rgba(63,154,139,.4);border-radius:16px;padding:28px;max-width:420px;width:92%;text-align:center;animation:cardIn .35s ease;}
 .waiting-box h2{color:var(--teal);margin-bottom:6px;font-size:22px;}
 .room-code-display{
   font-size:42px;font-weight:900;letter-spacing:10px;color:var(--gold-bright);
   background:rgba(0,0,0,.4);border:2px dashed rgba(212,175,90,.5);border-radius:14px;
   padding:16px;margin:18px 0;font-family:'Frank Ruhl Libre',serif;
   cursor:pointer;user-select:all;transition:.15s;
+  animation:codePulse 2.6s ease-in-out infinite;
 }
 .room-code-display:hover{border-color:var(--gold-bright);}
 .room-code-hint{font-size:12px;color:rgba(250,244,230,.4);margin-top:-10px;margin-bottom:16px;}
@@ -179,11 +192,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   position:relative;width:min(100%,900px);height:min(78vmin,640px);
   max-width:100%;max-height:100%;min-height:260px;
   background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 6px),
     radial-gradient(ellipse at 50% 50%, var(--felt-3) 0%, var(--felt-2) 60%, var(--felt-1) 100%);
   border:10px solid #3a2a14;
-  border-image:linear-gradient(160deg,#8a6a2e,#3a2a14) 1;
+  border-image:linear-gradient(160deg,#8a6a2e,#d4af5a,#3a2a14) 1;
   border-radius:26px;
-  box-shadow:0 20px 60px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.4);
+  box-shadow:0 20px 60px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.4), inset 0 0 0 2px rgba(212,175,90,.12);
 }
 .game-header{
   display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;
@@ -215,7 +229,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 .name-badge .turn-dot{width:7px;height:7px;border-radius:50%;background:transparent;}
 .name-badge.active .turn-dot{background:#5be27a;box-shadow:0 0 8px #5be27a;}
-.name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);}
+.name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);animation:codePulse 1s ease-in-out infinite;}
 .name-badge.me{border-color:var(--teal);box-shadow:0 0 10px rgba(63,154,139,.3);}
 .badge-stats{display:flex;flex-direction:column;gap:2px;align-items:center;}
 .bid-badge{font-size:10.5px;color:var(--teal);background:rgba(0,0,0,.4);border-radius:8px;padding:1px 7px;white-space:nowrap;}
@@ -247,6 +261,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   transition:transform .15s, box-shadow .15s, filter .15s;
   cursor:default;user-select:none;
   direction:ltr;
+  background-image:linear-gradient(160deg, rgba(255,255,255,.55) 0%, transparent 30%);
 }
 .card.dark{color:#141414;}
 .card.red{color:var(--brick);}
@@ -256,8 +271,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .card .r-bot .s{display:block;font-size:clamp(8px,2.1vmin,14px);}
 .card .center-sym{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(15px,4vmin,26px);opacity:.9;}
 .card.back{
-  background:repeating-linear-gradient(45deg, #7a1f2b, #7a1f2b 6px, #5c1620 6px, #5c1620 12px);
+  background:
+    repeating-linear-gradient(45deg, transparent 0px, transparent 5px, rgba(240,216,150,.10) 5px, rgba(240,216,150,.10) 6px),
+    repeating-linear-gradient(-45deg, transparent 0px, transparent 5px, rgba(240,216,150,.10) 5px, rgba(240,216,150,.10) 6px),
+    repeating-linear-gradient(45deg, #7a1f2b, #7a1f2b 6px, #5c1620 6px, #5c1620 12px);
   border:2px solid var(--gold);
+  box-shadow:inset 0 0 0 3px rgba(240,216,150,.18), 0 3px 8px rgba(0,0,0,.4);
 }
 .card.back .center-sym{display:none;}
 .card.legal{cursor:pointer;filter:brightness(1);}
@@ -308,7 +327,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:800;display:none;align-items:center;justify-content:center;padding:20px;}
 .modal-bg.show{display:flex;}
-.modal{background:var(--panel);border:1px solid rgba(212,175,90,.4);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 24px;}
+.modal{background:var(--panel);border:1px solid rgba(212,175,90,.4);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 24px;animation:modalIn .25s cubic-bezier(.2,.7,.3,1);}
 .modal h2{color:var(--gold-bright);margin-bottom:14px;font-size:24px;}
 .modal h4{color:var(--gold-bright);margin:16px 0 6px;font-size:15px;}
 .modal p, .modal li{font-size:13.5px;line-height:1.85;color:rgba(250,244,230,.9);}
@@ -318,11 +337,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 
 .gate-bg{position:fixed;inset:0;background:#050c09;z-index:900;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;text-align:center;}
 .gate-bg.show{display:flex;}
-.gate-bg .gs{font-size:44px;letter-spacing:10px;color:var(--gold-bright);}
+.gate-bg .gs{font-size:44px;letter-spacing:10px;color:var(--gold-bright);animation:glowPulse 2.6s ease-in-out infinite;}
 .gate-bg h2{font-size:26px;color:var(--cream);}
 .gate-bg p{color:rgba(250,244,230,.6);font-size:13px;max-width:320px;}
 
-.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;}
+.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;animation:modalIn .3s cubic-bezier(.2,.7,.3,1);}
 table.score-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px;}
 table.score-table th, table.score-table td{padding:6px 8px;text-align:center;border-bottom:1px solid rgba(212,175,90,.2);}
 table.score-table th{color:var(--gold-bright);font-weight:700;}
@@ -483,7 +502,7 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
         <button class="tb-btn" style="margin-inline-start:auto;padding:4px 10px;font-size:11px;" onclick="openFirebaseModal()">הגדרות</button>
       </div>
 
-      <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..."></div>
+      <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="whist-online-name-nofill"></div>
 
       <div class="online-actions-row">
         <button class="btn-primary" id="create-room-btn" onclick="createRoom()" disabled>צור חדר חדש</button>

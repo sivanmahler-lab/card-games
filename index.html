@@ -11,28 +11,53 @@
     --gold:#d4af5a; --gold-bright:#f0d896; --cream:#faf4e6; --ink:#211a10;
   }
   *{box-sizing:border-box;}
+  @keyframes feltShimmer{0%,100%{opacity:.5;}50%{opacity:.85;}}
+  @keyframes emblemGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 16px rgba(240,216,150,.65));}}
+  @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
   body{
     margin:0;min-height:100vh;font-family:'Heebo',sans-serif;color:var(--cream);
-    background:radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.05), transparent 55%),
+    position:relative;
+    background:
+               repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
+               radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
                radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
     display:flex;flex-direction:column;align-items:center;padding:40px 16px;
   }
-  h1{font-family:'Frank Ruhl Libre',serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;}
-  .sub{color:rgba(250,244,230,.65);margin-bottom:36px;font-size:14px;}
+  body::before{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    box-shadow:inset 0 0 160px rgba(0,0,0,.55);
+  }
+  body::after{
+    content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(circle at 50% 50%, transparent 40%, rgba(0,0,0,.35) 100%);
+  }
+  body > *{position:relative;z-index:1;}
+  h1{font-family:'Frank Ruhl Libre',serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;text-shadow:0 0 22px rgba(240,216,150,.3);}
+  .sub{color:rgba(250,244,230,.65);margin-bottom:36px;font-size:14px;letter-spacing:.5px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;max-width:800px;width:100%;}
   a.card{
     text-decoration:none;color:inherit;
-    background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.01));
+    background:linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
     border:1px solid rgba(212,175,90,.35);border-radius:14px;padding:26px 18px;text-align:center;
-    transition:.18s;
+    transition:.22s cubic-bezier(.2,.7,.3,1); position:relative;overflow:hidden;
+    box-shadow:0 0 0 1px rgba(212,175,90,.08) inset;
+    opacity:0;animation:cardIn .55s ease forwards;
   }
-  a.card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+  .grid a.card:nth-child(1){animation-delay:.05s;}
+  .grid a.card:nth-child(2){animation-delay:.18s;}
+  a.card::before{
+    content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.12) 50%,transparent 60%);
+    transform:translateX(-120%);transition:transform .6s ease;pointer-events:none;
+  }
+  a.card:hover::before{transform:translateX(120%);}
+  a.card:hover{border-color:var(--gold-bright);transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.4),0 0 0 1px rgba(212,175,90,.25) inset;}
   .ic{margin-bottom:10px;display:flex;align-items:center;justify-content:center;height:52px;}
-  .ic svg{height:100%;width:auto;overflow:visible;}
-  a.card h3{margin:0 0 4px;font-size:18px;color:var(--cream);}
+  .ic svg{height:100%;width:auto;overflow:visible;transition:filter .25s;}
+  a.card:hover .ic svg{filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));}
+  a.card h3{margin:0 0 4px;font-size:18px;color:var(--cream);font-family:'Frank Ruhl Libre',serif;}
   a.card p{margin:0;font-size:12.5px;color:rgba(250,244,230,.6);}
   h1.brand-title{display:flex;align-items:center;gap:12px;justify-content:center;}
-  h1.brand-title svg{height:40px;width:auto;}
+  h1.brand-title svg{height:40px;width:auto;animation:emblemGlow 3.2s ease-in-out infinite;}
 </style>
 </head>
 <body>
