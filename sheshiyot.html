@@ -124,6 +124,7 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .pill{padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
 button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:rgba(212,175,90,.16);}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
+button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;animation:codePulse 1.4s ease-in-out infinite;}
 #table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;overflow-y:auto;}
 @media(min-width:700px){ #table-wrap{max-width:640px;} }
 @media(min-width:1000px){ #table-wrap{max-width:760px;} }
@@ -184,7 +185,7 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
 .pcell.reorderable{cursor:grab;touch-action:none;}
 .pcell.reorderable:active{cursor:grabbing;}
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
-#reveal-results-overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:80;display:none;text-align:center;}
+#reveal-results-overlay{position:absolute;left:50%;top:50%;transform:translate(-50%, -108px);z-index:80;display:none;text-align:center;}
 #reveal-results-overlay.show{display:block;}
 .results-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:420px;max-height:38vh;overflow-y:auto;
   background:rgba(8,26,20,.96);border:2px solid var(--gold);border-radius:16px 16px 0 0;
@@ -1248,16 +1249,19 @@ function renderAll(){
     closeBtn.style.display = peekingNow ? 'inline-block' : 'none';
   }
 
-  // once the round ends, hands are revealed on the felt and each player opens the score
-  // panel at their own pace via this button (the panel itself never auto-opens). Once
-  // they've opened it at least once this round the button disappears for good — it was
-  // sitting right over the player's own cards and had no reason to stick around after
-  // its job (opening the panel) was done; the panel can still be reopened via the small
-  // "תוצאות" pill in the status bar.
+  // Once the round ends, hands are revealed on the felt and each player opens the score
+  // panel at their own pace via the "תוצאות" pill in the status bar (up top, never over
+  // the felt — a floating button placed over the table used to sit right on top of the
+  // player's own cards on shorter screens, with nowhere nearby to move it that didn't
+  // also risk overlapping someone else's cards). It pulses to draw the eye the first
+  // time until the panel has been opened at least once this round.
   const revealOverlay = document.getElementById('reveal-results-overlay');
-  revealOverlay.classList.toggle('show', S.phase==='ended' && !resultsShownThisRound);
+  revealOverlay.classList.remove('show');
   const reopenPill = document.getElementById('reopen-results-pill');
-  if(reopenPill) reopenPill.style.display = (S.phase==='ended' && resultsShownThisRound) ? 'inline-block' : 'none';
+  if(reopenPill){
+    reopenPill.style.display = S.phase==='ended' ? 'inline-block' : 'none';
+    reopenPill.classList.toggle('attn', S.phase==='ended' && !resultsShownThisRound);
+  }
 
   // action bar
   const bar = document.getElementById('action-bar');
