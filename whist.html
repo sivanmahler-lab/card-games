@@ -724,8 +724,54 @@ function freshState(){
     trumpSuit:null,
     turnSig:'',
     turnSigTime:Date.now(),
+    genId:0,
   };
 }
+
+/* ============================= BACKGROUND-TAB RESUME GUARD =============================
+   Mobile browsers throttle or fully suspend setTimeout/setInterval while a tab is hidden
+   (screen locked, app switched away). Any bot-turn / round-advance timers that were still
+   pending when that happened can all fire in a burst the moment the tab becomes visible
+   again, racing the heartbeat watchdog and each other — this was causing rounds to silently
+   skip their bidding phase and tricks to desync from the players' actual hands. Every
+   game-flow timer is scheduled through scheduleGameTimer(), which stamps the state's current
+   genId; if the tab was hidden for a while, genId is bumped on resume so any stale timers
+   scheduled before that point quietly no-op instead of firing late and out of order. */
+function scheduleGameTimer(fn, delay){
+  if(!S) return;
+  const stampedGen = S.genId;
+  return setTimeout(()=>{
+    if(!S || S.genId!==stampedGen) return;
+    fn();
+  }, delay);
+}
+let __hiddenSince = null;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    __hiddenSince = Date.now();
+    return;
+  }
+  const wasHiddenMs = __hiddenSince ? (Date.now()-__hiddenSince) : 0;
+  __hiddenSince = null;
+  if(!S || wasHiddenMs < 1500) return;
+  // Invalidate any timers scheduled before we backgrounded, then do exactly one clean
+  // re-render + re-drive of whatever phase we're actually in, instead of letting a pile of
+  // queued bot/round timers all fire back-to-back.
+  S.genId++;
+  clearTimeout(window.__botWatchdog);
+  clearTimeout(window.__trickWatchdog);
+  if(S.phase==='trump-bidding' || S.phase==='trick-bidding' || S.phase==='playing'){
+    renderTable();
+    try{
+      if(S.phase==='trump-bidding') advanceTrumpBidding();
+      else if(S.phase==='trick-bidding') advanceTrickBidding();
+      else if(S.phase==='playing'){
+        if(S.currentTrick.length===4) resolveTrick();
+        else advancePlaying();
+      }
+    } catch(e){ console.error('Resume re-drive failed', e); }
+  }
+});
 
 /* ============================= HEARTBEAT WATCHDOG ============================= */
 function heartbeatCheck(){
@@ -1243,7 +1289,7 @@ function advanceTrumpBidding(){
   if(remaining.length===0){
     hideControlPanel();
     showToast('כולם עברו (PASS) — מחלקים מחדש.');
-    setTimeout(()=>{ startRound(); }, 1200);
+    scheduleGameTimer(()=>{ startRound(); }, 1200);
     return;
   }
   const p = S.bidTurn;
@@ -1262,7 +1308,7 @@ function advanceTrumpBidding(){
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
-    setTimeout(()=>botTrumpBid(p), 1000);
+    scheduleGameTimer(()=>botTrumpBid(p), 1000);
   }
 }
 function minCountForSuit(suit){
@@ -1373,7 +1419,7 @@ function finishTrumpBidding(winner){
   S.declareOrder = [0,1,2,3].map(i=>(winner+i)%4);
   S.declareIdx = 0;
   hideControlPanel();
-  setTimeout(()=>{
+  scheduleGameTimer(()=>{
     renderTable();
     advanceTrickBidding();
   }, 400);
@@ -1394,7 +1440,7 @@ function advanceTrickBidding(){
       S.leader = S.trumpBid.player;
       S.turnInTrick=0;
       S.currentTrick=[];
-      setTimeout(()=>advancePlaying(), 300);
+      scheduleGameTimer(()=>advancePlaying(), 300);
     });
     return;
   }
@@ -1408,7 +1454,7 @@ function advanceTrickBidding(){
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
-    setTimeout(()=>botDeclare(p), 930);
+    scheduleGameTimer(()=>botDeclare(p), 930);
   }
 }
 function showDeclareSummary(cb){
@@ -1515,7 +1561,7 @@ function advancePlaying(){
   } else {
     hideControlPanel();
     clearTimeout(window.__botWatchdog);
-    window.__botWatchdog = setTimeout(()=>{
+    window.__botWatchdog = scheduleGameTimer(()=>{
       try{ botPlay(p); } catch(err){ console.error('botPlay failed', err); }
     }, 800);
   }
@@ -1544,9 +1590,9 @@ function playCard(p, c){
   S.turnInTrick++;
   renderTable();
   if(S.currentTrick.length===4){
-    setTimeout(resolveTrick, 900);
+    scheduleGameTimer(resolveTrick, 900);
   } else {
-    setTimeout(advancePlaying, 500);
+    scheduleGameTimer(advancePlaying, 500);
   }
 }
 function botPlay(p){
@@ -1630,9 +1676,9 @@ function resolveTrick(){
     S.currentTrick=[];
     renderTable();
     if(S.hands[0].length===0){
-      setTimeout(finishRound, 700);
+      scheduleGameTimer(finishRound, 700);
     } else {
-      setTimeout(advancePlaying, 700);
+      scheduleGameTimer(advancePlaying, 700);
     }
   };
 
