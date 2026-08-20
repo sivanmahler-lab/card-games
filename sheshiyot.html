@@ -122,6 +122,14 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .dot.err{background:#e05555;}
 .room-code-display{font-size:34px;font-weight:800;letter-spacing:8px;color:var(--gold-bright);margin:14px 0 4px;cursor:pointer;font-family:'Frank Ruhl Libre',serif;border-radius:14px;animation:codePulse 2.6s ease-in-out infinite;}
 .room-code-hint{font-size:11.5px;color:rgba(250,244,230,.45);margin-bottom:14px;}
+.whatsapp-share-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;
+  border-radius:10px;margin-bottom:14px;border:none;cursor:pointer;
+  background:#25D366;color:#0b3b21;font-weight:800;font-size:14.5px;
+  box-shadow:0 4px 14px rgba(37,211,102,.3);transition:.15s;
+}
+.whatsapp-share-btn:hover{filter:brightness(1.06);transform:translateY(-1px);}
+.whatsapp-share-btn svg{width:20px;height:20px;flex-shrink:0;}
 .players-list{background:rgba(0,0,0,.25);border-radius:12px;padding:14px;margin:14px 0;text-align:right;}
 .players-list .pl-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;}
 .players-list .pl-row:last-child{border-bottom:none;}
@@ -423,6 +431,10 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <p style="color:rgba(250,244,230,.55);font-size:13px;margin:4px 0 0;">שלחו את קוד החדר לחברים:</p>
     <div class="room-code-display" id="waiting-code" onclick="copyRoomCode()" title="לחץ להעתקה">------</div>
     <div class="room-code-hint">לחץ להעתקה • כל שחקן מזין את הקוד ומצטרף</div>
+    <button class="whatsapp-share-btn" onclick="shareRoomWhatsapp()">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.43 1.32 4.94L2.05 22l5.28-1.38a9.87 9.87 0 0 0 4.71 1.2h.01c5.46 0 9.9-4.45 9.9-9.91C21.95 6.45 17.5 2 12.04 2zm5.85 14.05c-.25.7-1.44 1.35-1.98 1.42-.5.07-1.15.1-1.85-.12-.43-.13-.98-.31-1.68-.61-2.96-1.28-4.89-4.26-5.04-4.46-.15-.2-1.2-1.6-1.2-3.05 0-1.45.76-2.16 1.03-2.46.27-.3.6-.37.8-.37.2 0 .4 0 .57.01.18.01.43-.07.68.51.25.6.85 2.07.93 2.22.08.15.13.33.03.53-.1.2-.15.33-.3.5-.15.18-.31.4-.45.54-.15.15-.3.31-.13.61.17.3.76 1.25 1.63 2.03 1.12 1 2.06 1.31 2.36 1.46.3.15.48.13.65-.08.18-.2.75-.87.95-1.17.2-.3.4-.25.68-.15.28.1 1.77.84 2.08 .99.3.15.5.23.58.35.08.13.08.75-.17 1.45z"/></svg>
+      שיתוף בוואטסאפ
+    </button>
     <div class="players-list" id="waiting-players"></div>
     <button class="btn-primary" id="start-room-btn" onclick="hostStartGame()" style="display:none;">התחל משחק</button>
     <button class="btn-secondary" onclick="goLobby()">ביטול</button>
@@ -1579,6 +1591,16 @@ function copyRoomCode(){
   if(!roomCode) return;
   navigator.clipboard && navigator.clipboard.writeText(roomCode).catch(()=>{});
   showToast('קוד הועתק: '+roomCode);
+}
+
+// Opens WhatsApp (app on mobile, web on desktop) with a ready-made invite message,
+// including the room code and a link straight to the online-join screen — the friend
+// just taps the link, sees the code pre-filled in the message, and joins in one go.
+function shareRoomWhatsapp(){
+  if(!roomCode) return;
+  const link = location.origin + location.pathname;
+  const msg = `בואו נשחק שישיות! הצטרפו לחדר שלי — קוד: ${roomCode}\n${link}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 function showWaitingScreen(myName){
   showScreen('screen-waiting');
