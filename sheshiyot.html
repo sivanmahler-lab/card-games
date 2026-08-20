@@ -90,8 +90,6 @@ body{
 .players-list{background:rgba(0,0,0,.25);border-radius:12px;padding:14px;margin:14px 0;text-align:right;}
 .players-list .pl-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;}
 .players-list .pl-row:last-child{border-bottom:none;}
-.bot-count-row{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.25);border-radius:10px;padding:10px 14px;margin-top:14px;}
-.bot-count-row select{background:rgba(0,0,0,.4);color:var(--cream);border:1px solid rgba(212,175,90,.35);border-radius:8px;padding:6px 10px;font-size:14px;}
 
 /* ---------- TABLE ---------- */
 #screen-game{justify-content:flex-start;padding:8px;}
@@ -331,17 +329,7 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
       <span id="fb-status-text">Firebase לא מוגדר</span>
     </div>
 
-    <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..."></div>
-
-    <div class="bot-count-row">
-      <span>מספר בוטים בחדר חדש</span>
-      <select id="bot-count-select">
-        <option value="0">0</option>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3" selected>3</option>
-      </select>
-    </div>
+    <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="sheshiyot-online-name-nofill"></div>
 
     <div class="online-actions-row">
       <button class="btn-primary" id="create-room-btn" onclick="createRoom()" disabled>צור חדר חדש</button>
@@ -468,8 +456,6 @@ let firebaseApp=null, fbDB=null, fbReady=false;
 let _playersListenerOff=null, _stateListenerOff=null, _actionListenerOff=null;
 let _pendingAnim=null; // set by applyHostAction right before renderAll(), fired right after
 let pendingDraw = null; // {source, card} — locally held while deciding (host or local human)
-let botCountChoice = 3;
-
 function seatFor(disp){ return (disp + myOnlineSeat) % 4; }
 function displayFor(actual){ return (actual - myOnlineSeat + 4) % 4; }
 
@@ -1411,12 +1397,11 @@ async function createRoom(){
   const myName = document.getElementById('online-name').value.trim();
   if(!myName){ showToast('נא להזין את השם שלך'); document.getElementById('online-name').focus(); return; }
   if(!fbReady){ showToast('אין חיבור ל-Firebase'); return; }
-  botCountChoice = parseInt(document.getElementById('bot-count-select').value, 10) || 0;
   roomCode = genRoomCode();
   isOnline = true; isHost = true; myOnlineSeat = 0;
   roomRef = fbDB.ref('sheshiyot_rooms/'+roomCode);
   await roomRef.set({
-    meta:{status:'waiting', host:myName, created:true, botCount:botCountChoice},
+    meta:{status:'waiting', host:myName, created:true},
     players:{ 0:{name:myName, joined:true} }
   });
   showWaitingScreen(myName);
@@ -1509,8 +1494,6 @@ function showWaitingScreen(myName){
 async function hostStartGame(){
   const snap = await roomRef.child('players').once('value');
   const players = snap.val() || {};
-  const metaSnap = await roomRef.child('meta/botCount').once('value');
-  const botCount = metaSnap.val() || 0;
 
   newRound();
   isOnline=true; isHost=true;
@@ -1524,7 +1507,6 @@ async function hostStartGame(){
       S.peeked[s] = true;
     }
   }
-  // if fewer humans than seats and botCount specified, fine — remaining are bots already
   await roomRef.child('meta/status').set('playing');
   showScreen('screen-game');
   renderAll();
