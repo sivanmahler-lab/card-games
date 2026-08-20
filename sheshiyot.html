@@ -161,6 +161,10 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
 @media(min-width:1000px){
   .pgrid.small{transform:scale(1);}
 }
+/* On short viewports (wide window but little vertical room), the width-based rules
+   above stop shrinking the opponents' card grids even though there isn't enough
+   height for them — leaving almost no gap between the top player's row and the
+   center piles. Scale back down whenever height is tight, regardless of width. */
 .pcell{
   width:44px;height:62px;border-radius:6px;position:relative;cursor:default;
   background:
@@ -191,7 +195,8 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
 .results-panel.show{display:block;}
 .results-panel .rp-head{cursor:grab;margin:0 -16px 10px;padding:12px 16px;border-radius:16px 16px 0 0;
   user-select:none;touch-action:none;text-align:center;font-size:13px;font-weight:700;color:var(--gold-bright);
-  background:rgba(212,175,90,.14);border-bottom:1px solid rgba(212,175,90,.3);}
+  background:#0d3327;border-bottom:1px solid rgba(212,175,90,.3);
+  position:sticky;top:0;z-index:2;}
 .results-panel .rp-head:active{cursor:grabbing;}
 .results-panel.dragging{transition:none;}
 .results-panel .rp-close{position:absolute;top:10px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
@@ -249,6 +254,24 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
   .pgrid-wrap.pos-1{left:-6px;}
   .pgrid-wrap.pos-3{right:-6px;}
   .center-pot > div{gap:10px !important;}
+}
+/* Wide-but-short windows (e.g. a browser resized short rather than a narrow phone)
+   don't match the max-width rules above, yet the felt still doesn't have enough
+   vertical room. .pgrid.small's transform:scale() only shrinks the cards visually —
+   it does NOT shrink the box they reserve in the layout — so the top player's row
+   can end up almost touching the center piles. Shrinking the opponents' actual card
+   size (not just visually scaling it) and the pile size reclaims real vertical space. */
+@media(max-height:640px){
+  .pgrid.small .pcell{width:34px;height:48px;font-size:15px;}
+  .pgrid.small .pcell .r{font-size:9px;}
+  .pgrid.small .pcell .sym{font-size:13px;}
+  .pile{width:46px;height:64px;}
+}
+@media(max-height:520px){
+  .pgrid.small .pcell{width:27px;height:38px;font-size:12px;}
+  .pgrid.small .pcell .r{font-size:8px;}
+  .pgrid.small .pcell .sym{font-size:11px;}
+  .pile{width:40px;height:56px;}
 }
 </style>
 </head>
@@ -446,7 +469,7 @@ button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:r
      player keep looking at everyone's revealed cards on the felt above it while reading
      the score breakdown) -->
 <div class="results-panel" id="results-panel">
-  <div class="rp-head" id="rp-head">⠿⠿⠿ גררי כאן כדי להזיז ולראות את הקלפים ⠿⠿⠿</div>
+  <div class="rp-head" id="rp-head">⠿⠿⠿ גרור/י כאן כדי להזיז ולראות את הקלפים ⠿⠿⠿</div>
   <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
   <div id="round-end-content"></div>
 </div>
@@ -753,10 +776,10 @@ function prepareTurnAnim(p, prevHand, prevDiscardTop){
 /* ============================= TURN ACTIONS ============================= */
 function isMyTurnLocal(){
   const myActual = seatFor(0);
-  return S.phase==='playing' && S.turn===myActual && S.isHuman[myActual] && !pendingDraw;
+  return S.phase==='playing' && S.turn===myActual && S.isHuman[myActual] && !pendingDraw && !S.turnActed;
 }
 function onDrawClosed(){
-  if(isOnline && !isHost){ submitRemoteAction('drawClosed', {}); return; }
+  if(isOnline && !isHost){ if(!isMyTurnLocal()) return; submitRemoteAction('drawClosed', {}); return; }
   if(!isMyTurnLocal()) return;
   ensureDrawPile();
   const card = S.drawPile.pop();
@@ -770,7 +793,7 @@ function onTakeOpen(){
     discardDrawn();
     return;
   }
-  if(isOnline && !isHost){ submitRemoteAction('takeOpen', {}); return; }
+  if(isOnline && !isHost){ if(!isMyTurnLocal()) return; submitRemoteAction('takeOpen', {}); return; }
   if(!isMyTurnLocal()) return;
   if(S.discardPile.length===0) return;
   const card = S.discardPile.pop();
@@ -1711,10 +1734,16 @@ function applyHostAction(act){
   }
   if(S.phase!=='playing' || S.turn!==p) return;
   if(act.type==='drawClosed'){
+    // A player may only draw once per turn: reject if they already have a card
+    // pending (drawn but not yet placed/discarded) or already completed their
+    // one action this turn (turnActed) — otherwise a client re-sending clicks
+    // (double-tap, stale UI) could keep pulling cards from the pile.
+    if(S.pendingDraw || S.turnActed) return;
     ensureDrawPile();
     const card = S.drawPile.pop();
     S.pendingDraw = {source:'closed', card, owner:p};
   } else if(act.type==='takeOpen'){
+    if(S.pendingDraw || S.turnActed) return;
     if(S.discardPile.length===0) return;
     const card = S.discardPile.pop();
     S.pendingDraw = {source:'open', card, owner:p};
