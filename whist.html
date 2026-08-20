@@ -1262,7 +1262,7 @@ function advanceTrumpBidding(){
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
-    setTimeout(()=>botTrumpBid(p), 750);
+    setTimeout(()=>botTrumpBid(p), 1000);
   }
 }
 function minCountForSuit(suit){
@@ -1408,7 +1408,7 @@ function advanceTrickBidding(){
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
-    setTimeout(()=>botDeclare(p), 700);
+    setTimeout(()=>botDeclare(p), 930);
   }
 }
 function showDeclareSummary(cb){
