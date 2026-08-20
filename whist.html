@@ -996,7 +996,12 @@ function cardHTML(c, extraClass){
   </div>`;
 }
 function renderOwnFan(fan, actual){
-  const hand = S.hands[actual];
+  // Firebase Realtime Database silently converts empty arrays (a hand with 0 cards left, e.g.
+  // right after the last trick of a round) into `null` on the wire. Without this guard, an
+  // online client would throw here reading `.length` off `null` the instant a round ended —
+  // which aborted the whole render pass and made the client's screen look frozen right when
+  // the round-end results should have appeared.
+  const hand = S.hands[actual] || [];
   const n = hand.length;
   if(n===0){
     const hint = document.getElementById('card-confirm-hint');
@@ -1673,7 +1678,10 @@ function showRoundEndModal(results){
     }).join('');
     return `<tr><td>${h.roundNum}<br><span style="font-size:10.5px;color:rgba(250,244,230,.55);">${typeLabel} ${trumpInfo}</span></td>${cells}</tr>`;
   }).join('');
-  const totalsCells = S.totals.map(t=>`<td colspan="2">${t}</td>`).join('');
+  // Empty cell under "הימור" (bid) + the total under "ניקוד" (score), so the totals row
+  // lines up column-for-column with the score numbers it's summing, instead of one merged
+  // cell spanning both sub-columns and drifting out of alignment.
+  const totalsCells = S.totals.map(t=>`<td></td><td>${t}</td>`).join('');
   const isHostOrLocal = !isOnline || isHost;
   document.getElementById('round-end-content').innerHTML = `
     <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
@@ -2135,13 +2143,15 @@ function startOnlineClientGame(remoteState, playersData){
     if(!remote || !remote.phase) return;
 
     const wasRoundEnd = (remote.phase==='round-end');
+    // roundEndData.results already carries each player's real pts for this round (computed
+    // once by the host in finishRound()) — use it as-is. showRoundEndModal() itself prefers
+    // S.roundHistory when present, so this is mainly the fallback for the very first round.
+    const roundEndResults = wasRoundEnd && remote.roundEndData ? remote.roundEndData.results : null;
     applyRemoteState(remote);
     renderTable();
 
-    if(wasRoundEnd && remote.roundEndData){
-      showRoundEndModal(remote.roundEndData.results.map(r=>({
-        ...r, pts: remote.roundEndData.totalsAfter[r.p] - S.totals[r.p]
-      })));
+    if(wasRoundEnd && roundEndResults){
+      showRoundEndModal(roundEndResults);
     } else {
       document.getElementById('round-end-modal').classList.remove('show');
     }
@@ -2185,8 +2195,11 @@ function applyRemoteState(remote){
   S.roundType = remote.roundType || null;
   S.roundHistory = remote.roundHistory || [];
   S.roundEndData = remote.roundEndData || null;
-  // Use received hands (clients only render their own face-up)
-  if(remote.hands) S.hands = remote.hands;
+  // Use received hands (clients only render their own face-up). Firebase turns an empty
+  // array ([]) into `null` on the wire, and can turn a whole all-empty hands array into
+  // `null` too — normalize every seat back to a real (possibly empty) array so nothing
+  // downstream has to special-case null.
+  if(remote.hands) S.hands = [0,1,2,3].map(s=> remote.hands[s] || []);
 
   // Update pills
   if(S.trumpSuit!==null){
