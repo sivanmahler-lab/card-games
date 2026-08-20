@@ -105,9 +105,9 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .game-card.disabled{cursor:default;opacity:.55;}
 .game-card.disabled:hover{border-color:rgba(212,175,90,0.35);transform:none;box-shadow:none;}
 .game-card .soon{display:inline-block;margin-top:8px;font-size:11px;color:var(--teal);border:1px solid var(--teal);border-radius:20px;padding:2px 10px;}
-.online-actions-row{display:flex;gap:10px;margin-top:8px;}
-.online-actions-row .btn-primary{margin-top:0;flex:1 1 0;width:auto;}
-@media(max-width:420px){.online-actions-row{flex-direction:column;}}
+.online-actions-row{display:flex;gap:8px;margin-top:8px;}
+.online-actions-row .btn-primary{margin-top:0;flex:1 1 0;width:auto;padding-inline:6px;white-space:normal;line-height:1.25;}
+@media(max-width:360px){.online-actions-row .btn-primary{font-size:14px;padding:11px 4px;}}
 .note-strip{font-size:12px;color:rgba(250,244,230,.5);border-top:1px dashed rgba(212,175,90,.3);padding-top:14px;margin-top:8px;line-height:1.6;}
 
 /* ---------- SETUP ---------- */
@@ -140,10 +140,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .online-box .sub{color:rgba(250,244,230,.55);font-size:13px;text-align:center;margin-bottom:22px;}
 .or-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:rgba(250,244,230,.4);font-size:13px;}
 .or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:rgba(212,175,90,.2);}
-.join-row{display:flex;gap:8px;}
-.join-row input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);color:var(--cream);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
+.join-row{display:flex;gap:8px;flex-wrap:wrap;}
+.join-row input{flex:1 1 140px;min-width:0;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);color:var(--cream);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
 .join-row input::placeholder{letter-spacing:0;font-weight:400;font-size:14px;}
-.join-row .btn-primary{width:auto;padding:10px 18px;margin-top:0;white-space:nowrap;}
+.join-row .btn-primary{width:auto;flex:0 0 auto;padding:10px 18px;margin-top:0;white-space:nowrap;}
+#join-row-wrap{margin-top:14px;}
 .firebase-hint{margin-top:18px;padding:12px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,90,.2);font-size:12px;color:rgba(250,244,230,.5);line-height:1.7;}
 .firebase-hint a{color:var(--teal);cursor:pointer;text-decoration:underline;}
 .firebase-status{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:16px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.25);}
@@ -1639,13 +1640,19 @@ function finishRound(){
     } else {
       pts = bid===0 ? (S.roundType==='UP' ? -20 : -50) : -10*Math.abs(bid-won);
     }
-    S.totals[p]+=pts;
     results.push({p, bid, won, pts, made});
+  }
+  // Voided round: if every single player missed their bid, no one earns or loses points —
+  // the round is shown in the history (so the table isn't misleading about what happened)
+  // but its points don't count toward anyone's total.
+  const allMissed = results.every(r=>!r.made);
+  if(!allMissed){
+    for(const r of results) S.totals[r.p]+=r.pts;
   }
   if(!S.roundHistory) S.roundHistory=[];
   S.roundHistory.push({
     roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit,
-    names: S.names.slice(), results
+    names: S.names.slice(), results, voided: allMissed
   });
   // Mark phase so the round-end screen syncs to every online client, not just the host: the
   // client's gameState listener only shows the round-end modal when it sees phase==='round-end'
@@ -1670,13 +1677,15 @@ function showRoundEndModal(results){
   const rowsHtml = history.map(h=>{
     const typeLabel = h.roundType==='UP' ? 'UP ⬆' : (h.roundType==='UNDER' ? 'UNDER ⬇' : '');
     const trumpInfo = h.trumpSuit!=null && SUITS[h.trumpSuit] ? SUITS[h.trumpSuit].sym : '';
+    const voidedStyle = h.voided ? ' style="opacity:.55;text-decoration:line-through;"' : '';
     const cells = h.results.map(r=>{
       const scoreCell = r.made
         ? `<span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${r.pts>0?'+':''}${r.pts}</span>`
         : `${r.pts>0?'+':''}${r.pts}`;
-      return `<td>${r.bid}</td><td class="${r.made?'win-tag':'lose-tag'}">${scoreCell}</td>`;
+      return `<td${voidedStyle}>${r.bid}</td><td class="${r.made?'win-tag':'lose-tag'}"${voidedStyle}>${scoreCell}</td>`;
     }).join('');
-    return `<tr><td>${h.roundNum}<br><span style="font-size:10.5px;color:rgba(250,244,230,.55);">${typeLabel} ${trumpInfo}</span></td>${cells}</tr>`;
+    const voidNote = h.voided ? `<br><span style="font-size:10px;color:var(--danger);text-decoration:none;">כולם הפסידו — הסיבוב בוטל</span>` : '';
+    return `<tr><td>${h.roundNum}<br><span style="font-size:10.5px;color:rgba(250,244,230,.55);">${typeLabel} ${trumpInfo}</span>${voidNote}</td>${cells}</tr>`;
   }).join('');
   // Empty cell under "הימור" (bid) + the total under "ניקוד" (score), so the totals row
   // lines up column-for-column with the score numbers it's summing, instead of one merged
