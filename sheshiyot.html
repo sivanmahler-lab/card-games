@@ -463,13 +463,20 @@ function newRound(){
   // Fresh match: brand-new names/seats and an empty score history.
   buildRoundState(['את/ה','בוט 1','בוט 2','בוט 3'], [true,false,false,false], [], 1, 0);
 }
-function buildRoundState(names, isHuman, matchHistory, roundNum, starter){
+// `active` marks which of the 4 seats are actually in this match — for vs-computer and
+// local pass-and-play every seat is always active (4 hands dealt, bots fill the rest).
+// Online games with fewer than 4 real players leave the unfilled seats out of `active`
+// entirely instead of puppeting them with a bot: advanceTurn(), the finish-declaration
+// countdown, scoring, and rendering all skip inactive seats (see findNextActiveSeat(),
+// activeSeats(), endRound(), renderAll()).
+function buildRoundState(names, isHuman, matchHistory, roundNum, starter, active){
   resultsShownThisRound = false;
   const deck = shuffle(buildDeck());
   S = {
     phase:'peek',
     names: names.slice(),
     isHuman: isHuman.slice(),
+    active: (active || [true,true,true,true]).slice(),
     hands:[[],[],[],[]],
     graduated:[false,false,false,false],
     peeked:[false,false,false,false],
@@ -491,14 +498,38 @@ function buildRoundState(names, isHuman, matchHistory, roundNum, starter){
   S.drawPile = deck;
   S.discardPile = [S.drawPile.pop()];
 }
+// Number of seats actually in play this match.
+function activeSeatCount(){ return S.active ? S.active.filter(Boolean).length : 4; }
+// Next active seat after `from`, cycling through only active seats (never lands on an
+// empty seat, and handles any count from 2 to 4).
+function findNextActiveSeat(from){
+  let s = from;
+  for(let i=0;i<4;i++){
+    s = (s+1)%4;
+    if(!S.active || S.active[s]) return s;
+  }
+  return from; // shouldn't happen (would mean no active seats at all)
+}
 function startNextRound(){
-  const nextStarter = (S.starter+1)%4;
+  const nextStarter = findNextActiveSeat_forSeat(S.starter);
   const nextRoundNum = (S.roundNum||1)+1;
-  buildRoundState(S.names, S.isHuman, S.matchHistory||[], nextRoundNum, nextStarter);
+  buildRoundState(S.names, S.isHuman, S.matchHistory||[], nextRoundNum, nextStarter, S.active);
   document.getElementById('results-panel').classList.remove('show');
   showScreen('screen-game');
   renderAll();
   maybeBotTurn();
+}
+// Small helper so startNextRound() can pick the next starter using the *previous* round's
+// S.active before buildRoundState() replaces S — same skip-inactive-seats logic as
+// findNextActiveSeat(), just taking the active array as a plain arg instead of reading S.
+function findNextActiveSeat_forSeat(from){
+  const active = S.active || [true,true,true,true];
+  let s = from;
+  for(let i=0;i<4;i++){
+    s = (s+1)%4;
+    if(active[s]) return s;
+  }
+  return from;
 }
 function onClickNextRound(){
   document.getElementById('results-panel').classList.remove('show');
@@ -761,7 +792,7 @@ function endMyTurn(){
 }
 function doDeclareFinished(p){
   S.finishCaller = p;
-  S.finalTurnsRemaining = 3; // the other 3 players each get exactly one more turn
+  S.finalTurnsRemaining = activeSeatCount()-1; // every OTHER active seat gets exactly one more turn
   // Who declared and that it's the last round is shown via the persistent
   // #final-round-banner (driven by renderAll off S.finishCaller) rather than a toast —
   // a toast auto-hides and can be missed; the banner stays up for the whole final round.
@@ -787,7 +818,7 @@ function advanceTurn(){
       return;
     }
   }
-  S.turn = (S.turn+1)%4;
+  S.turn = findNextActiveSeat(S.turn);
   S.turnActed = false;
   pendingDraw = null;
   renderAll();
@@ -968,6 +999,7 @@ function endRound(){
       // caller (including the caller) just keeps their plain raw score, no penalty.
       for(let p=0;p<4;p++){
         if(p===caller) continue;
+        if(S.active && !S.active[p]) continue;
         if(raw[p] < raw[caller]) final[p] = raw[p]+10;
       }
     }
@@ -983,18 +1015,20 @@ function endRound(){
 }
 function showRoundEndModal(){
   const history = S.matchHistory || [];
+  const activeSeats = [0,1,2,3].filter(p => !S.active || S.active[p]);
   const totals = [0,0,0,0];
-  history.forEach(r=>{ r.final.forEach((v,i)=>totals[i]+=v); });
-  const minTotal = Math.min(...totals);
+  history.forEach(r=>{ activeSeats.forEach(i=>totals[i]+=r.final[i]); });
+  const minTotal = Math.min(...activeSeats.map(i=>totals[i]));
 
-  let headerCells = S.names.map(n=>`<th>${n}</th>`).join('');
+  let headerCells = activeSeats.map(i=>`<th>${S.names[i]}</th>`).join('');
   let rows = history.map((r,idx)=>{
     // Just the round number — who came out ahead for THIS round is shown by circling
     // their score below; who declared "finished" isn't repeated here since the circle
     // already makes the round's outcome clear at a glance.
     const roundLabel = 'סבב '+(idx+1);
-    const roundMin = Math.min(...r.final);
-    const cells = r.final.map(v=>{
+    const roundMin = Math.min(...activeSeats.map(i=>r.final[i]));
+    const cells = activeSeats.map(i=>{
+      const v = r.final[i];
       // Circle the lowest (winning) score for this specific round.
       return v===roundMin
         ? `<td><span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${v}</span></td>`
@@ -1002,7 +1036,10 @@ function showRoundEndModal(){
     }).join('');
     return `<tr><td>${roundLabel}</td>${cells}</tr>`;
   }).join('');
-  let totalsCells = totals.map(t=>`<td>${t===minTotal?'<b>'+t+'</b>':t}</td>`).join('');
+  let totalsCells = activeSeats.map(i=>{
+    const t = totals[i];
+    return `<td>${t===minTotal?'<b>'+t+'</b>':t}</td>`;
+  }).join('');
 
   const box = document.getElementById('round-end-content');
   box.innerHTML = `
@@ -1057,6 +1094,10 @@ function renderAll(){
 
   for(let disp=0; disp<4; disp++){
     const actual = seatFor(disp);
+    const wrapEl = document.getElementById('pw-'+disp);
+    const isActive = !S.active || S.active[actual];
+    if(wrapEl) wrapEl.style.display = isActive ? '' : 'none';
+    if(!isActive) continue;
     const nameEl = document.getElementById('pn-'+disp);
     const declared = S.finishCaller===actual;
     nameEl.textContent = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
@@ -1497,13 +1538,25 @@ async function hostStartGame(){
 
   newRound();
   isOnline=true; isHost=true;
+  // Online games play with exactly the seats that actually joined — 2, 3, or 4 real
+  // people — instead of auto-filling empty seats with bots. Seat 0 (the host) is always
+  // active; any other unfilled seat is left out of the match entirely rather than handed
+  // to a bot (see S.active / findNextActiveSeat() / activeSeatCount() for how the rest of
+  // the game — turn order, "finished" countdown, scoring, rendering — skips those seats).
+  S.active = [true,false,false,false];
   for(let s=0;s<4;s++){
     if(players[s]){
       S.names[s] = players[s].name;
       S.isHuman[s] = true;
-    } else {
+      S.active[s] = true;
+      // newRound()/buildRoundState() ran with the default single-human template
+      // ([true,false,false,false]), which pre-marks every non-seat-0 slot as already
+      // peeked. A real player joining one of those seats needs their own peek window,
+      // so undo that default now that we know this seat is actually a human.
+      S.peeked[s] = false;
+    } else if(s!==0){
       S.isHuman[s] = false;
-      S.names[s] = 'בוט '+s;
+      S.names[s] = '';
       S.peeked[s] = true;
     }
   }
