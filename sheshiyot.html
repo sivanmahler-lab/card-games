@@ -503,6 +503,9 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 <script>
 /* ============================= DECK / SCORING ============================= */
 const SUITS_INFO = { h:{sym:'♥',color:'red'}, d:{sym:'♦',color:'red'}, c:{sym:'♣',color:'black'}, s:{sym:'♠',color:'black'} };
+// Bot display names — a little royal court instead of "בוט 1/2/3", indexed 0-2 by the bot's
+// relative slot (never by seat position, since that shifts depending on how many humans join).
+const BOT_NAMES = ['ארתור','ויקטוריה',"צ'רצ'יל",'אליזבט'];
 function rankLabel(r){ if(r===1) return 'A'; if(r===11) return 'J'; if(r===12) return 'Q'; if(r===13) return 'K'; return String(r); }
 function cardValue(r){ if(r===13) return 0; if(r>=11) return 10; return r; }
 function buildDeck(){
@@ -556,7 +559,7 @@ function layoutSlotFor(disp){
 
 function newRound(){
   // Fresh match: brand-new names/seats and an empty score history.
-  buildRoundState(['את/ה','בוט 1','בוט 2','בוט 3'], [true,false,false,false], [], 1, 0);
+  buildRoundState(['את/ה', BOT_NAMES[0], BOT_NAMES[1], BOT_NAMES[2]], [true,false,false,false], [], 1, 0);
 }
 // `active` marks which of the 4 seats are actually in this match — for vs-computer and
 // local pass-and-play every seat is always active (4 hands dealt, bots fill the rest).

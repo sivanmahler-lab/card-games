@@ -649,6 +649,9 @@ const SUITS = [
   {sym:'♠', name:'עלה',  color:'dark'},
 ];
 const RANK_LABEL = r => r<=10 ? String(r) : ({11:'J',12:'Q',13:'K',14:'A'}[r]);
+// Bot display names — a little royal court instead of "בוט 1/2/3", indexed 0-2 by the bot's
+// relative slot (never by seat position, since that shifts depending on how many humans join).
+const BOT_NAMES = ['ארתור','ויקטוריה',"צ'רצ'יל",'אליזבט'];
 // Display order only (does NOT affect trump-bidding strength, which still uses the SUITS
 // array index: תלתן < מעוין < לב < עלה). This controls the order cards are sorted/shown in a
 // hand and in the suit-choice buttons, so black/red alternate: עלה, לב, תלתן, מעוין.
@@ -698,7 +701,7 @@ function seatFor(displayPos){
 function freshState(){
   return {
     mode:'computer',
-    names:['את/ה','בוט 1','בוט 2','בוט 3'],
+    names:['את/ה', BOT_NAMES[0], BOT_NAMES[1], BOT_NAMES[2]],
     isHuman:[true,false,false,false],
     hands:[[],[],[],[]],
     totals:[0,0,0,0],
@@ -958,7 +961,7 @@ function startFriendsGame(){
     S.names[i] = document.getElementById('inp-name-'+i).value.trim() || ('שחקן '+(i+1));
     S.isHuman[i] = true;
   }
-  for(let i=total;i<4;i++){ S.isHuman[i]=false; S.names[i] = 'בוט '+(i-total+1); }
+  for(let i=total;i<4;i++){ S.isHuman[i]=false; S.names[i] = BOT_NAMES[i-total]; }
   saveMyName(S.names[0]);
   beginMatch();
 }
@@ -970,7 +973,7 @@ function startMixedGame(){
     S.names[i] = document.getElementById('inp-name-'+i).value.trim() || ('חבר '+i);
     S.isHuman[i] = true;
   }
-  for(let i=friends+1;i<4;i++){ S.isHuman[i]=false; S.names[i]='בוט '+(i-friends); }
+  for(let i=friends+1;i<4;i++){ S.isHuman[i]=false; S.names[i]=BOT_NAMES[i-friends-1]; }
   saveMyName(S.names[0]);
   beginMatch();
 }
@@ -2203,12 +2206,13 @@ function startOnlineHostGame(){
     const players = snap.val() || {};
     S = freshState();
     S.mode = 'online';
+    let botIdx = 0;
     for(let s=0;s<4;s++){
       if(players[s] && players[s].joined){
         S.names[s] = players[s].name;
         S.isHuman[s] = true;
       } else {
-        S.names[s] = 'בוט '+(s+1);
+        S.names[s] = BOT_NAMES[botIdx++];
         S.isHuman[s] = false;
       }
     }
@@ -2229,12 +2233,13 @@ function startOnlineClientGame(remoteState, playersData){
 
   S = freshState();
   S.mode = 'online';
+  let botIdx = 0;
   for(let s=0;s<4;s++){
     if(playersData[s] && playersData[s].joined){
       S.names[s] = playersData[s].name;
       S.isHuman[s] = true;
     } else {
-      S.names[s] = 'בוט '+(s+1);
+      S.names[s] = BOT_NAMES[botIdx++];
       S.isHuman[s] = false;
     }
   }
