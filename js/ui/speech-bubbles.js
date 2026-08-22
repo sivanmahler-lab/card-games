@@ -2,53 +2,74 @@
    SPEECH BUBBLES — js/ui/speech-bubbles.js
    =============================================================================================
    Small, ephemeral speech bubbles anchored to a bot's name badge, driven by the persona's
-   speechStyle (see js/ai/bot-persona.js). Two distinct things this module renders:
+   speechStyle (see js/ai/bot-persona.js). Deliberately restrained by design: bots stay quiet
+   almost all the time and only speak up for a genuinely dramatic, unusual moment in the hand —
+   this is a premium accent, not a running commentary track, and it should never read as spam.
 
-     1. A "thinking..." bubble shown WHILE a bot is deciding (bidding or playing), removed the
-        moment the real action happens. This is deliberately generic per archetype ("רגע
-        לחשוב..." for conservative vs "למה לחכות?" for aggressive) rather than per-event, since
-        it's shown before the outcome of the decision is known.
-     2. A short reaction bubble shown AFTER an event whose outcome is known (won a trick, missed
-        a bid), picked at random from that archetype's line bank so the same bot doesn't repeat
-        itself every round.
+   Design intent, per explicit product direction:
+     - NO "thinking..." bubble while a bot is deciding. A bot's decision delay is just a plain,
+       silent pause now — nothing is shown during it. (showThinkingBubble is kept as a no-op
+       shim below so whist.html's existing call sites don't need to change; see the note there.)
+     - Reactions are gated to three specific dramatic triggers, decided by whist.html (this
+       module has no access to game state and makes no game-logic judgment calls):
+         1. onZeroBid   — this bot just declared a bid of exactly zero (a rare, high-risk call).
+         2. onBadMiss   — this bot missed its bid by 2 or more tricks in either direction.
+         3. onSurpriseWin — this bot won a trick it didn't need (it had already made its bid),
+            an unwanted extra that risks blowing a made contract.
+       whist.html only calls showReactionBubble() when one of these three conditions is actually
+       true — this module doesn't re-derive them.
+     - Even when a trigger fires, the bubble only actually shows ~30-40% of the time (see
+       REACTION_CHANCE below) — a bot that reacted to every single dramatic moment would still
+       feel like too much. Missing the roll is silent: no bubble, no fallback line.
+     - Lines are short, dry, and specific to each archetype's voice: צ'רצ'יל understated and
+       wry, ארתור brash and a little too confident, ויקטוריה clipped and numeric. No archetype
+       repeats a line back-to-back for the same bot instance in a single game session (see the
+       last-line tracking below) so a long game doesn't start feeling canned.
 
-   This module does no game-logic decisions and does not read/write S — whist.html calls these
-   functions at the exact points it already has a human-perceptible delay (the existing
-   scheduleTurnAction(...) delays for bidding/playing) or a resolved outcome (finishTrick,
-   finishRound), passing in the seat's DOM badge id and bot name it already has on hand.
+   This module does no game-logic decisions and does not read/write S — whist.html decides WHEN
+   a trigger condition is true and calls showReactionBubble() only then, passing in the seat's
+   DOM badge id, the bot's display name, and which of the three trigger kinds fired.
    ============================================================================================= */
 
 import { speechStyleFor } from '../ai/bot-persona.js';
 
+// Only this fraction of genuinely-triggered dramatic moments actually produce a bubble. Kept
+// module-private (not exported) so the "how often do bots talk" tuning lives in exactly one
+// place; whist.html doesn't need to know this number, it just calls showReactionBubble() on
+// every real trigger and lets this module decide whether to actually show anything.
+const REACTION_CHANCE = 0.35;
+
 // ---- Line bank -------------------------------------------------------------------------------
 // Keyed by speechStyle (not by bot name) so a future 4th/5th archetype only needs one new entry
-// here, reused by any bot assigned that style.
+// here, reused by any bot assigned that style. Every line bank below covers exactly the three
+// dramatic trigger kinds whist.html can fire — no generic "thinking"/"bid pressure" filler.
 const SPEECH_BANK = Object.freeze({
-  understated: {
-    thinking:     ['רגע לחשוב...', 'הממ...'],
-    onWinTrick:   ['כצפוי.', 'טוב, טוב.'],
-    onMissedBid:  ['חבל.', 'לא נורא, בפעם הבאה.'],
-    onBidPressure:['רגע לחשוב...'],
+  understated: { // צ'רצ'יל — measured, dry, never raises his voice
+    onZeroBid:     ['אפס. שקט לפני הסערה.', 'לפעמים לא לקחת הוא הניצחון.', 'אפס — ונחיה עם זה.'],
+    onBadMiss:     ['טעות חישוב. תקרה.', 'הפעם לא הלך. לומדים.', 'מסקנות מהסיבוב הזה — בשקט.'],
+    onSurpriseWin: ['לא ביקשתי את זה.', 'לקיחה מיותרת. חבל.', 'טוב שהצלחתי — פחות טוב שהייתי צריך.'],
   },
-  boastful: {
-    thinking:     ['למה לחכות?', 'קל קל...'],
-    onWinTrick:   ['בדיוק ככה!', 'מי עוד?'],
-    onMissedBid:  ['זה לא הוגן!', 'בפעם הבאה אני הולך על הכל.'],
-    onBidPressure:['למה לחכות?'],
+  boastful: { // ארתור — loud, sure of himself, a little too sure
+    onZeroBid:     ['אפס?! לא הימור שלי בד"כ.', 'אפס, אבל תסתכלו בסיבוב הבא.', 'גם אפס אני עושה בסטייל.'],
+    onBadMiss:     ['זה לא ייתכן.', 'המזל בגד בי, לא האסטרטגיה.', 'בפעם הבאה — בלי רחמים.'],
+    onSurpriseWin: ['אמרתי לכם!', 'קלף שלא תכננתי — אבל אני אקח אותו.', 'זה מה שקורה כשאני משחק.'],
   },
-  analytical: {
-    thinking:     ['בודקת את הקלפים...', 'מחשבת...'],
-    onWinTrick:   ['כמו שחישבתי.', 'בדיוק לפי התכנון.'],
-    onMissedBid:  ['מוזר, החישוב היה נכון.', 'משתנה בלתי צפוי.'],
-    onBidPressure:['בודקת את הקלפים שוב...'],
+  analytical: { // ויקטוריה — clipped, numeric, states outcomes as facts
+    onZeroBid:     ['אפס. חישוב מדויק.', 'הסתברות גבוהה, הימור אפס.', 'אפס לקיחות — כמתוכנן.'],
+    onBadMiss:     ['סטייה של שתיים ומעלה מהתחזית.', 'משתנה לא צפוי בחישוב.', 'התחזית לא התממשה הפעם.'],
+    onSurpriseWin: ['לקיחה נוספת, לא בתכנון.', 'עודף לא רצוי.', 'תוצאה שלא נדרשה.'],
   },
-  neutral: {
-    thinking:     ['רגע...'],
-    onWinTrick:   ['יש!'],
-    onMissedBid:  ['אה, חבל.'],
-    onBidPressure:['רגע...'],
+  neutral: { // אליזבט / any future bot without a defined archetype
+    onZeroBid:     ['אפס.', 'הולכת על אפס.'],
+    onBadMiss:     ['לא הלך הפעם.', 'טעיתי בהערכה.'],
+    onSurpriseWin: ['לא ציפיתי לזו.', 'לקיחה בלתי צפויה.'],
   },
 });
+
+// Tracks the last line shown per (badgeId+kind) so the same bot doesn't repeat itself back-to-
+// back — a small in-memory map, intentionally not persisted, since "don't repeat within this
+// game session" is all the polish this needs.
+const lastLineShown = new Map(); // key: `${name}:${kind}` -> line string
 
 function linesFor(name, kind){
   const style = speechStyleFor(name);
@@ -59,7 +80,17 @@ function linesFor(name, kind){
 function pickLine(name, kind){
   const lines = linesFor(name, kind);
   if(lines.length === 0) return null;
-  return lines[Math.floor(Math.random() * lines.length)];
+  if(lines.length === 1) return lines[0];
+  const key = name + ':' + kind;
+  const last = lastLineShown.get(key);
+  let candidates = lines;
+  if(last){
+    const filtered = lines.filter(l => l !== last);
+    if(filtered.length > 0) candidates = filtered;
+  }
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  lastLineShown.set(key, chosen);
+  return chosen;
 }
 
 // ---- Bubble rendering -------------------------------------------------------------------------
@@ -95,7 +126,6 @@ function ensureStyles(){
       content:''; position:absolute; top:calc(100% - 2px); left:50%; transform:translateX(-50%);
       border:5px solid transparent; border-top-color:#0a1410; z-index:1;
     }
-    .speech-bubble.thinking{ font-style:italic; }
     @media (prefers-reduced-motion: reduce){
       .speech-bubble{ transition:none; }
     }
@@ -119,8 +149,7 @@ function clearBubble(badgeId){
  * @param {string} badgeId - DOM id of the name-badge element to anchor to
  * @param {string} text - bubble text
  * @param {object} [opts]
- * @param {boolean} [opts.isThinking] - adds the 'thinking' style (italic, slightly dimmer)
- * @param {number} [opts.durationMs] - auto-remove after this long (default 1600ms)
+ * @param {number} [opts.durationMs] - auto-remove after this long (default 1800ms)
  */
 export function showBubble(badgeId, text, opts = {}){
   if(!text) return;
@@ -132,11 +161,11 @@ export function showBubble(badgeId, text, opts = {}){
   // rather than to the nearest other positioned ancestor (e.g. #felt).
   if(getComputedStyle(badge).position === 'static') badge.style.position = 'relative';
   const el = document.createElement('div');
-  el.className = 'speech-bubble' + (opts.isThinking ? ' thinking' : '');
+  el.className = 'speech-bubble';
   el.textContent = text;
   badge.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
-  const duration = opts.durationMs || 1600;
+  const duration = opts.durationMs || 1800;
   const timeoutId = setTimeout(() => {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 200);
@@ -151,31 +180,29 @@ export function hideBubble(badgeId){
 }
 
 /**
- * Show a "thinking..." bubble for a bot, styled by its persona's speechStyle. Call this right
- * when you schedule the bot's delayed action (e.g. inside the same scheduleTurnAction call
- * whist.html already uses for botTrumpBid/botDeclare/botPlay), and call hideBubble() (or just
- * let it auto-expire) once the action actually resolves.
- *
- * @param {string} badgeId
- * @param {string} name - bot display name (used to look up its persona's speech style)
- * @param {number} [thinkDurationMs] - how long the bot's actual delay is, so the bubble doesn't
- *   auto-hide before the action lands. Defaults to 1200ms.
+ * No-op kept only so whist.html's existing scheduleTurnAction call sites (which call this right
+ * before a bot's bidding/playing delay) don't need to be touched. Per the current design, bots
+ * are silent while deciding — no "thinking..." bubble is shown here anymore. If whist.html is
+ * ever updated to drop these call sites entirely, this export can be removed too.
  */
-export function showThinkingBubble(badgeId, name, thinkDurationMs = 1200){
-  const line = pickLine(name, 'thinking');
-  showBubble(badgeId, line, { isThinking: true, durationMs: thinkDurationMs });
+export function showThinkingBubble(){
+  // Intentionally does nothing.
 }
 
 /**
- * Show a short reaction bubble for a resolved event (won a trick / missed a bid). Picks a
- * random line from that bot's archetype's bank so the same bot doesn't repeat itself constantly.
+ * Show a short reaction bubble for a genuinely dramatic, resolved moment. whist.html is
+ * responsible for only calling this when one of the three trigger kinds below is actually true
+ * — this module does not re-derive or validate that from game state. Even when called, the
+ * bubble only actually appears ~35% of the time (REACTION_CHANCE) so bots stay mostly quiet.
  *
  * @param {string} badgeId
- * @param {string} name - bot display name
- * @param {'onWinTrick'|'onMissedBid'|'onBidPressure'} kind
+ * @param {string} name - bot display name (used to look up its persona's speech style)
+ * @param {'onZeroBid'|'onBadMiss'|'onSurpriseWin'} kind
+ * @param {() => number} [rng] - optional injectable RNG for deterministic testing; defaults to Math.random
  */
-export function showReactionBubble(badgeId, name, kind){
+export function showReactionBubble(badgeId, name, kind, rng = Math.random){
+  if(rng() >= REACTION_CHANCE) return; // missed the roll — stay silent, no bubble at all
   const line = pickLine(name, kind);
-  showBubble(badgeId, line, { durationMs: 1800 });
+  showBubble(badgeId, line, { durationMs: 2000 });
 }
 
