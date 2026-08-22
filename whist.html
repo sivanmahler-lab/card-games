@@ -168,6 +168,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .join-row input{flex:1 1 140px;min-width:0;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);color:var(--cream);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
 .join-row input::placeholder{letter-spacing:0;font-weight:400;font-size:14px;}
 .join-row .btn-primary{width:auto;flex:0 0 auto;padding:10px 18px;margin-top:0;white-space:nowrap;}
+/* Deep-link join mode (?room=CODE — see applyRoomDeepLink()): the code field + join button
+   stack full-width and the button gets extra visual weight, since at that point it's the one
+   and only action the screen is asking for — no "create room" button beside it competing for
+   attention. */
+.join-row.deep-link-mode{flex-direction:column;}
+.join-row .btn-primary.deep-link-primary{width:100%;padding:13px 16px;font-size:16px;box-shadow:0 6px 18px rgba(212,175,90,.35);}
 #join-row-wrap{margin-top:14px;}
 .firebase-hint{margin-top:18px;padding:12px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,90,.2);font-size:12px;color:rgba(250,244,230,.5);line-height:1.7;}
 .firebase-hint a{color:var(--teal);cursor:pointer;text-decoration:underline;}
@@ -398,17 +404,32 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .gate-bg h2{font-size:26px;color:var(--cream);}
 .gate-bg p{color:rgba(250,244,230,.6);font-size:13px;max-width:320px;}
 
-.round-end-card{background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;animation:modalIn .3s cubic-bezier(.2,.7,.3,1);}
-table.score-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px;}
-table.score-table th, table.score-table td{padding:6px 8px;text-align:center;border-bottom:1px solid rgba(212,175,90,.2);}
-table.score-table th{color:var(--gold-bright);font-weight:700;}
-table.match-table{font-size:12.5px;white-space:nowrap;}
-table.match-table th.sub{font-size:10.5px;font-weight:400;color:rgba(250,244,230,.55);padding:2px 6px;}
-table.match-table td{padding:5px 6px;}
-table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:800;color:var(--gold-bright);border-bottom:none;}
-.re-scroll-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-.re-scroll-hint{font-size:11px;color:rgba(250,244,230,.4);text-align:center;margin-top:4px;display:none;}
-.re-scroll-hint.show{display:block;}
+/* Nearly opaque (not the old 35%) — this card sits on top of .modal-bg's own 72%-opaque
+   backdrop, but the combination still let the bright felt/badges directly behind it show
+   through visibly (reported as stray player-name/score text "floating" behind the modal). A
+   solid, only-slightly-translucent panel is what actually stops that: */
+.round-end-card{background:rgba(8,20,15,.97);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;max-height:82vh;overflow-y:auto;animation:modalIn .3s cubic-bezier(.2,.7,.3,1);}
+/* ---- Round-end results: per-player CARD rows (see showRoundEndModal()) ----------------------
+   Replaces the old 4-players-x-2-sub-columns wide table, which relied on horizontal scrolling
+   that silently hid a column with no indication there was more to see, especially in this RTL
+   page where overflow-x:auto's default scroll position cut off the far column. A vertical stack
+   has no horizontal axis to break on any width, and every player's full name is always shown
+   in full rather than squeezed into a narrow column. */
+.rr-scroll-wrap{margin-top:8px;}
+.rr-round-block{background:rgba(255,255,255,.04);border:1px solid rgba(212,175,90,.22);border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+.rr-round-head{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;color:var(--gold-bright);font-size:13.5px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(212,175,90,.22);}
+.rr-round-meta{font-size:11.5px;font-weight:400;color:rgba(250,244,230,.6);}
+.rr-player-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13.5px;}
+.rr-player-row + .rr-player-row{border-top:1px solid rgba(255,255,255,.06);}
+.rr-player-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+.rr-player-bid{flex:0 0 auto;font-size:11.5px;color:rgba(250,244,230,.55);}
+.rr-made{display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;flex:0 0 26px;font-size:12px;font-weight:700;color:var(--gold-bright);}
+.rr-missed{flex:0 0 auto;min-width:26px;text-align:center;font-weight:700;color:var(--danger);}
+.rr-voided{opacity:.55;text-decoration:line-through;}
+.rr-void-note{font-size:10.5px;color:var(--danger);margin-top:4px;}
+.rr-totals-block{background:rgba(212,175,90,.08);border-color:var(--gold);}
+.rr-totals-row .rr-player-name{font-weight:800;color:var(--gold-bright);}
+.rr-totals-score{font-weight:800;color:var(--gold-bright);font-size:16px;min-width:32px;text-align:center;}
 .win-tag{color:#7be29a;font-weight:800;}
 .lose-tag{color:#e77a6d;font-weight:800;}
 
@@ -557,15 +578,20 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
       </h2>
       <p class="sub">כל שחקן על המכשיר שלו — מחוברים בזמן אמת</p>
 
-      <div class="firebase-status" id="fb-status">
+      <!-- Technical Firebase connection status is intentionally hidden from players — it's
+           internal plumbing, not something a friend joining a game needs to see or think
+           about. The dot/text/settings button still exist and stay functionally wired up
+           (create-room-btn's disabled state still tracks connection status via
+           updateFirebaseStatus()), just not shown. -->
+      <div class="firebase-status" id="fb-status" style="display:none;">
         <span class="dot err" id="fb-dot"></span>
         <span id="fb-status-text">Firebase לא מוגדר</span>
         <button class="tb-btn" style="margin-inline-start:auto;padding:4px 10px;font-size:11px;" onclick="openFirebaseModal()">הגדרות</button>
       </div>
 
-      <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="whist-online-name-nofill"></div>
+      <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="whist-online-name-nofill" oninput="saveMyName(this.value.trim())"></div>
 
-      <div class="online-actions-row">
+      <div class="online-actions-row" id="online-actions-row">
         <button class="btn-primary" id="create-room-btn" onclick="createRoom()" disabled>צור חדר חדש</button>
         <button class="btn-primary" id="show-join-btn" onclick="toggleJoinRow()">הצטרף לחדר קיים</button>
       </div>
@@ -573,9 +599,14 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
       <div class="field" id="join-row-wrap" style="display:none;">
         <div class="join-row">
           <input id="join-code" placeholder="קוד חדר (6 תווים)" maxlength="6" oninput="this.value=this.value.toUpperCase()">
-          <button class="btn-primary" onclick="joinRoom()">הצטרף</button>
+          <button class="btn-primary" id="join-room-btn" onclick="joinRoom()">הצטרף</button>
         </div>
       </div>
+      <!-- Shown only via a WhatsApp deep-link (?room=CODE) — see applyRoomDeepLink() — as a
+           low-emphasis fallback for "I actually wanted to host, not join" instead of a full
+           second prominent button competing with the join action the link was clearly meant
+           to trigger. -->
+      <button class="btn-secondary" id="create-room-link" onclick="createRoom()" disabled style="display:none;">רוצה לפתוח חדר חדש במקום?</button>
 
       <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>
     </div>
@@ -1027,6 +1058,11 @@ async function getSavedName(){
     const v = localStorage.getItem('whist_player_name');
     return v || '';
   } catch(e){ return ''; }
+}
+// Synchronous variant for call sites that need the value immediately (e.g. pre-filling an
+// input the instant a screen is shown) rather than awaiting the async wrapper above.
+function getSavedNameSync(){
+  try{ return localStorage.getItem('whist_player_name') || ''; } catch(e){ return ''; }
 }
 async function saveMyName(name){
   try{ localStorage.setItem('whist_player_name', name); } catch(e){}
@@ -2226,43 +2262,56 @@ function finishRound(){
   showRoundEndModal(results);
 }
 function showRoundEndModal(results){
-  // Cumulative match table: one row per finished round (not just this one), with each
-  // player getting two sub-columns (bid | score) so the whole match's bidding history is
-  // visible at a glance — matches how a real Whist scoresheet is kept on paper.
+  // Cumulative match history: one entry per finished round (not just this one).
   const history = S.roundHistory && S.roundHistory.length ? S.roundHistory : [{
     roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit, names: S.names.slice(), results
   }];
-  const nameHeaderCells = S.names.map(n=>`<th colspan="2">${n}</th>`).join('');
-  const subHeaderCells = S.names.map(()=>`<th class="sub">הימור</th><th class="sub">ניקוד</th>`).join('');
-  const rowsHtml = history.map(h=>{
+  // Rebuilt as a per-player CARD layout instead of a wide table-with-sub-columns. The old
+  // 4-players-x-2-sub-columns table was reported as broken on mobile: it rendered wider than
+  // its container, and — since this is an RTL page — a plain overflow-x:auto wrapper defaults
+  // its scroll position to show the FIRST (rightmost) column, silently cutting off the LAST
+  // (leftmost) column with no visual indication there was more to see ("only 3 of 4 players
+  // show up"). A vertical stack of full-width player cards has no horizontal-scroll axis at
+  // all, so that failure mode is structurally impossible here, and every player's full name is
+  // always fully visible rather than truncated/overlapping in a cramped column.
+  const scoreCellHTML = (r)=> r.made
+    ? `<span class="rr-made">${r.pts>0?'+':''}${r.pts}</span>`
+    : `<span class="rr-missed">${r.pts>0?'+':''}${r.pts}</span>`;
+  const roundsHtml = history.map(h=>{
     const typeLabel = h.roundType==='UP' ? 'UP ⬆' : (h.roundType==='UNDER' ? 'UNDER ⬇' : '');
     const trumpInfo = h.trumpSuit!=null && SUITS[h.trumpSuit] ? SUITS[h.trumpSuit].sym : '';
-    const voidedStyle = h.voided ? ' style="opacity:.55;text-decoration:line-through;"' : '';
-    const cells = h.results.map(r=>{
-      const scoreCell = r.made
-        ? `<span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${r.pts>0?'+':''}${r.pts}</span>`
-        : `${r.pts>0?'+':''}${r.pts}`;
-      return `<td${voidedStyle}>${r.bid}</td><td class="${r.made?'win-tag':'lose-tag'}"${voidedStyle}>${scoreCell}</td>`;
+    const voidNote = h.voided ? `<div class="rr-void-note">כולם הפסידו — הסיבוב בוטל</div>` : '';
+    const playerRows = h.names.map((name,i)=>{
+      const r = h.results[i];
+      return `<div class="rr-player-row${h.voided?' rr-voided':''}">
+        <span class="rr-player-name">${name}</span>
+        <span class="rr-player-bid">הימור: ${r.bid}</span>
+        ${scoreCellHTML(r)}
+      </div>`;
     }).join('');
-    const voidNote = h.voided ? `<br><span style="font-size:10px;color:var(--danger);text-decoration:none;">כולם הפסידו — הסיבוב בוטל</span>` : '';
-    return `<tr><td>${h.roundNum}<br><span style="font-size:10.5px;color:rgba(250,244,230,.55);">${typeLabel} ${trumpInfo}</span>${voidNote}</td>${cells}</tr>`;
+    return `<div class="rr-round-block">
+      <div class="rr-round-head">
+        <span>סיבוב ${h.roundNum}</span>
+        <span class="rr-round-meta">${typeLabel} ${trumpInfo}</span>
+      </div>
+      ${playerRows}
+      ${voidNote}
+    </div>`;
   }).join('');
-  // Empty cell under "הימור" (bid) + the total under "ניקוד" (score), so the totals row
-  // lines up column-for-column with the score numbers it's summing, instead of one merged
-  // cell spanning both sub-columns and drifting out of alignment.
-  const totalsCells = S.totals.map(t=>`<td></td><td>${t}</td>`).join('');
+  const totalsRows = S.names.map((name,i)=>`<div class="rr-player-row rr-totals-row">
+    <span class="rr-player-name">${name}</span>
+    <span class="rr-totals-score">${S.totals[i]}</span>
+  </div>`).join('');
   const isHostOrLocal = !isOnline || isHost;
   document.getElementById('round-end-content').innerHTML = `
     <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
-    <div class="re-scroll-wrap" id="re-scroll-wrap">
-    <table class="score-table match-table">
-      <tr><th>סיבוב</th>${nameHeaderCells}</tr>
-      <tr><th class="sub"></th>${subHeaderCells}</tr>
-      ${rowsHtml}
-      <tr class="totals-row"><td>סה"כ</td>${totalsCells}</tr>
-    </table>
+    <div class="rr-scroll-wrap" id="re-scroll-wrap">
+      ${roundsHtml}
+      <div class="rr-round-block rr-totals-block">
+        <div class="rr-round-head"><span>סה"כ נקודות במשחק</span></div>
+        ${totalsRows}
+      </div>
     </div>
-    <div class="re-scroll-hint" id="re-scroll-hint">↔ החליקו כדי לראות את כל 4 השחקנים</div>
     ${isHostOrLocal
       ? `<button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
          <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>`
@@ -2270,14 +2319,6 @@ function showRoundEndModal(results){
     }
   `;
   document.getElementById('round-end-modal').classList.add('show');
-  // If the 4-player table is wider than its wrapper, the columns for the last player(s) get
-  // scrolled out of view with no visual cue — this was reported as "only 2 players show up".
-  // Surface an explicit scroll hint whenever that's the case.
-  requestAnimationFrame(()=>{
-    const wrap = document.getElementById('re-scroll-wrap');
-    const hint = document.getElementById('re-scroll-hint');
-    if(wrap && hint) hint.classList.toggle('show', wrap.scrollWidth > wrap.clientWidth + 2);
-  });
 }
 function closeRoundEnd(){ document.getElementById('round-end-modal').classList.remove('show'); }
 function nextRound(){
@@ -2394,6 +2435,11 @@ async function initFirebaseAndUpdateStatus(){
   updateFirebaseStatus(ok);
   const btn = document.getElementById('create-room-btn');
   if(btn) btn.disabled = !ok;
+  // Mirrors create-room-btn's enabled state onto the demoted "create room instead" link shown
+  // during a deep-link join (see applyRoomDeepLink()) — kept in sync here rather than only at
+  // the moment the deep-link handler runs, since Firebase can finish connecting afterwards.
+  const createLink = document.getElementById('create-room-link');
+  if(createLink) createLink.disabled = !ok;
 }
 
 async function tryInitFirebase(){
@@ -2428,12 +2474,15 @@ function updateFirebaseStatus(ok){
 
 async function initOnlineSetup(){
   showScreen('screen-online-setup');
-  // Intentionally not pre-filling from a previously saved name here: on a shared/borrowed
-  // device this silently carried over the last player's name into a new join, which is
-  // exactly the bug that got reported (a second player joining as "סיון"). Every player
-  // must type their own name explicitly for online play.
+  // Restores the player's own saved name on every visit (saved on every keystroke — see the
+  // 'input' listener wired up below). This deliberately reverses an earlier decision to always
+  // start this field blank (to avoid a shared/borrowed device silently carrying over the
+  // PREVIOUS player's name into a new join) — that protection is explicitly traded away here
+  // per a direct request to always restore the player's own name automatically. On a
+  // family/shared device this does mean a second person joining right after someone else will
+  // see that first name pre-filled and needs to actually notice and clear it themselves.
   const nameInput = document.getElementById('online-name');
-  if(nameInput) nameInput.value = '';
+  if(nameInput) nameInput.value = getSavedNameSync();
   const joinWrap = document.getElementById('join-row-wrap');
   if(joinWrap) joinWrap.style.display = 'none';
   const joinCodeInput = document.getElementById('join-code');
@@ -2932,10 +2981,22 @@ function applyRoomDeepLink(){
   chooseMode('online').then(()=>{
     const joinWrap = document.getElementById('join-row-wrap');
     const joinCodeInput = document.getElementById('join-code');
-    const showJoinBtn = document.getElementById('show-join-btn');
+    const actionsRow = document.getElementById('online-actions-row');
+    const createLink = document.getElementById('create-room-link');
+    const joinBtn = document.getElementById('join-room-btn');
     if(joinCodeInput) joinCodeInput.value = code;
     if(joinWrap) joinWrap.style.display = 'block';
-    if(showJoinBtn) showJoinBtn.style.display = 'none';
+    // A friend who tapped a WhatsApp invite link almost certainly wants to join that specific
+    // table, not host a new one — so the whole "צור חדר חדש / הצטרף לחדר קיים" choice (which
+    // makes sense on a cold visit to the page) is replaced with just the join action, made as
+    // prominent and unambiguous as possible: full-width, no competing button beside it. Hosting
+    // is still reachable, just demoted to a low-emphasis text link below in case they actually
+    // meant to open their own room.
+    if(actionsRow) actionsRow.style.display = 'none';
+    if(joinBtn) joinBtn.classList.add('deep-link-primary');
+    const joinRowEl = document.querySelector('#join-row-wrap .join-row');
+    if(joinRowEl) joinRowEl.classList.add('deep-link-mode');
+    if(createLink){ createLink.style.display = 'block'; createLink.disabled = document.getElementById('create-room-btn').disabled; }
     // Hand focus straight to the name field — the room code is already filled in, so typing
     // their name is the one remaining thing standing between the friend and pressing "הצטרף".
     const nameInput = document.getElementById('online-name');

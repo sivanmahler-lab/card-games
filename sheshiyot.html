@@ -123,6 +123,12 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .join-row{display:flex;gap:8px;}
 .join-row input{flex:1;}
 .join-row .btn-primary{width:auto;margin-top:0;padding:11px 16px;}
+/* Deep-link join mode (?room=CODE — see applyRoomDeepLink()): the code field + join button
+   stack full-width and the button gets extra visual weight, since at that point it's the one
+   and only action the screen is asking for — no "create room" button beside it competing for
+   attention. */
+.join-row.deep-link-mode{flex-direction:column;}
+.join-row .btn-primary.deep-link-primary{width:100%;padding:13px 16px;font-size:16px;box-shadow:0 6px 18px rgba(212,175,90,.35);}
 .online-box,.setup-box,.waiting-box{max-width:480px;width:100%;padding:20px;text-align:center;border-radius:16px;}
 .online-box h2,.waiting-box h2{margin-bottom:2px;}
 .sub{color:rgba(250,244,230,.55);font-size:13px;margin:0 0 10px;}
@@ -182,18 +188,33 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    visually drifted toward the table center on narrow phones. Pinning to a true top corner
    with a fixed max-width cap (tightened further at the breakpoints below) is what actually
    held up under mobile verification there, so the same pattern is used here. */
-.pgrid-wrap.pos-1{left:2px;top:4px;transform:none;z-index:20;max-width:104px;}
-.pgrid-wrap.pos-2{top:8px;left:50%;transform:translateX(-50%);z-index:20;}
-.pgrid-wrap.pos-3{right:2px;top:4px;transform:none;z-index:20;max-width:104px;}
+/* All three opponent positions share the exact same top offset (4px) so their name badges —
+   and therefore their card grids right below — start at precisely the same height. pos-2 used
+   to sit 4px lower than pos-1/pos-3, which is exactly the kind of small baked-in mismatch that
+   reads as a misaligned row on a real device even though it's "only a few pixels" in a desktop
+   inspector. A shared --opp-top custom property keeps all three locked together going forward
+   instead of relying on three separate literals staying in sync by coincidence. */
+.pgrid-wrap.pos-1{left:2px;top:var(--opp-top,4px);transform:none;z-index:20;max-width:104px;}
+.pgrid-wrap.pos-2{top:var(--opp-top,4px);left:50%;transform:translateX(-50%);z-index:20;}
+.pgrid-wrap.pos-3{right:2px;top:var(--opp-top,4px);transform:none;z-index:20;max-width:104px;}
 .p-name{font-size:12.5px;font-weight:700;background:rgba(0,0,0,.6);border:1px solid rgba(212,175,90,.4);border-radius:14px;
-  padding:3px 12px;white-space:nowrap;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;}
+  padding:3px 12px;white-space:nowrap;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;
+  /* Fixed line-height (not just font-size) so the badge is always exactly the same height
+     regardless of which characters/emoji it happens to contain (e.g. the "📣 ... — סיימתי!"
+     declared-finish text) — a varying badge height was the other half of the row-misalignment
+     bug, since .pgrid-inner stacks the grid directly below the badge in normal flow. */
+  line-height:16px;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);animation:codePulse 1.3s ease-in-out infinite;}
 .p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
 .pgrid-inner{display:flex;flex-direction:column;align-items:center;gap:1px;}
-.active-row-arrow{font-size:11px;line-height:1;color:var(--gold-bright);font-weight:800;
-  text-shadow:0 0 6px rgba(240,216,150,.7);visibility:hidden;}
-.active-row-arrow.show{visibility:visible;}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+/* Marks the 3 cards that are actually still in play once a player graduates (only the top row
+   remains open at that point) — replaces a small arrow icon that used to sit under the name
+   badge, which read as unclear/decorative rather than as "this is the live row". A visible gold
+   glow directly on the relevant cells is unambiguous at a glance, and adds no extra layout height
+   the way a separate arrow element did (which also helped cause uneven row-start heights across
+   the three opponent grids). */
+.pcell.row-active{box-shadow:0 0 0 2px var(--gold-bright), 0 0 10px 2px rgba(240,216,150,.55);}
 .pgrid.small{transform:scale(.62);}
 @media(min-width:700px){
   /* On wider screens there's plenty of room — don't shrink the other players' cards
@@ -216,7 +237,13 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 }
 .pcell.face{background:linear-gradient(160deg, rgba(255,255,255,.6) 0%, transparent 30%), #fdfaf1;color:#222;box-shadow:0 2px 6px rgba(0,0,0,.3);}
 .pcell.face .r{position:absolute;top:2px;right:3px;font-size:11px;font-weight:800;line-height:1;}
-.pcell.face .sym{font-size:18px;}
+/* .sym now holds an inline vector <svg> (see symHTML()) instead of a plain unicode glyph — a
+   real font-rendered ♣/♠/♥/♦ character varies wildly in visual weight/size across OS/browser
+   font sets, which is what let one suit symbol render enormous relative to the rank on a
+   reported device. Capping the icon at a fixed fraction of the card box (not a font-size) keeps
+   it proportional to the rank text no matter how the card itself gets resized at any breakpoint. */
+.pcell.face .sym{width:45%;height:45%;display:flex;align-items:center;justify-content:center;}
+.pcell.face .sym svg{width:100%;height:100%;overflow:visible;}
 .pcell.red{color:#c0272d;}
 .pcell.black{color:#1a1a1a;}
 .pcell.empty{visibility:hidden;}
@@ -251,7 +278,8 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pile.open:hover{transform:translateY(-2px);}
 .pile.open.disabled{cursor:default;opacity:.6;}
 .pile .r{position:absolute;top:3px;right:4px;font-size:11px;font-weight:800;line-height:1;}
-.pile .sym{font-size:18px;}
+.pile .sym{width:45%;height:45%;display:flex;align-items:center;justify-content:center;}
+.pile .sym svg{width:100%;height:100%;overflow:visible;}
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
 .pile.closed.drawn.disabled{opacity:1;}
 
@@ -304,13 +332,13 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 @media(max-height:640px){
   .pgrid.small .pcell{width:34px;height:48px;font-size:15px;}
   .pgrid.small .pcell .r{font-size:9px;}
-  .pgrid.small .pcell .sym{font-size:13px;}
+  /* .sym is sized as a % of .pcell (see the base rule) so it auto-scales with the card here —
+     no font-size override needed now that it's an SVG rather than a text glyph. */
   .pile{width:46px;height:64px;}
 }
 @media(max-height:520px){
   .pgrid.small .pcell{width:27px;height:38px;font-size:12px;}
   .pgrid.small .pcell .r{font-size:8px;}
-  .pgrid.small .pcell .sym{font-size:11px;}
   .pile{width:40px;height:56px;}
 }
 </style>
@@ -429,14 +457,18 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     </h2>
     <p class="sub">כל שחקן על המכשיר שלו — מחוברים בזמן אמת</p>
 
-    <div class="firebase-status" id="fb-status">
+    <!-- Technical Firebase connection status is intentionally hidden from players — it's
+         internal plumbing, not something a friend joining a game needs to see or think about.
+         The dot/text still exist and stay functionally wired up (create-room-btn's disabled
+         state still tracks connection status via updateFirebaseStatus()), just not shown. -->
+    <div class="firebase-status" id="fb-status" style="display:none;">
       <span class="dot err" id="fb-dot"></span>
       <span id="fb-status-text">Firebase לא מוגדר</span>
     </div>
 
-    <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="sheshiyot-online-name-nofill"></div>
+    <div class="field"><label>השם שלך</label><input id="online-name" maxlength="12" placeholder="הכנס שם..." autocomplete="off" name="sheshiyot-online-name-nofill" oninput="saveMyName(this.value.trim())"></div>
 
-    <div class="online-actions-row">
+    <div class="online-actions-row" id="online-actions-row">
       <button class="btn-primary" id="create-room-btn" onclick="createRoom()" disabled>צור חדר חדש</button>
       <button class="btn-primary" id="show-join-btn" onclick="toggleJoinRow()">הצטרף לחדר קיים</button>
     </div>
@@ -444,9 +476,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <div class="field" id="join-row-wrap" style="display:none;">
       <div class="join-row">
         <input id="join-code" placeholder="קוד חדר (6 תווים)" maxlength="6" oninput="this.value=this.value.toUpperCase()">
-        <button class="btn-primary" onclick="joinRoom()">הצטרף</button>
+        <button class="btn-primary" id="join-room-btn" onclick="joinRoom()">הצטרף</button>
       </div>
     </div>
+    <!-- Shown only via a WhatsApp deep-link (?room=CODE) — see applyRoomDeepLink() — as a
+         low-emphasis fallback for "I actually wanted to host, not join" instead of a full
+         second prominent button competing with the join action the link was clearly meant
+         to trigger. -->
+    <button class="btn-secondary" id="create-room-link" onclick="createRoom()" disabled style="display:none;">רוצה לפתוח חדר חדש במקום?</button>
 
     <button class="btn-secondary" onclick="goLobby()">חזרה ללובי</button>
   </div>
@@ -482,10 +519,10 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
   <div id="table-wrap">
     <div id="felt">
-      <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-0">▲</div><div class="pgrid" id="pg-0"></div></div></div>
-      <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-1">▲</div><div class="pgrid small" id="pg-1"></div></div></div>
-      <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-2">▲</div><div class="pgrid small" id="pg-2"></div></div></div>
-      <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="active-row-arrow" id="ar-3">▲</div><div class="pgrid small" id="pg-3"></div></div></div>
+      <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="pgrid" id="pg-0"></div></div></div>
+      <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-1"></div></div></div>
+      <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-2"></div></div></div>
+      <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-3"></div></div></div>
       <div class="center-pot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
         <div style="display:flex;gap:18px;align-items:flex-start;">
           <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
@@ -543,6 +580,26 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 <script>
 /* ============================= DECK / SCORING ============================= */
 const SUITS_INFO = { h:{sym:'♥',color:'red'}, d:{sym:'♦',color:'red'}, c:{sym:'♣',color:'black'}, s:{sym:'♠',color:'black'} };
+// Vector suit-glyph path data — same paths already used for the lobby's hero/mode-card icons
+// (see the <defs> in #screen-lobby) — reused here for the actual in-game card faces so a
+// player's card doesn't depend on the browser/OS's own emoji-font rendering of ♥♦♣♠, which
+// varies wildly in size/weight across platforms (this is exactly what caused one suit symbol
+// to render enormous relative to the rank on a reported device). Each path is centered at its
+// own local (0,0) origin sized to roughly a -7..7 box, then scaled via the viewBox below to
+// whatever pixel size .sym ends up being rendered at.
+const SUIT_PATH = {
+  h: '<path d="M0,3.2 C0,-1 -4.6,-1 -4.6,2 C-4.6,5 0,8.4 0,10.5 C0,8.4 4.6,5 4.6,2 C4.6,-1 0,-1 0,3.2 Z"/>',
+  s: '<path d="M0,-6.5 C3.4,-3 5.2,-0.6 5.2,2.2 A3.4,3.4 0 0 1 0.6,5.4 A2.2,2.2 0 0 0 2.8,7.6 H-2.8 A2.2,2.2 0 0 0 -0.6,5.4 A3.4,3.4 0 0 1 -5.2,2.2 C-5.2,-0.6 -3.4,-3 0,-6.5 Z"/>',
+  d: '<path d="M0,-6.6 L4.6,0 L0,6.6 L-4.6,0 Z"/>',
+  c: '<path d="M0,-2 A2.7,2.7 0 1 1 2.4,2.1 A2.7,2.7 0 1 1 0.6,-1.4 A2.7,2.7 0 1 1 -2.4,2.1 A2.7,2.7 0 1 1 -0.6,-1.4 C-1,0.5 -1.6,2.4 -3,5.2 H3 C1.6,2.4 1,0.5 0,-2 Z"/>',
+};
+// Returns the <div class="sym"> markup for a suit, as an inline vector icon instead of a plain
+// unicode character. viewBox is centered on the path data's own origin (an 18x18 box, -9..9 on
+// each axis) so the icon is naturally centered regardless of what size .sym is rendered at —
+// actual on-screen size is controlled purely by CSS (.sym width/height), see point 4's fix.
+function symHTML(suit){
+  return `<div class="sym"><svg viewBox="-9 -9 18 18" fill="${SUITS_INFO[suit].color==='red'?'#c0272d':'#1a1a1a'}">${SUIT_PATH[suit]}</svg></div>`;
+}
 // Bot display names — a little royal court instead of "בוט 1/2/3", indexed 0-2 by the bot's
 // relative slot (never by seat position, since that shifts depending on how many humans join).
 const BOT_NAMES = ['ארתור','ויקטוריה',"צ'רצ'יל",'אליזבט'];
@@ -568,7 +625,7 @@ function cardHTML(c, extraClass){
   const info = SUITS_INFO[c.suit];
   return `<div class="pcell face ${info.color} ${extraClass||''}">
     <div class="r">${rankLabel(c.rank)}</div>
-    <div class="sym">${info.sym}</div>
+    ${symHTML(c.suit)}
   </div>`;
 }
 
@@ -840,7 +897,7 @@ function flyGhostCard(card, fromRect, toRect){
   ghost.style.margin = '0';
   ghost.style.zIndex = 999;
   ghost.style.pointerEvents = 'none';
-  ghost.innerHTML = `<div class="r">${rankLabel(card.rank)}</div><div class="sym">${info.sym}</div>`;
+  ghost.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
   document.body.appendChild(ghost);
   const dx = toRect.left - fromRect.left;
   const dy = toRect.top - fromRect.top;
@@ -1343,11 +1400,6 @@ function renderAll(){
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     nameEl.classList.toggle('declared-finish', declared);
     renderPlayerGrid(slot, actual);
-    // Once a player graduates, only their top row (the first 3 cells) is in play — mark
-    // that row with a small arrow so it's obvious at a glance who's playing which row,
-    // without having to remember who tapped a top-row card at some earlier point.
-    const arrowEl = document.getElementById('ar-'+slot);
-    if(arrowEl) arrowEl.classList.toggle('show', !!S.graduated[actual]);
   }
 
   // piles
@@ -1357,7 +1409,7 @@ function renderAll(){
     // Show the drawn card face-up in place of the closed-pile back — this is the
     // player's own private decision, so it's only ever populated on their own screen.
     const info = SUITS_INFO[pendingDraw.card.suit];
-    closedEl.innerHTML = `<div class="r">${rankLabel(pendingDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
+    closedEl.innerHTML = `<div class="r">${rankLabel(pendingDraw.card.rank)}</div>${symHTML(pendingDraw.card.suit)}`;
     closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     closedEl.classList.add('drawn','disabled');
     closedEl.onclick = null;
@@ -1365,7 +1417,7 @@ function renderAll(){
     // A bot is "thinking" mid-turn with a card drawn from the closed pile — reveal it
     // face-up so everyone watching can see what it took, same as the player's own draw.
     const info = SUITS_INFO[botRevealedDraw.card.suit];
-    closedEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
+    closedEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div>${symHTML(botRevealedDraw.card.suit)}`;
     closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     closedEl.classList.add('drawn','disabled');
     closedEl.onclick = null;
@@ -1381,13 +1433,13 @@ function renderAll(){
     // open-pile slot during the pause (it hasn't gone anywhere yet from the viewer's
     // perspective), instead of jumping straight to whatever's now underneath it.
     const info = SUITS_INFO[botRevealedDraw.card.suit];
-    openEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div><div class="sym">${info.sym}</div>`;
+    openEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div>${symHTML(botRevealedDraw.card.suit)}`;
     openEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
   } else {
     const top = S.discardPile[S.discardPile.length-1];
     if(top){
       const info = SUITS_INFO[top.suit];
-      openEl.innerHTML = `<div class="r">${rankLabel(top.rank)}</div><div class="sym">${info.sym}</div>`;
+      openEl.innerHTML = `<div class="r">${rankLabel(top.rank)}</div>${symHTML(top.suit)}`;
       openEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     } else {
       openEl.innerHTML = '';
@@ -1481,6 +1533,11 @@ function renderPlayerGrid(disp, actual){
     wrap.innerHTML = html;
     const cellEl = wrap.firstElementChild;
     cellEl.dataset.slotIdx = i;
+    // Once a player graduates, only their top row (slots 0-2) is still in play — instead of a
+    // separate small arrow icon under the name (which read as unclear/decorative), highlight
+    // the 3 actually-playable cells directly with a gold glow, so it's obvious at a glance
+    // which row is live without having to remember who tapped a top-row card earlier.
+    if(S.graduated[actual] && activeRow.includes(i)) cellEl.classList.add('row-active');
     if(inOwnPeekWindow && bottomRow.includes(i)){
       cellEl.classList.add('selectable');
       // Both interactions apply to these 3 cards at once: a plain tap toggles that
@@ -1668,11 +1725,25 @@ function updateFirebaseStatus(ok){
   dot.className = 'dot ' + (ok ? 'ok' : 'err');
   text.textContent = ok ? 'Firebase מחובר ✓' : 'Firebase לא מוגדר';
   document.getElementById('create-room-btn').disabled = !ok;
+  // Mirrors create-room-btn's enabled state onto the demoted "create room instead" link shown
+  // during a deep-link join (see applyRoomDeepLink()) — kept in sync here rather than only at
+  // the moment the deep-link handler runs, since Firebase can finish connecting afterwards.
+  const createLink = document.getElementById('create-room-link');
+  if(createLink) createLink.disabled = !ok;
+}
+// Restores the player's own saved name every time this screen opens (saved on every
+// keystroke — see the 'input' listener on #online-name). whist.html's equivalent field has
+// the same behavior — see that file's comment on the shared-device tradeoff this implies.
+function getSavedNameSync(){
+  try{ return localStorage.getItem('sheshiyot_player_name') || ''; } catch(e){ return ''; }
+}
+function saveMyName(name){
+  try{ localStorage.setItem('sheshiyot_player_name', name); } catch(e){}
 }
 async function initOnlineSetup(){
   showScreen('screen-online-setup');
   const nameInput = document.getElementById('online-name');
-  if(nameInput) nameInput.value = '';
+  if(nameInput) nameInput.value = getSavedNameSync();
   const joinWrap = document.getElementById('join-row-wrap');
   if(joinWrap) joinWrap.style.display = 'none';
   const joinCodeInput = document.getElementById('join-code');
@@ -2025,10 +2096,22 @@ function applyRoomDeepLink(){
   chooseMode('online').then(()=>{
     const joinWrap = document.getElementById('join-row-wrap');
     const joinCodeInput = document.getElementById('join-code');
-    const showJoinBtn = document.getElementById('show-join-btn');
+    const actionsRow = document.getElementById('online-actions-row');
+    const createLink = document.getElementById('create-room-link');
+    const joinBtn = document.getElementById('join-room-btn');
     if(joinCodeInput) joinCodeInput.value = code;
     if(joinWrap) joinWrap.style.display = 'block';
-    if(showJoinBtn) showJoinBtn.style.display = 'none';
+    // A friend who tapped a WhatsApp invite link almost certainly wants to join that specific
+    // table, not host a new one — so the whole "צור חדר חדש / הצטרף לחדר קיים" choice (which
+    // makes sense on a cold visit to the page) is replaced with just the join action, made as
+    // prominent and unambiguous as possible: full-width, no competing button beside it. Hosting
+    // is still reachable, just demoted to a low-emphasis text link below in case they actually
+    // meant to open their own room.
+    if(actionsRow) actionsRow.style.display = 'none';
+    if(joinBtn) joinBtn.classList.add('deep-link-primary');
+    const joinRowEl = document.querySelector('#join-row-wrap .join-row');
+    if(joinRowEl) joinRowEl.classList.add('deep-link-mode');
+    if(createLink){ createLink.style.display = 'block'; createLink.disabled = document.getElementById('create-room-btn').disabled; }
     // Hand focus straight to the name field — the room code is already filled in, so typing
     // their name is the one remaining thing standing between the friend and pressing "הצטרף".
     const nameInput = document.getElementById('online-name');
