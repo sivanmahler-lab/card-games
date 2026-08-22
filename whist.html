@@ -1477,7 +1477,8 @@ function advanceTrumpBidding(){
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
-    if(window.SpeechBubbles) window.SpeechBubbles.showThinkingBubble('badge-'+displayFor(p), S.names[p], 1000);
+    // Bots are silent while deciding — no "thinking..." bubble (see js/ui/speech-bubbles.js);
+    // just the existing natural delay before the bid lands.
     scheduleTurnAction(()=>botTrumpBid(p), 1000);
   }
 }
@@ -1648,7 +1649,8 @@ function advanceTrickBidding(){
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
-    if(window.SpeechBubbles) window.SpeechBubbles.showThinkingBubble('badge-'+displayFor(p), S.names[p], 930);
+    // Bots are silent while deciding — no "thinking..." bubble; the zero-bid reaction (if any)
+    // fires from inside botDeclare() itself once the bid is actually set, see below.
     scheduleTurnAction(()=>botDeclare(p), 930);
   }
 }
@@ -1780,6 +1782,12 @@ function botDeclare(p){
   v = Math.max(isTrumpWinner?S.trumpBid.count:0, Math.min(13, v));
   if(forbid!==null && v===forbid) v = v>0? v-1 : v+1;
   S.bids[p]=v;
+  // Dramatic-moment reaction #1: a genuine zero bid. Only fires ~35% of the time even when
+  // triggered (see REACTION_CHANCE in js/ui/speech-bubbles.js) and never for the trump-winner
+  // (whose "bid" is just their already-committed trump count, never a real zero call).
+  if(window.SpeechBubbles && v===0 && !isTrumpWinner){
+    window.SpeechBubbles.showReactionBubble('badge-'+displayFor(p), S.names[p], 'onZeroBid');
+  }
   S.declareIdx++;
   advanceTrickBidding();
 }
@@ -1975,10 +1983,14 @@ function resolveTrick(){
     ann.className='trick-winner-ann';
     ann.textContent = '🏆 '+S.names[winnerPlayer]+' לוקח/ת';
     if(area) area.appendChild(ann);
-    // Bot reaction bubble — only for a bot winner, not a human one, and only a short "won the
-    // trick" reaction; missed-bid reactions happen once per round in finishRound() below.
-    if(window.SpeechBubbles && !S.isHuman[winnerPlayer]){
-      window.SpeechBubbles.showReactionBubble('badge-'+displayFor(winnerPlayer), S.names[winnerPlayer], 'onWinTrick');
+    // Dramatic-moment reaction #2: a surprise win — this bot already had at least as many
+    // tricks as it bid (S.tricksWon[winnerPlayer] not yet incremented for THIS trick at this
+    // point), so winning another one is an unwanted extra that risks blowing a made contract.
+    // A routine trick win toward a still-open bid says nothing — that's not dramatic, so no
+    // bubble fires for it at all (missed-bid reactions happen once per round in finishRound()
+    // below instead).
+    if(window.SpeechBubbles && !S.isHuman[winnerPlayer] && S.tricksWon[winnerPlayer] >= S.bids[winnerPlayer]){
+      window.SpeechBubbles.showReactionBubble('badge-'+displayFor(winnerPlayer), S.names[winnerPlayer], 'onSurpriseWin');
     }
   } catch(err){ console.error('Trick announcement failed', err); }
 
@@ -2066,12 +2078,14 @@ function finishRound(){
   // (see recordBotBidOutcome/botAggressiveness above) so their bidding keeps calibrating
   // toward their own actual accuracy, game after game, on this browser.
   for(const r of results){ if(!S.isHuman[r.p]) recordBotBidOutcome(S.names[r.p], r.bid, r.won); }
-  // Missed-bid reaction bubbles for bots that didn't make their contract — shown briefly right
-  // before the round-end modal covers the table, so the reaction is still visible for a beat.
+  // Dramatic-moment reaction #3: a BAD miss — off by 2 or more tricks in either direction, not
+  // just any missed contract (missing by exactly 1 is common and not dramatic enough to react
+  // to). Shown briefly right before the round-end modal covers the table, so it's still visible
+  // for a beat.
   if(window.SpeechBubbles){
     for(const r of results){
-      if(!S.isHuman[r.p] && !r.made){
-        window.SpeechBubbles.showReactionBubble('badge-'+displayFor(r.p), S.names[r.p], 'onMissedBid');
+      if(!S.isHuman[r.p] && !r.made && Math.abs(r.bid - r.won) >= 2){
+        window.SpeechBubbles.showReactionBubble('badge-'+displayFor(r.p), S.names[r.p], 'onBadMiss');
       }
     }
   }
