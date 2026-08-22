@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>שישיות — משחק הקלפים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Unified type system (see docs/premium-platform-proposal.md): Rubik carries headings, brand
+     text, and anywhere a number/score/bid needs to read with confident weight; Heebo carries
+     body copy, buttons, and tabular/list content. Both loaded at the weights actually used below
+     so nothing silently falls back to a system font. -->
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;600;700;800;900&family=Heebo:wght@300;400;500;600;800&display=swap" rel="stylesheet">
 <!-- Shared "Luxury Card Club" design tokens — see js/ui/theme.css and
      docs/premium-platform-proposal.md §1-2. This page keeps its own :root below for the
      tokens theme.css doesn't define (--felt/--teal/--amber) and now gets --surface/
@@ -39,7 +44,11 @@ body{
     radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
   font-family:'Heebo',sans-serif;color:var(--cream);overflow:hidden;height:100vh;
 }
-h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
+h1,h2,h3{font-family:'Rubik',sans-serif;}
+button{font-family:'Heebo',sans-serif;}
+/* Numbers/scores/bids read with Rubik's more confident weight — tag any such value with this
+   class instead of redeclaring font-family ad hoc at each call site. */
+.font-num{font-family:'Rubik',sans-serif;font-variant-numeric:tabular-nums;}
 @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
 @keyframes modalIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
 @keyframes glowPulse{0%,100%{text-shadow:0 0 18px rgba(240,216,150,.3);}50%{text-shadow:0 0 30px rgba(240,216,150,.6);}}
@@ -56,12 +65,36 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
   transform:translateX(-130%);transition:transform .55s ease;
 }
 .mode-card:hover::after,.tb-btn:hover::after,.btn-secondary:hover::after,.action-bar button:not(:disabled):hover::after{transform:translateX(130%);}
+
+/* ---------- SPLASH / LOADING SCREEN ---------- */
+@keyframes splashEmblemGlow{0%,100%{filter:drop-shadow(0 0 8px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 20px rgba(240,216,150,.7));}}
+#splash-screen{
+  position:fixed;inset:0;z-index:5000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.07), transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  transition:opacity .5s ease, visibility .5s ease;
+}
+#splash-screen.fade-out{opacity:0;visibility:hidden;pointer-events:none;}
+.splash-emblem{width:80px;height:auto;margin-bottom:10px;animation:splashEmblemGlow 2.6s ease-in-out infinite;}
+.splash-emblem svg{width:100%;height:auto;overflow:visible;}
+.splash-title{font-family:'Rubik',sans-serif;font-weight:800;font-size:38px;color:var(--gold-bright);text-shadow:0 0 22px rgba(240,216,150,.3);margin:0;}
+.splash-sub{font-size:13px;letter-spacing:.5px;color:rgba(250,244,230,.6);margin-bottom:30px;text-align:center;padding:0 20px;}
+.splash-bar-track{width:220px;max-width:70vw;height:6px;border-radius:4px;background:rgba(0,0,0,.4);border:1px solid rgba(212,175,90,.3);overflow:hidden;}
+.splash-bar-fill{height:100%;width:0%;border-radius:4px;background:linear-gradient(90deg,var(--gold),var(--gold-bright));box-shadow:0 0 10px rgba(240,216,150,.5);transition:width .35s ease;}
+.splash-status{margin-top:14px;font-size:12.5px;color:rgba(250,244,230,.55);min-height:16px;transition:opacity .2s ease;}
+@media (prefers-reduced-motion: reduce){
+  .splash-emblem{animation:none;}
+}
+
 .topbar{
   position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:space-between;
   padding:0 14px;background:linear-gradient(180deg, rgba(6,17,13,0.95), rgba(6,17,13,0.75));border-bottom:1px solid rgba(212,175,90,.35);z-index:100;
   backdrop-filter:blur(4px);
 }
-.brand{font-weight:700;font-size:16px;color:var(--gold-bright);display:flex;align-items:center;gap:8px;font-family:'Frank Ruhl Libre',serif;}
+.brand{font-weight:700;font-size:16px;color:var(--gold-bright);display:flex;align-items:center;gap:8px;font-family:'Rubik',sans-serif;}
 .brand .suits{font-size:14px;letter-spacing:2px;}
 .tb-btns{display:flex;gap:6px;}
 .tb-btn{
@@ -77,7 +110,7 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 #screen-lobby{justify-content:center;padding:20px;text-align:center;}
 .lobby-card{max-width:640px;width:100%;}
 .hero-suits{font-size:clamp(28px,9vw,52px);letter-spacing:clamp(4px,2.5vw,14px);margin-bottom:6px;color:var(--gold-bright);text-shadow:0 0 24px rgba(240,216,150,.35);white-space:nowrap;animation:glowPulse 3.4s ease-in-out infinite;}
-.hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;font-family:'Frank Ruhl Libre',serif;}
+.hero-title{font-size:44px;color:var(--cream);margin-bottom:4px;font-family:'Rubik',sans-serif;}
 .hero-sub{color:rgba(250,244,230,.65);font-size:15px;margin-bottom:34px;letter-spacing:.5px;}
 .mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
 @media(max-width:640px){.mode-grid{grid-template-columns:1fr;}}
@@ -93,7 +126,7 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .mode-grid .mode-card:nth-child(2){animation-delay:.15s;}
 .mode-grid .mode-card:nth-child(3){animation-delay:.25s;}
 .mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);display:flex;align-items:center;justify-content:center;height:46px;}
-.mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;font-family:'Frank Ruhl Libre',serif;}
+.mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;font-family:'Rubik',sans-serif;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
 .mode-card.online-card{border-color:var(--teal);}
 .mode-card.online-card .ic{color:var(--teal);}
@@ -137,7 +170,7 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .dot{width:9px;height:9px;border-radius:50%;background:#888;}
 .dot.ok{background:#4caf50;box-shadow:0 0 6px #4caf50;}
 .dot.err{background:#e05555;}
-.room-code-display{font-size:34px;font-weight:800;letter-spacing:8px;color:var(--gold-bright);margin:14px 0 4px;cursor:pointer;font-family:'Frank Ruhl Libre',serif;border-radius:14px;animation:codePulse 2.6s ease-in-out infinite;}
+.room-code-display{font-size:34px;font-weight:800;letter-spacing:8px;color:var(--gold-bright);margin:14px 0 4px;cursor:pointer;font-family:'Rubik',sans-serif;border-radius:14px;animation:codePulse 2.6s ease-in-out infinite;}
 .room-code-hint{font-size:11.5px;color:rgba(250,244,230,.45);margin-bottom:14px;}
 .whatsapp-share-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;
@@ -247,8 +280,13 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pcell.red{color:#c0272d;}
 .pcell.black{color:#1a1a1a;}
 .pcell.empty{visibility:hidden;}
-.pcell.selectable{cursor:pointer;box-shadow:0 0 0 2px var(--gold-bright);}
-.pcell.selectable:hover{transform:translateY(-4px);}
+.pcell{transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease;}
+.pcell.selectable{cursor:pointer;transform:translateY(-8px);box-shadow:0 6px 14px rgba(0,0,0,.3),0 0 0 2px var(--gold-bright),0 0 10px rgba(240,216,150,.35);}
+.pcell.selectable:hover{transform:translateY(-14px);box-shadow:0 10px 18px rgba(0,0,0,.4),0 0 0 2px var(--gold-bright),0 0 16px rgba(240,216,150,.5);}
+/* Own face-up cells that are NOT currently actionable (e.g. the graduated-out bottom row while
+   waiting to place a drawn card) are dimmed, matching whist.html's .card.illegal treatment — a
+   quiet visual cue for "not clickable right now" without a separate disabled-looking overlay. */
+.pcell.not-actionable{opacity:.55;}
 .pcell.justswapped{box-shadow:0 0 0 3px var(--teal);}
 .pcell.reorderable{cursor:grab;touch-action:none;}
 .pcell.reorderable:active{cursor:grabbing;}
@@ -303,9 +341,9 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .modal h2{color:var(--gold-bright);margin-top:0;}
 .modal p{font-size:13.5px;line-height:1.7;color:rgba(250,244,230,.85);}
 .close-btn{margin-top:14px;}
-.score-table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;}
+.score-table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;font-family:'Rubik',sans-serif;}
 .score-table th,.score-table td{padding:7px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08);}
-.score-table th{color:var(--gold-bright);}
+.score-table th{color:var(--gold-bright);font-family:'Heebo',sans-serif;}
 .score-table tr.winner td{color:var(--gold-bright);font-weight:800;}
 
 @media(max-width:480px){
@@ -344,6 +382,21 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 </style>
 </head>
 <body>
+<!-- Splash / loading screen: shown immediately (no flash of unstyled content while fonts/
+     Firebase/etc are still settling), then faded out once the real page is ready. See the
+     SplashScreen driver script near the end of this file for the progress-stage logic. -->
+<div id="splash-screen">
+  <div class="splash-emblem">
+    <svg viewBox="0 0 40 34" aria-hidden="true">
+      <rect x="2" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(-8 12 17)"/>
+      <rect x="18" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(8 28 17)"/>
+    </svg>
+  </div>
+  <h1 class="splash-title">שישיות</h1>
+  <div class="splash-sub">שישה קלפים, כמה שפחות נקודות</div>
+  <div class="splash-bar-track"><div class="splash-bar-fill" id="splash-bar-fill"></div></div>
+  <div class="splash-status" id="splash-status">מערבב את החפיסה...</div>
+</div>
 
 <div class="topbar">
   <div class="brand"><svg viewBox="0 0 40 34" aria-hidden="true" style="width:26px;height:auto;">
@@ -1551,6 +1604,11 @@ function renderPlayerGrid(disp, actual){
     } else if(canReorderOwnHand && S.phase!=='ended'){
       attachReorderDrag(cellEl, i);
     }
+    // While a drawn card is waiting to be placed, cells outside the active row can't take it —
+    // dim them so it's visually obvious where the drawn card actually can (and can't) go.
+    if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && !activeRow.includes(i) && showFace){
+      cellEl.classList.add('not-actionable');
+    }
     el.appendChild(cellEl);
   }
 }
@@ -2124,8 +2182,50 @@ function cleanupOnlineListeners(){
 }
 
 /* ============================= INIT ============================= */
+// ---------- Splash / loading screen driver ----------
+// A simple staged progress bar: each named stage jumps the bar to a fixed percentage and swaps
+// the status line, rather than a real byte-level progress measurement (there's nothing here to
+// measure bytes of — it's a single static HTML file). sheshiyot.html doesn't connect to Firebase
+// until the player actually chooses online mode, so unlike whist.html this sequence has no real
+// "connecting" step — the stages instead cover shuffling in and laying the table out.
+const SplashScreen = {
+  stages: [
+    { pct: 20,  text: 'מערבב את החפיסה...' },
+    { pct: 60,  text: 'מכין את השולחן...' },
+    { pct: 100, text: 'מוכן!' },
+  ],
+  _idx: 0,
+  _done: false,
+  set(stageIdx){
+    if(this._done) return;
+    const s = this.stages[Math.min(stageIdx, this.stages.length-1)];
+    const fill = document.getElementById('splash-bar-fill');
+    const status = document.getElementById('splash-status');
+    if(fill) fill.style.width = s.pct+'%';
+    if(status) status.textContent = s.text;
+  },
+  finish(){
+    if(this._done) return;
+    this._done = true;
+    this.set(this.stages.length-1);
+    const el = document.getElementById('splash-screen');
+    if(!el) return;
+    setTimeout(()=>{
+      el.classList.add('fade-out');
+      setTimeout(()=>{ el.remove(); }, 550);
+    }, 250);
+  }
+};
+SplashScreen.set(0);
+
 document.addEventListener('DOMContentLoaded', ()=>{
+  SplashScreen.set(1);
   showResumeGamePrompt();
+  // Give the lobby one frame to actually paint before declaring readiness, then close out the
+  // splash — applyRoomDeepLink() (registered as its own 'load' listener below) may still swap
+  // the visible screen shortly after this, but that transition happens underneath the
+  // already-faded splash rather than blocking it.
+  requestAnimationFrame(()=> requestAnimationFrame(()=> SplashScreen.finish()));
 });
 
 // Deep-link join: a friend who taps a WhatsApp-shared link lands on this page with
@@ -2170,6 +2270,14 @@ function applyRoomDeepLink(){
   });
 }
 window.addEventListener('load', applyRoomDeepLink);
+// The lobby's "חוקים" (rules) button links here as sheshiyot.html?rules=1 so a player can read
+// the rules before ever entering a game mode — openInstructions() itself doesn't depend on any
+// game state, so it's safe to fire straight from a query param on load like this.
+window.addEventListener('load', ()=>{
+  try{
+    if(new URLSearchParams(location.search).get('rules')==='1') openInstructions();
+  } catch(e){}
+});
 
 // PWA: register the service worker so the app shell can be installed / opened
 // offline. Safe to skip silently if unsupported (older browsers, non-https, etc).

@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>הלובי — משחקי קלפים</title>
-<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@700;900&family=Heebo:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Unified type system (see docs/premium-platform-proposal.md): Rubik carries headings/brand
+     text; Heebo carries body copy. Both loaded at the weights actually used so nothing silently
+     falls back to a system font. -->
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@600;700;800;900&family=Heebo:wght@400;600;800&display=swap" rel="stylesheet">
 <!-- Shared "Luxury Card Club" design tokens — see js/ui/theme.css and
      docs/premium-platform-proposal.md §1-2. Kept as a separate stylesheet (not inlined) so
      whist.html/sheshiyot.html can eventually link the same file and the three pages stay
@@ -41,45 +45,71 @@
     background:radial-gradient(circle at 50% 50%, transparent 40%, rgba(0,0,0,.35) 100%);
   }
   body > *{position:relative;z-index:1;}
-  h1{font-family:'Frank Ruhl Libre',serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;text-shadow:0 0 22px rgba(240,216,150,.3);}
+  h1{font-family:'Rubik',sans-serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;text-shadow:0 0 22px rgba(240,216,150,.3);}
   .sub{color:rgba(250,244,230,.65);margin-bottom:36px;font-size:14px;letter-spacing:.5px;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;max-width:800px;width:100%;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;max-width:800px;width:100%;perspective:1200px;}
 
   /* Game cards reuse .luxury-card from theme.css for the glass/hover treatment, and add only
      the layout/content styling specific to a lobby tile (padding, the shine sweep, spacing for
-     the icon/title/subtitle stack). */
-  a.card{
+     the icon/title/subtitle stack, and the 3D tilt-on-hover below). */
+  .card{
     text-decoration:none;color:inherit;
-    padding:26px 18px;text-align:center;
+    padding:28px 20px 22px;text-align:center;
     position:relative;overflow:hidden;
     opacity:0;animation:cardIn .55s ease forwards;
+    display:flex;flex-direction:column;align-items:center;
+    transform-style:preserve-3d;
+    transition:transform .35s cubic-bezier(.2,.7,.3,1), box-shadow .35s cubic-bezier(.2,.7,.3,1), border-color .22s ease;
   }
-  .grid a.card:nth-child(1){animation-delay:.05s;}
-  .grid a.card:nth-child(2){animation-delay:.18s;}
+  .grid .card:nth-child(1){animation-delay:.05s;}
+  .grid .card:nth-child(2){animation-delay:.18s;}
+  /* 3D tilt: a small rotation on both axes plus a slight lift, driven by mousemove JS below
+     (see tiltCard()) which sets --rx/--ry per pointer position. Falls back to a flat hover state
+     with no JS (touch devices, prefers-reduced-motion) via the plain :hover rule beneath it. */
+  .card{--rx:0deg;--ry:0deg;transform:rotateX(var(--rx)) rotateY(var(--ry)) translateY(0);}
+  .card:hover{box-shadow:0 22px 46px rgba(0,0,0,.5), 0 0 30px rgba(240,216,150,.16);}
   /* Soft top-down gold sheen inside the glass, on top of theme.css's own frosted background —
      gives the panel a sense of depth/light-from-above instead of a flat tint. */
-  a.card::before{
+  .card::before{
     content:'';position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(160deg, rgba(240,216,150,.10), transparent 45%);
   }
   /* The hover "shine sweep" — a diagonal light band that travels across the card. Separate
      layer from ::before (used for the static top-light) since both need to coexist. */
-  a.card::after{
+  .card::after{
     content:'';position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.14) 50%,transparent 60%);
     transform:translateX(-120%);transition:transform .6s ease;
   }
-  a.card:hover::after{transform:translateX(120%);}
-  .ic{margin-bottom:10px;display:flex;align-items:center;justify-content:center;height:52px;position:relative;}
+  .card:hover::after{transform:translateX(120%);}
+  .ic{margin-bottom:12px;display:flex;align-items:center;justify-content:center;height:52px;position:relative;}
   .ic svg{height:100%;width:auto;overflow:visible;transition:filter .25s, transform .25s;}
-  a.card:hover .ic svg{filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));transform:scale(1.05);}
-  a.card h3{margin:0 0 4px;font-size:18px;color:var(--cream);font-family:'Frank Ruhl Libre',serif;}
-  a.card p{margin:0;font-size:12.5px;color:var(--gold-dim);}
+  .card:hover .ic svg{filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));transform:scale(1.05) translateZ(20px);}
+  .card h3{margin:0 0 4px;font-size:19px;color:var(--cream);font-family:'Rubik',sans-serif;font-weight:700;}
+  .card p.tagline{margin:0 0 18px;font-size:12.5px;color:var(--gold-dim);}
+  .card-actions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:auto;}
+  .play-btn{
+    display:block;width:100%;padding:11px 14px;border-radius:10px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--gold),#b8933f);color:#241a05;
+    font-family:'Rubik',sans-serif;font-weight:800;font-size:14.5px;
+    text-decoration:none;text-align:center;
+    box-shadow:0 6px 16px rgba(212,175,90,.3);
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .play-btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(212,175,90,.4);}
+  .rules-btn{
+    display:block;width:100%;padding:8px 14px;border-radius:10px;
+    border:1px solid var(--surface-border);background:transparent;color:var(--gold-dim);
+    font-family:'Heebo',sans-serif;font-size:12.5px;font-weight:600;
+    text-decoration:none;text-align:center;cursor:pointer;
+    transition:border-color .18s ease, color .18s ease, background .18s ease;
+  }
+  .rules-btn:hover{border-color:var(--gold-bright);color:var(--gold-bright);background:rgba(212,175,90,.08);}
   h1.brand-title{display:flex;align-items:center;gap:12px;justify-content:center;}
   h1.brand-title svg{height:40px;width:auto;animation:emblemGlow 3.2s ease-in-out infinite;}
 
   @media (prefers-reduced-motion: reduce){
-    a.card{opacity:1;animation:none;}
+    .card{opacity:1;animation:none;transform:none !important;transition:box-shadow .2s ease;}
     h1.brand-title svg{animation:none;}
   }
 </style>
@@ -97,7 +127,7 @@
   </h1>
   <div class="sub">בחרו משחק</div>
   <div class="grid">
-    <a class="card luxury-card" href="whist.html">
+    <div class="card luxury-card" data-tilt>
       <div class="ic">
         <!-- Whist: a fanned hand of 13 card-backs -->
         <svg viewBox="0 0 200 100" aria-hidden="true">
@@ -107,10 +137,14 @@
           </g>
         </svg>
       </div>
-      <h3>וויסט</h3>
-      <p>חוזים, שליטים ולקיחות</p>
-    </a>
-    <a class="card luxury-card" href="sheshiyot.html">
+      <h3>וויסט ישראלי</h3>
+      <p class="tagline">חוזים, שליטים ולקיחות</p>
+      <div class="card-actions">
+        <a class="play-btn" href="whist.html">שחק עכשיו</a>
+        <a class="rules-btn" href="whist.html?rules=1">חוקי המשחק</a>
+      </div>
+    </div>
+    <div class="card luxury-card" data-tilt>
       <div class="ic">
         <!-- Sheshiyot: six face-up cards with polished vector suit glyphs (paths, not emoji —
              emoji rendering varies wildly across OS/browser font sets, while these paths render
@@ -141,9 +175,13 @@
         </svg>
       </div>
       <h3>שישיות</h3>
-      <p>שישה קלפים, כמה שפחות נקודות</p>
-    </a>
-    <!-- להוספת משחק חדש: פשוט מעתיקים כרטיס כזה ומצביעים ל-html החדש -->
+      <p class="tagline">שישה קלפים, כמה שפחות נקודות</p>
+      <div class="card-actions">
+        <a class="play-btn" href="sheshiyot.html">שחק עכשיו</a>
+        <a class="rules-btn" href="sheshiyot.html?rules=1">חוקי המשחק</a>
+      </div>
+    </div>
+    <!-- להוספת משחק חדש: פשוט מעתיקים כרטיס כזה (data-tilt + card-actions) ומצביעים ל-html החדש -->
   </div>
   <script>
     // Build the Whist fan programmatically: 13 card-backs rotated evenly across ~100deg,
@@ -176,6 +214,30 @@
         g.appendChild(wrap);
       }
     })();
+  </script>
+  <script>
+    // 3D tilt-on-hover for the lobby game cards: rotate the card slightly around both axes
+    // based on where the pointer sits over it, so it reads as a physical tile catching the
+    // light rather than a flat rectangle. Skipped entirely for touch input (no mousemove to
+    // drive it) and under prefers-reduced-motion, where the plain CSS :hover/lift still applies.
+    if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+      document.querySelectorAll('[data-tilt]').forEach(card=>{
+        const maxDeg = 7;
+        card.addEventListener('mousemove', e=>{
+          const rect = card.getBoundingClientRect();
+          const px = (e.clientX - rect.left) / rect.width;  // 0..1 across the card
+          const py = (e.clientY - rect.top) / rect.height;  // 0..1 down the card
+          const ry = (px - 0.5) * maxDeg * 2;   // left/right tilt
+          const rx = (0.5 - py) * maxDeg * 2;   // up/down tilt
+          card.style.setProperty('--ry', ry.toFixed(2)+'deg');
+          card.style.setProperty('--rx', rx.toFixed(2)+'deg');
+        });
+        card.addEventListener('mouseleave', ()=>{
+          card.style.setProperty('--ry', '0deg');
+          card.style.setProperty('--rx', '0deg');
+        });
+      });
+    }
   </script>
   <script>
     // PWA: register the service worker so the app shell can be installed / opened
