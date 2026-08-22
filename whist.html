@@ -644,6 +644,19 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
 
 </div>
 
+<!-- Bot persona + speech-bubble modules are loaded here as real ES modules (see
+     docs/premium-platform-proposal.md §2) and republished onto `window` so the classic script
+     below — which many inline onclick="..." handlers already depend on being non-module,
+     global-scope code — can call them as plain functions without any other change to its
+     structure. This keeps the "single static HTML file, no build step" workflow intact while
+     still getting genuine module separation for the AI/UI logic itself. -->
+<script type="module">
+  import * as BotPersona from './js/ai/bot-persona.js';
+  import * as SpeechBubbles from './js/ui/speech-bubbles.js';
+  window.BotPersona = BotPersona;
+  window.SpeechBubbles = SpeechBubbles;
+</script>
+
 <script>
 /* ============================= DATA ============================= */
 const SUITS = [
@@ -1424,6 +1437,7 @@ function advanceTrumpBidding(){
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
+    if(window.SpeechBubbles) window.SpeechBubbles.showThinkingBubble('badge-'+displayFor(p), S.names[p], 1000);
     scheduleTurnAction(()=>botTrumpBid(p), 1000);
   }
 }
@@ -1504,7 +1518,14 @@ function botTrumpBid(p){
   // low cards to spare, and extra trump length on top of that (see the big comment above
   // suitSafeTricks()). The learned per-bot multiplier nudges this up/down a little based
   // on whether this bot's past bids have tended to come up short or long.
-  const mult = botAggressiveness(S.names[p]);
+  // Combined multiplier: this bot's persistent learned calibration (botAggressiveness) times
+  // its hidden persona's riskTolerance (see js/ai/bot-persona.js) — a conservative bot like
+  // צ'רצ'יל needs a bigger safe-tricks margin before it's willing to open bidding at all, an
+  // aggressive bot like ארתור will push on a thinner margin. Falls back to the learned
+  // multiplier alone if the persona module hasn't loaded for some reason.
+  const mult = window.BotPersona
+    ? window.BotPersona.biddingMultiplier(S.names[p], botAggressiveness(S.names[p]))
+    : botAggressiveness(S.names[p]);
   let best = {suit:0, tricks:-1};
   for(let s=0;s<4;s++){
     const tricks = safeTricksIfTrump(hand, s) * mult;
@@ -1587,6 +1608,7 @@ function advanceTrickBidding(){
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
+    if(window.SpeechBubbles) window.SpeechBubbles.showThinkingBubble('badge-'+displayFor(p), S.names[p], 930);
     scheduleTurnAction(()=>botDeclare(p), 930);
   }
 }
@@ -1652,8 +1674,21 @@ function botDeclare(p){
   if(S.phase!=='trick-bidding' || S.declareOrder[S.declareIdx]!==p) return;
   const isTrumpWinner = (p===S.trumpBid.player);
   const hand = S.hands[p];
-  const mult = botAggressiveness(S.names[p]);
+  // Combined multiplier: persisted learned calibration × hidden persona riskTolerance — same
+  // reasoning as botTrumpBid() above.
+  const mult = window.BotPersona
+    ? window.BotPersona.biddingMultiplier(S.names[p], botAggressiveness(S.names[p]))
+    : botAggressiveness(S.names[p]);
   const est = estimateTricks(hand, S.trumpSuit) * mult;
+  // Whether this bot's persona actually "pulls the trigger" on a borderline zero-bid, given
+  // that the hand already qualifies per hasOnlyLowCardsEverySuit(). A conservative persona
+  // (riskAversionToZero > 1) takes it essentially every time; an aggressive one sometimes
+  // talks itself out of it even on a qualifying hand. Falls back to "always take it" (the
+  // original behavior) if the persona module hasn't loaded.
+  const qualifiesForZero = hasOnlyLowCardsEverySuit(hand);
+  const takeZeroBid = window.BotPersona
+    ? window.BotPersona.shouldConsiderZeroBid(qualifiesForZero, S.names[p])
+    : qualifiesForZero;
   const positionInOrder = S.declareIdx; // 0=trump winner already excluded, else 0..3 declare order slot
   const isLastBidder = (S.declareIdx===3);
   let v;
@@ -1666,10 +1701,11 @@ function botDeclare(p){
     // Rule 2 (2nd/3rd bidder, not the trump-setter): count trump-suit length plus strong
     // off-suit cards, i.e. the same safe-tricks estimate used everywhere else. Consider
     // bidding zero outright if the hand is uniformly weak in every suit.
-    if(hasOnlyLowCardsEverySuit(hand)){
+    if(takeZeroBid){
       v = 0;
     } else {
       v = Math.max(0, Math.min(13, Math.round(est)));
+      v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     }
   } else {
     // Rule 2, last bidder: the trickiest seat. Needs to weigh three things at once:
@@ -1681,7 +1717,7 @@ function botDeclare(p){
     //      pushing the total closer to 13 (an UNDER game favors most bidders and is the
     //      "expected" outcome most rounds), unless this hand genuinely can't support it.
     const declaredSoFar = S.declareOrder.slice(0,3).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
-    if(hasOnlyLowCardsEverySuit(hand)){
+    if(takeZeroBid){
       v = 0;
     } else {
       const baseline = Math.max(0, Math.min(13, Math.round(est)));
@@ -1695,6 +1731,7 @@ function botDeclare(p){
       } else {
         v = baseline;
       }
+      v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     }
   }
 
@@ -1808,7 +1845,17 @@ function botPlay(p){
     // Cards already known to be gone this round (from completed tricks), used to tell
     // whether a King etc. is now the effective top of its suit.
     const playedCards = S.trickHistory.flatMap(h=>h.cards.map(pc=>pc.card));
-    const suitTopIsGone = (suit, aboveRank)=> playedCards.some(c=>c.suit===suit && c.rank>aboveRank);
+    // Whether this specific bot's persona "reliably notices" that a suit's top card has
+    // already fallen (see js/ai/bot-persona.js knowsSuitTopIsGone). ויקטוריה's near-perfect
+    // countingAccuracy means she almost always uses this correctly; ארתור's lower accuracy
+    // means he sometimes leads as if a King were still second-best when the Ace is long gone.
+    // Falls back to the objective fact (the original behavior) if the persona module hasn't
+    // loaded.
+    const suitTopIsGoneObjective = (suit, aboveRank)=> playedCards.some(c=>c.suit===suit && c.rank>aboveRank);
+    const suitTopIsGone = (suit, aboveRank)=>{
+      const objective = suitTopIsGoneObjective(suit, aboveRank);
+      return window.BotPersona ? window.BotPersona.knowsSuitTopIsGone(objective, S.names[p]) : objective;
+    };
     if(S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
       choice = sorted[0];
     } else if(S.roundType==='UP' && needMore){
@@ -1888,6 +1935,11 @@ function resolveTrick(){
     ann.className='trick-winner-ann';
     ann.textContent = '🏆 '+S.names[winnerPlayer]+' לוקח/ת';
     if(area) area.appendChild(ann);
+    // Bot reaction bubble — only for a bot winner, not a human one, and only a short "won the
+    // trick" reaction; missed-bid reactions happen once per round in finishRound() below.
+    if(window.SpeechBubbles && !S.isHuman[winnerPlayer]){
+      window.SpeechBubbles.showReactionBubble('badge-'+displayFor(winnerPlayer), S.names[winnerPlayer], 'onWinTrick');
+    }
   } catch(err){ console.error('Trick announcement failed', err); }
 
   let finished = false;
@@ -1974,6 +2026,15 @@ function finishRound(){
   // (see recordBotBidOutcome/botAggressiveness above) so their bidding keeps calibrating
   // toward their own actual accuracy, game after game, on this browser.
   for(const r of results){ if(!S.isHuman[r.p]) recordBotBidOutcome(S.names[r.p], r.bid, r.won); }
+  // Missed-bid reaction bubbles for bots that didn't make their contract — shown briefly right
+  // before the round-end modal covers the table, so the reaction is still visible for a beat.
+  if(window.SpeechBubbles){
+    for(const r of results){
+      if(!S.isHuman[r.p] && !r.made){
+        window.SpeechBubbles.showReactionBubble('badge-'+displayFor(r.p), S.names[r.p], 'onMissedBid');
+      }
+    }
+  }
   // Voided round: if every single player missed their bid, no one earns or loses points —
   // the round is shown in the history (so the table isn't misleading about what happened)
   // but its points don't count toward anyone's total.
