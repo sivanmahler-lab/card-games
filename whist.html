@@ -2534,13 +2534,15 @@ function copyRoomCode(){
   }
 }
 
-// Opens WhatsApp (app on mobile, web on desktop) with a ready-made invite message,
-// including the room code and a link straight to the online-join screen — the friend
-// just taps the link, sees the code pre-filled in the message, and joins in one go.
+// Opens WhatsApp (app on mobile, web on desktop) with a ready-made invite message. The link
+// itself carries the room code as a ?room=CODE query param (see the deep-link handler near the
+// bottom of this file, applyRoomDeepLink()) — a friend who taps it lands straight on the
+// online-join screen with the code already filled in and the join row already open, instead of
+// having to copy the code out of the message text and paste it in by hand.
 function shareRoomWhatsapp(){
   if(!roomCode) return;
-  const link = location.origin + location.pathname;
-  const msg = `בואו נשחק וויסט! הצטרפו לחדר שלי — קוד: ${roomCode}\n${link}`;
+  const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomCode);
+  const msg = `בוא נשחק וויסט! לחץ על הקישור כדי להצטרף ישירות לשולחן שלי: ${link}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -2795,6 +2797,39 @@ window.addEventListener('load', ()=>{
   const cfg = loadFirebaseConfig();
   if(cfg) tryInitFirebase().then(ok=>updateFirebaseStatus(ok));
 });
+
+// Seamless deep-link join: if the page was opened via a shareRoomWhatsapp() link (see above),
+// the URL carries ?room=CODE. Instead of the friend having to read the code out of the WhatsApp
+// message and type/paste it into the join field by hand, jump straight to the online-join
+// screen with that code already filled in and the join row already expanded — all that's left
+// for them to do is type their own name and tap "הצטרף". The room code itself is not sensitive
+// (it's already been shared over WhatsApp in plain text), but the player's NAME is intentionally
+// still left for them to type — see the "on a shared/borrowed device" comment in
+// initOnlineSetup(), which this deliberately doesn't override.
+function applyRoomDeepLink(){
+  let code;
+  try{
+    const params = new URLSearchParams(location.search);
+    code = (params.get('room') || '').trim().toUpperCase();
+  } catch(e){ return; }
+  // Same 6-character shape genRoomCode() produces — a malformed/garbage ?room= value (e.g. from
+  // a mangled forward or a stale bookmark) is silently ignored rather than being pushed into
+  // joinRoom() where it would just fail with a "room not found" toast for no obvious reason.
+  if(!/^[A-Z0-9]{6}$/.test(code)) return;
+  chooseMode('online').then(()=>{
+    const joinWrap = document.getElementById('join-row-wrap');
+    const joinCodeInput = document.getElementById('join-code');
+    const showJoinBtn = document.getElementById('show-join-btn');
+    if(joinCodeInput) joinCodeInput.value = code;
+    if(joinWrap) joinWrap.style.display = 'block';
+    if(showJoinBtn) showJoinBtn.style.display = 'none';
+    // Hand focus straight to the name field — the room code is already filled in, so typing
+    // their name is the one remaining thing standing between the friend and pressing "הצטרף".
+    const nameInput = document.getElementById('online-name');
+    if(nameInput) nameInput.focus();
+  });
+}
+window.addEventListener('load', applyRoomDeepLink);
 
 // PWA: register the service worker so the app shell can be installed / opened
 // offline. Safe to skip silently if unsupported (older browsers, non-https, etc).
