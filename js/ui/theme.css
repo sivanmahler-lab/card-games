@@ -1,0 +1,107 @@
+/* =============================================================================================
+   THEME.CSS — shared "Luxury Card Club" design tokens
+   =============================================================================================
+   The single source of truth for the color/typography tokens shared across index.html (the
+   lobby) and, eventually, whist.html / sheshiyot.html — see docs/premium-platform-proposal.md
+   §1-2 for the full rationale. Loaded via a plain <link rel="stylesheet"> (no build step,
+   consistent with the rest of this project), so it must stay self-contained: no @import of
+   anything else, no build-time preprocessing assumed.
+
+   Guiding principle carried over from the proposal: gold is a spotlight, not a base color. It
+   marks ONE focal point at a time (an active hover, a call to action, a highlight) — it does
+   not outline everything. Everything else leans on the felt/surface/cream scale below.
+   ============================================================================================= */
+
+:root{
+  /* ---- Felt (base background) — unchanged from the existing whist.html/sheshiyot.html scale,
+     reused here so the lobby and the games feel like one continuous space rather than two
+     different products bolted together. */
+  --felt-1:#0d2b22;
+  --felt-2:#164434;
+  --felt-3:#1f5a44;
+
+  /* ---- Surface (cards, panels) — the new Glassmorphism layer. --surface is meant to be used
+     together with backdrop-filter: blur(...) on the element itself (CSS custom properties can't
+     bundle a filter, so each component's own rule pairs --surface with its own blur — see
+     .luxury-card below for the canonical pairing) and a translucent, slightly-lighter-than-felt
+     tint so content behind it still reads through faintly, like real frosted glass over a felt
+     table rather than an opaque card floating on top of it. */
+  --surface: rgba(22, 68, 52, .38);
+  --surface-border: rgba(212,175,90,.18);
+
+  /* ---- Gold scale — --gold/--gold-bright unchanged from the existing games; --gold-dim is new,
+     for secondary/supporting text that should still read as "gold family" without competing
+     with an actual focal highlight. */
+  --gold:#d4af5a;
+  --gold-bright:#f0d896;
+  --gold-dim: rgba(212,175,90,.55);
+
+  /* ---- Text / ink ---- */
+  --cream:#faf4e6;
+  --ink:#211a10;
+
+  /* ---- Slate — a deliberately DIFFERENT surface family, reserved for "analysis" contexts (the
+     Coach/review screen from the platform proposal, not yet built) so that switching from "I'm
+     playing" to "I'm reviewing" reads as a distinct mode, not just a different-colored felt. Not
+     used in the lobby or the games themselves — defined here so it's consistent whenever it
+     first gets used, rather than invented ad hoc later. */
+  --slate-1: #1a1f2b;
+
+  /* ---- Danger (unchanged, kept here so any shared component can reference it without needing
+     its own local redefinition) ---- */
+  --danger: #e0554a;
+}
+
+/* ---- Typography --------------------------------------------------------------------------
+   Frank Ruhl Libre is reserved for the brand name and large screen-level headings — H1/H2 in
+   spirit, not every button or label. Heebo carries everything else (body copy, buttons, small
+   UI text) at three weights only (400/600/800) so weight always means the same thing wherever
+   it's used, rather than drifting component to component. */
+.luxury-heading, h1.luxury-heading, h2.luxury-heading{
+  font-family:'Frank Ruhl Libre', serif;
+  font-weight:700;
+  color:var(--gold-bright);
+}
+.luxury-body{
+  font-family:'Heebo', sans-serif;
+}
+/* Any element carrying a score, bid count, or other changing number should get this class so
+   digits occupy fixed-width character cells — without it, a bid pill going from "9" to "10"
+   visibly reflows/jitters as the digit count changes mid-animation. */
+.tabular-nums{
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Luxury card / glass panel component ---------------------------------------------------
+   The shared visual language for anything meant to read as a "premium panel" — the lobby's game
+   cards today, and any future glass panel (settings, summaries) that wants the same treatment.
+   Deliberately a class, not a bare element selector, so existing markup opts in explicitly
+   rather than every div silently picking up frosted-glass styling. */
+.luxury-card{
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px); /* Safari/iOS still requires the vendor prefix */
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  transition: transform .22s cubic-bezier(.2,.7,.3,1), box-shadow .22s cubic-bezier(.2,.7,.3,1), border-color .22s ease;
+}
+.luxury-card:hover{
+  border-color: var(--gold-bright);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 34px rgba(0,0,0,.4), 0 0 24px rgba(240,216,150,.12);
+}
+
+/* ---- Motion sensitivity --------------------------------------------------------------------
+   Applies globally to any element wherever this stylesheet is loaded: a user with reduced-
+   motion preferences gets instant state changes across the whole page, not just the specific
+   components this file defines. Individual pages may still define their OWN more targeted
+   prefers-reduced-motion overrides for animations this file doesn't know about (e.g. card-deal
+   animations in the games) — this is a safety-net floor, not a replacement for those. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
