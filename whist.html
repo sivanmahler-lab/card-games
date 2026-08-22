@@ -236,29 +236,36 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:60;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
-/* Side badges (left/right seats) sit ABOVE their card fan, not on top of it — the badge is
-   anchored to the same top offset the fan used to start at, and the fan is pushed down below
-   the badge's own height (badge height + a fixed breathing-room gap) so the two never overlap,
-   at any viewport width. Using margin-top in em (relative to the badge's own font-size) plus a
-   small fixed gap keeps this in sync if the badge's font-size or padding changes later.
-   max-width caps how far the badge's own content (name + bid/tricks pills) can reach toward
-   the center of the felt — without a cap, a longer bot name plus its stats pills could stretch
-   past the safe zone and encroach on the central trick area on narrow phones. */
-.side-badge{position:absolute;z-index:35;max-width:34%;}
-.side-badge.left-badge{left:6px;top:10%;}
-.side-badge.right-badge{right:6px;top:10%;}
+/* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
+   side edge (left:2px / right:2px) and near the very top (top:4px) — directly above their own
+   card fan, never beside it. This is a corner anchor, not a percentage-based one, specifically
+   so the badge's position can never drift toward the table's center on any viewport width: it
+   is always exactly 2px from the felt's own left/right edge, full stop. The fan is pushed below
+   the badge by a fixed pixel amount (badge height + breathing room), tightened further on
+   narrow phones where the badge itself is also shrunk (see below), so the two never touch.
+   max-width additionally hard-caps the badge at a small, fixed corner footprint so its content
+   (name + bid/tricks pills) can never grow wide enough to reach the center trick area either. */
+.side-badge{position:absolute;z-index:35;max-width:104px;}
+.side-badge.left-badge{left:2px;top:4px;}
+.side-badge.right-badge{right:2px;top:4px;}
 .fan.side{position:absolute;z-index:30;}
-.fan.left-fan{left:6px;top:calc(10% + 54px);}
-.fan.right-fan{right:6px;top:calc(10% + 54px);}
+.fan.left-fan{left:6px;top:66px;}
+.fan.right-fan{right:6px;top:66px;}
 @media(max-width:430px){
+  .side-badge{max-width:84px;}
   /* .name-badge shrinks a notch on narrow phones (see below), so the fan can start slightly
      closer underneath it there instead of leaving oversized empty space. */
-  .fan.left-fan{top:calc(10% + 46px);}
-  .fan.right-fan{top:calc(10% + 46px);}
+  .fan.left-fan{top:56px;}
+  .fan.right-fan{top:56px;}
   /* On the narrowest phones, stack name-above-stats instead of side-by-side so the badge's
      own footprint stays narrow and short rather than stretching wide toward the center. */
-  .side-badge .name-badge{flex-direction:column;gap:2px;padding:5px 8px;}
-  .side-badge .badge-stats{flex-direction:row;gap:4px;}
+  .side-badge .name-badge{flex-direction:column;gap:2px;padding:4px 6px;}
+  .side-badge .badge-stats{flex-direction:row;gap:3px;}
+}
+@media(max-width:360px){
+  .side-badge{max-width:72px;}
+  .fan.left-fan{top:52px;}
+  .fan.right-fan{top:52px;}
 }
 
 .name-badge{
