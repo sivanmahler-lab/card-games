@@ -6,6 +6,11 @@
 <title>שישיות — משחק הקלפים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
+<!-- Shared "Luxury Card Club" design tokens — see js/ui/theme.css and
+     docs/premium-platform-proposal.md §1-2. This page keeps its own :root below for the
+     tokens theme.css doesn't define (--felt/--teal/--amber) and now gets --surface/
+     --surface-border/--gold-dim/--slate-1 from theme.css instead of redefining them. -->
+<link rel="stylesheet" href="js/ui/theme.css">
 <!-- PWA: lets the site be installed to the home screen as an app -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0d2b22">
@@ -16,6 +21,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
+/* Page-specific tokens only — --felt/--teal/--amber have no equivalent in theme.css, so they
+   stay defined here. --felt-1/--felt-2/--felt-3/--gold/--gold-bright/--cream/--ink are also
+   redeclared for safety (identical values to theme.css) so this page still renders correctly
+   if theme.css ever fails to load; --surface/--surface-border/--gold-dim/--slate-1/--danger
+   are intentionally NOT redeclared here — they come from theme.css only. */
 :root{
   --felt:#0f3d2e; --felt-1:#0d2b22; --felt-2:#164434; --felt-3:#1f5a44;
   --gold:#d4af5a; --gold-bright:#f0d896; --cream:#faf4e6; --teal:#3f9a8b; --amber:#d99a3f; --ink:#211a10;
@@ -72,15 +82,16 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:18px;}
 @media(max-width:640px){.mode-grid{grid-template-columns:1fr;}}
 .mode-card{
-  background:linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.015));
-  border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
-  transition:.22s cubic-bezier(.2,.7,.3,1); position:relative; overflow:hidden; cursor:pointer;
+  /* Glassmorphism via theme.css's .luxury-card (background/backdrop-filter/border/hover are
+     applied through that class on the element itself — see the mode-card markup below); this
+     rule only adds the layout/content styling specific to a lobby mode-tile. */
+  border-radius:14px;padding:22px 16px;text-align:center;
+  position:relative; overflow:hidden; cursor:pointer;
   opacity:0;animation:cardIn .55s ease forwards;
 }
 .mode-grid .mode-card:nth-child(1){animation-delay:.05s;}
 .mode-grid .mode-card:nth-child(2){animation-delay:.15s;}
 .mode-grid .mode-card:nth-child(3){animation-delay:.25s;}
-.mode-card:hover{border-color:var(--gold-bright);transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.4);}
 .mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);display:flex;align-items:center;justify-content:center;height:46px;}
 .mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;font-family:'Frank Ruhl Libre',serif;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
@@ -112,7 +123,7 @@ h1,h2,h3{font-family:'Frank Ruhl Libre',serif;}
 .join-row{display:flex;gap:8px;}
 .join-row input{flex:1;}
 .join-row .btn-primary{width:auto;margin-top:0;padding:11px 16px;}
-.online-box,.setup-box,.waiting-box{max-width:480px;width:100%;padding:20px;text-align:center;}
+.online-box,.setup-box,.waiting-box{max-width:480px;width:100%;padding:20px;text-align:center;border-radius:16px;}
 .online-box h2,.waiting-box h2{margin-bottom:2px;}
 .sub{color:rgba(250,244,230,.55);font-size:13px;margin:0 0 10px;}
 .firebase-status{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,90,.2);
@@ -166,11 +177,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 
 .pgrid-wrap{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
 .pgrid-wrap.pos-0{bottom:6px;left:50%;transform:translateX(-50%);z-index:40;}
-.pgrid-wrap.pos-1{left:6px;top:50%;transform:translateY(-50%);z-index:20;}
+/* Side players (pos-1/pos-3): fixed-pixel corner pin, NOT percentage/translateY-centered.
+   whist.html hit this exact bug earlier — a vertically-centered side badge+card stack still
+   visually drifted toward the table center on narrow phones. Pinning to a true top corner
+   with a fixed max-width cap (tightened further at the breakpoints below) is what actually
+   held up under mobile verification there, so the same pattern is used here. */
+.pgrid-wrap.pos-1{left:2px;top:4px;transform:none;z-index:20;max-width:104px;}
 .pgrid-wrap.pos-2{top:8px;left:50%;transform:translateX(-50%);z-index:20;}
-.pgrid-wrap.pos-3{right:6px;top:50%;transform:translateY(-50%);z-index:20;}
+.pgrid-wrap.pos-3{right:2px;top:4px;transform:none;z-index:20;max-width:104px;}
 .p-name{font-size:12.5px;font-weight:700;background:rgba(0,0,0,.6);border:1px solid rgba(212,175,90,.4);border-radius:14px;
-  padding:3px 12px;white-space:nowrap;}
+  padding:3px 12px;white-space:nowrap;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);animation:codePulse 1.3s ease-in-out infinite;}
 .p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
 .pgrid-inner{display:flex;flex-direction:column;align-items:center;gap:1px;}
@@ -192,15 +208,15 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    height for them — leaving almost no gap between the top player's row and the
    center piles. Scale back down whenever height is tight, regardless of width. */
 .pcell{
-  width:44px;height:62px;border-radius:6px;position:relative;cursor:default;
+  width:50px;height:70px;border-radius:6px;position:relative;cursor:default;
   background:repeating-linear-gradient(45deg, #8a1f2b, #8a1f2b 6px, #5c1219 6px, #5c1219 12px);
   border:1px solid rgba(240,216,150,.4);box-shadow:inset 0 0 0 2px rgba(240,216,150,.12);
   display:flex;align-items:center;justify-content:center;font-size:20px;color:rgba(255,255,255,.15);
   transition:transform .12s, box-shadow .12s;
 }
 .pcell.face{background:linear-gradient(160deg, rgba(255,255,255,.6) 0%, transparent 30%), #fdfaf1;color:#222;box-shadow:0 2px 6px rgba(0,0,0,.3);}
-.pcell.face .r{position:absolute;top:2px;right:3px;font-size:10px;font-weight:800;line-height:1;}
-.pcell.face .sym{font-size:16px;}
+.pcell.face .r{position:absolute;top:2px;right:3px;font-size:11px;font-weight:800;line-height:1;}
+.pcell.face .sym{font-size:18px;}
 .pcell.red{color:#c0272d;}
 .pcell.black{color:#1a1a1a;}
 .pcell.empty{visibility:hidden;}
@@ -227,7 +243,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 @media(min-width:700px){ .results-panel{max-width:480px;} }
 
 .center-pot{display:flex;align-items:center;gap:18px;}
-.pile{width:52px;height:74px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
+.pile{width:58px;height:82px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
 .pile.closed{background:repeating-linear-gradient(45deg, #8a1f2b, #8a1f2b 6px, #5c1219 6px, #5c1219 12px);border:1px solid rgba(240,216,150,.4);cursor:pointer;font-size:22px;color:rgba(255,255,255,.2);}
 .pile.closed:hover{transform:translateY(-2px);}
 .pile.closed.disabled{cursor:default;opacity:.5;}
@@ -265,15 +281,19 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .score-table tr.winner td{color:var(--gold-bright);font-weight:800;}
 
 @media(max-width:480px){
-  .pcell{width:38px;height:54px;}
-  .pile{width:42px;height:60px;}
+  .pcell{width:44px;height:62px;}
+  .pile{width:46px;height:65px;}
   /* Side players' card grids were visually overlapping the center piles on narrow
      phones — .pgrid.small only scales the cards visually, the layout box itself stays
      full width, so it needs to shrink AND sit further out for the piles to have room. */
   .pgrid.small{transform:scale(.5);}
-  .pgrid-wrap.pos-1{left:-6px;}
-  .pgrid-wrap.pos-3{right:-6px;}
+  .pgrid-wrap.pos-1{max-width:84px;}
+  .pgrid-wrap.pos-3{max-width:84px;}
   .center-pot > div{gap:10px !important;}
+}
+@media(max-width:360px){
+  .pgrid-wrap.pos-1{max-width:72px;}
+  .pgrid-wrap.pos-3{max-width:72px;}
 }
 /* Wide-but-short windows (e.g. a browser resized short rather than a narrow phone)
    don't match the max-width rules above, yet the felt still doesn't have enough
@@ -313,6 +333,15 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 <div class="screen active" id="screen-lobby">
   <div class="lobby-card">
     <svg class="hero-svg" viewBox="0 0 150 70" aria-hidden="true" style="width:clamp(110px,26vw,170px);height:auto;margin-bottom:10px;">
+        <!-- Six face-up cards with polished vector suit glyphs (paths, not emoji/text glyphs —
+             those render inconsistently across OS/browser font sets; these paths render
+             identically everywhere, matching the pattern already used in index.html). -->
+        <defs>
+          <g id="she-suit-heart"><path d="M0,3.2 C0,-1 -4.6,-1 -4.6,2 C-4.6,5 0,8.4 0,10.5 C0,8.4 4.6,5 4.6,2 C4.6,-1 0,-1 0,3.2 Z"/></g>
+          <g id="she-suit-spade"><path d="M0,-6.5 C3.4,-3 5.2,-0.6 5.2,2.2 A3.4,3.4 0 0 1 0.6,5.4 A2.2,2.2 0 0 0 2.8,7.6 H-2.8 A2.2,2.2 0 0 0 -0.6,5.4 A3.4,3.4 0 0 1 -5.2,2.2 C-5.2,-0.6 -3.4,-3 0,-6.5 Z"/></g>
+          <g id="she-suit-diamond"><path d="M0,-6.6 L4.6,0 L0,6.6 L-4.6,0 Z"/></g>
+          <g id="she-suit-club"><path d="M0,-2 A2.7,2.7 0 1 1 2.4,2.1 A2.7,2.7 0 1 1 0.6,-1.4 A2.7,2.7 0 1 1 -2.4,2.1 A2.7,2.7 0 1 1 -0.6,-1.4 C-1,0.5 -1.6,2.4 -3,5.2 H3 C1.6,2.4 1,0.5 0,-2 Z"/></g>
+        </defs>
         <g stroke="#211a10" stroke-width="1.5">
             <rect x="4"  y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
             <rect x="62" y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
@@ -321,24 +350,23 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
             <rect x="62" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
             <rect x="120" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
           </g>
-          <g font-family="Heebo, sans-serif" font-weight="800" font-size="13" text-anchor="middle">
-            <text x="17"  y="19" fill="#c0272d">♥</text>
-            <text x="75"  y="19" fill="#1a1a1a">♠</text>
-            <text x="133" y="19" fill="#c0272d">♦</text>
-            <text x="17"  y="55" fill="#1a1a1a">♣</text>
-            <text x="75"  y="55" fill="#c0272d">♥</text>
-            <text x="133" y="55" fill="#1a1a1a">♠</text>
-          </g>
+          <use href="#she-suit-heart"   x="17"  y="17" fill="#c0272d"/>
+          <use href="#she-suit-spade"   x="75"  y="17" fill="#1a1a1a"/>
+          <use href="#she-suit-diamond" x="133" y="17" fill="#c0272d"/>
+          <use href="#she-suit-club"    x="17"  y="53" fill="#1a1a1a"/>
+          <use href="#she-suit-heart"   x="75"  y="53" fill="#c0272d"/>
+          <use href="#she-suit-spade"   x="133" y="53" fill="#1a1a1a"/>
       </svg>
     <div class="hero-title">שישיות</div>
     <div class="hero-sub">שישה קלפים, כמה שפחות נקודות — משחק הקלפים הישראלי</div>
     <div class="mode-grid">
-      <div class="mode-card" onclick="chooseMode('computer')">
+      <div class="mode-card luxury-card" onclick="chooseMode('computer')">
         <div class="ic">
           <!-- vs computer: a player card facing off against three bot silhouettes -->
           <svg viewBox="0 0 90 60" aria-hidden="true" style="width:52px;height:auto;">
+            <defs><g id="she-mc-heart"><path d="M0,3.2 C0,-1 -4.6,-1 -4.6,2 C-4.6,5 0,8.4 0,10.5 C0,8.4 4.6,5 4.6,2 C4.6,-1 0,-1 0,3.2 Z"/></g></defs>
             <rect x="4" y="16" width="26" height="36" rx="4" fill="#faf4e6" stroke="#211a10" stroke-width="1.5"/>
-            <text x="17" y="39" font-family="Heebo, sans-serif" font-weight="800" font-size="15" text-anchor="middle" fill="#c0272d">♥</text>
+            <use href="#she-mc-heart" x="17" y="34" fill="#c0272d"/>
             <g stroke="#d4af5a" stroke-width="1.6" fill="none">
               <path d="M40 30h10" stroke-dasharray="2 3"/>
             </g>
@@ -359,7 +387,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
         <h3>מול המחשב</h3>
         <p>את/ה מול שלושה בוטים. מתחילים מיד.</p>
       </div>
-      <div class="mode-card online-card" onclick="chooseMode('online')">
+      <div class="mode-card online-card luxury-card" onclick="chooseMode('online')">
         <div class="ic">
           <!-- online with friends: four connected player dots around a signal pulse -->
           <svg viewBox="0 0 70 60" aria-hidden="true" style="width:44px;height:auto;">
@@ -384,7 +412,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 
 <!-- ONLINE SETUP -->
 <div class="screen" id="screen-online-setup">
-  <div class="online-box">
+  <div class="online-box luxury-card">
     <h2 style="display:flex;align-items:center;justify-content:center;gap:10px;">
       <svg viewBox="0 0 70 60" aria-hidden="true" style="width:32px;height:auto;">
         <g stroke="#d4af5a" stroke-width="1.4" fill="none" opacity="0.75">
@@ -426,7 +454,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 
 <!-- WAITING ROOM -->
 <div class="screen" id="screen-waiting">
-  <div class="waiting-box">
+  <div class="waiting-box luxury-card">
     <h2>🎴 ממתינים לשחקנים</h2>
     <p style="color:rgba(250,244,230,.55);font-size:13px;margin:4px 0 0;">שלחו את קוד החדר לחברים:</p>
     <div class="room-code-display" id="waiting-code" onclick="copyRoomCode()" title="לחץ להעתקה">------</div>
@@ -645,12 +673,15 @@ function ensureDrawPile(){
 }
 
 /* ============================= FLOW: LOCAL / VS COMPUTER ============================= */
-function chooseMode(m){
+async function chooseMode(m){
   mode = m;
   if(m==='computer'){
     startLocalGame(1);
   } else if(m==='online'){
-    initOnlineSetup();
+    // Returned so callers that need to act after the online-setup screen is ready — e.g.
+    // applyRoomDeepLink() prefilling the join code — can await/`.then()` this instead of
+    // racing initOnlineSetup()'s own async Firebase-status work.
+    return initOnlineSetup();
   }
 }
 function startLocalGame(numHumans){
@@ -1596,13 +1627,15 @@ function copyRoomCode(){
   showToast('קוד הועתק: '+roomCode);
 }
 
-// Opens WhatsApp (app on mobile, web on desktop) with a ready-made invite message,
-// including the room code and a link straight to the online-join screen — the friend
-// just taps the link, sees the code pre-filled in the message, and joins in one go.
+// Opens WhatsApp (app on mobile, web on desktop) with a ready-made invite message. The link
+// itself carries the room code as a ?room=CODE query param (see the deep-link handler near the
+// bottom of this file, applyRoomDeepLink()) — a friend who taps it lands straight on the
+// online-join screen with the code already filled in and the join row already open, instead of
+// having to copy the code out of the message text and paste it in by hand.
 function shareRoomWhatsapp(){
   if(!roomCode) return;
-  const link = location.origin + location.pathname;
-  const msg = `בואו נשחק שישיות! הצטרפו לחדר שלי — קוד: ${roomCode}\n${link}`;
+  const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomCode);
+  const msg = `בוא/י לשחק איתי שישיות! לחצו להצטרפות ישירה לשולחן: ${link}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 function showWaitingScreen(myName){
@@ -1867,6 +1900,37 @@ function cleanupOnlineListeners(){
 document.addEventListener('DOMContentLoaded', ()=>{
   // nothing to auto-init; user picks a mode from the lobby
 });
+
+// Deep-link join: a friend who taps a WhatsApp-shared link lands on this page with
+// ?room=CODE in the URL. Detect it, jump straight to the online-join screen, pre-fill the
+// code, and open the join row — no manual copy-paste of the room code required. The room
+// CODE itself is not sensitive (it's already been shared over WhatsApp in plain text), but
+// the player's NAME is intentionally still left for them to type — see the "on a shared/
+// borrowed device" comment in initOnlineSetup(), which this deliberately doesn't override.
+function applyRoomDeepLink(){
+  let code;
+  try{
+    const params = new URLSearchParams(location.search);
+    code = (params.get('room') || '').trim().toUpperCase();
+  } catch(e){ return; }
+  // Same 6-character shape genRoomCode() produces — a malformed/garbage ?room= value (e.g. from
+  // a mangled forward or a stale bookmark) is silently ignored rather than being pushed into
+  // joinRoom() where it would just fail with a "room not found" toast for no obvious reason.
+  if(!/^[A-Z0-9]{6}$/.test(code)) return;
+  chooseMode('online').then(()=>{
+    const joinWrap = document.getElementById('join-row-wrap');
+    const joinCodeInput = document.getElementById('join-code');
+    const showJoinBtn = document.getElementById('show-join-btn');
+    if(joinCodeInput) joinCodeInput.value = code;
+    if(joinWrap) joinWrap.style.display = 'block';
+    if(showJoinBtn) showJoinBtn.style.display = 'none';
+    // Hand focus straight to the name field — the room code is already filled in, so typing
+    // their name is the one remaining thing standing between the friend and pressing "הצטרף".
+    const nameInput = document.getElementById('online-name');
+    if(nameInput) nameInput.focus();
+  });
+}
+window.addEventListener('load', applyRoomDeepLink);
 
 // PWA: register the service worker so the app shell can be installed / opened
 // offline. Safe to skip silently if unsupported (older browsers, non-https, etc).
