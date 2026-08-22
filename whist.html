@@ -2548,6 +2548,30 @@ function genRoomCode(){
   return code;
 }
 
+// Fire-and-forget push notification to the admin's phone via ntfy.sh whenever a room is
+// created or joined. Best-effort only — a failed/blocked request must never interrupt the
+// actual room flow, hence the empty .catch().
+async function sendAdminAlert(text){
+  try{
+    fetch('https://ntfy.sh/sivan-cards-live', {
+      method: 'POST',
+      body: text,
+      headers: { 'Title': 'התראת משחק קלפים' }
+    }).catch(()=>{});
+  } catch(e){}
+}
+
+// A room is considered a "ghost" (abandoned) once nobody is connected AND it's been more than
+// 30 minutes since any activity was recorded in it — see the lastActive stamp written by
+// pushStateToFirebase()/onDisconnect handlers below. Rooms still in this window, or with a
+// player actively connected, are left alone.
+const ROOM_STALE_MS = 30*60*1000;
+function isRoomStale(data){
+  if(!data || !data.meta) return true;
+  const lastActive = data.meta.lastActive || data.meta.created || 0;
+  return (Date.now() - lastActive) > ROOM_STALE_MS;
+}
+
 async function createRoom(){
   if(!fbDb){ showToast('יש להגדיר Firebase קודם'); return; }
   const myName = document.getElementById('online-name').value.trim();
@@ -2566,17 +2590,26 @@ async function createRoom(){
     isHost = true;
     isOnline = true;
 
-    await fbDb.ref('rooms/'+code).set({
-      meta: { status:'waiting', created:Date.now(), host:0 },
+    const roomRefNow = fbDb.ref('rooms/'+code);
+    await roomRefNow.set({
+      meta: { status:'waiting', created:Date.now(), lastActive:Date.now(), host:0 },
       players: { 0: { name:myName, joined:true } }
     });
 
-    // Auto-cleanup on disconnect
-    fbDb.ref('rooms/'+code+'/meta/hostOnline').onDisconnect().set(false);
-    fbDb.ref('rooms/'+code+'/meta/hostOnline').set(true);
+    // Presence & auto-cleanup: if the host disconnects before the game starts (closes the tab,
+    // loses connection, etc.) the whole room is removed so it never lingers as a ghost room
+    // other players could stumble into. Once the game actually starts this onDisconnect is left
+    // in place too — a host dropping mid-game still means the room should go away.
+    roomRefNow.onDisconnect().remove();
+    // Per-player presence: this seat's own entry is removed on disconnect regardless of host
+    // status, so a room a host is still in but whose player entry glitched doesn't show a ghost
+    // seat either.
+    roomRefNow.child('players/0').onDisconnect().remove();
 
-    roomRef = fbDb.ref('rooms/'+code);
+    roomRef = roomRefNow;
     showWaitingScreen();
+
+    sendAdminAlert(`🎴 וויסט - ${myName} יצר/ה חדר חדש (קוד: ${code})`);
   } catch(e){
     console.error('createRoom error', e);
     showToast('שגיאה ביצירת חדר: '+e.message);
@@ -2596,6 +2629,10 @@ async function joinRoom(){
     if(!snap.exists()){ showToast('חדר לא נמצא: '+code); return; }
     const data = snap.val();
     if(data.meta.status!=='waiting'){ showToast('המשחק כבר התחיל בחדר זה'); return; }
+    // Ghost-room guard: a room with no lastActive heartbeat in the last 30 minutes is treated
+    // as abandoned rather than joinable, even if its onDisconnect cleanup never fired (e.g. the
+    // host's browser crashed instead of closing cleanly).
+    if(isRoomStale(data)){ showToast('החדר הזה לא פעיל יותר'); fbDb.ref('rooms/'+code).remove().catch(()=>{}); return; }
 
     const players = data.players || {};
     let seat = -1;
@@ -2609,9 +2646,15 @@ async function joinRoom(){
     isHost = false;
     isOnline = true;
 
-    await fbDb.ref('rooms/'+code+'/players/'+seat).set({ name:myName, joined:true });
-    roomRef = fbDb.ref('rooms/'+code);
+    const roomRefNow = fbDb.ref('rooms/'+code);
+    await roomRefNow.child('players/'+seat).set({ name:myName, joined:true });
+    await roomRefNow.child('meta/lastActive').set(Date.now());
+    // This player's own seat is cleaned up if they disconnect (closes tab, loses connection).
+    roomRefNow.child('players/'+seat).onDisconnect().remove();
+    roomRef = roomRefNow;
     showWaitingScreen();
+
+    sendAdminAlert(`👥 וויסט - ${myName} הצטרף/ה לחדר ${code}`);
   } catch(e){
     console.error('joinRoom error', e);
     showToast('שגיאה בהצטרפות: '+e.message);
@@ -2935,6 +2978,10 @@ function pushStateToFirebase(){
     roundEndData: S.roundEndData || null,
   };
   roomRef.child('gameState').set(state).catch(e=>console.error('Firebase push failed',e));
+  // Activity heartbeat: every host-driven state push also stamps meta/lastActive, so a room
+  // that's mid-game but between explicit player actions is never mistaken for a stale/ghost room
+  // by the 30-minute isRoomStale() check in joinRoom().
+  roomRef.child('meta/lastActive').set(Date.now()).catch(()=>{});
 }
 
 function listenForPendingActions(){

@@ -1763,18 +1763,51 @@ function genRoomCode(){
   for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
   return code;
 }
+
+// Fire-and-forget push notification to the admin's phone via ntfy.sh whenever a room is
+// created or joined. Best-effort only — a failed/blocked request must never interrupt the
+// actual room flow, hence the empty .catch().
+async function sendAdminAlert(text){
+  try{
+    fetch('https://ntfy.sh/sivan-cards-live', {
+      method: 'POST',
+      body: text,
+      headers: { 'Title': 'התראת משחק קלפים' }
+    }).catch(()=>{});
+  } catch(e){}
+}
+
+// A room is considered a "ghost" (abandoned) once it's been more than 30 minutes since any
+// activity was recorded in it — see the lastActive stamp written below and in
+// pushStateToFirebase(). Rooms still inside this window are left alone even with no players.
+const ROOM_STALE_MS = 30*60*1000;
+function isRoomStale(data){
+  if(!data || !data.meta) return true;
+  const lastActive = data.meta.lastActive || data.meta.createdAt || 0;
+  return (Date.now() - lastActive) > ROOM_STALE_MS;
+}
+
 async function createRoom(){
   const myName = document.getElementById('online-name').value.trim();
   if(!myName){ showToast('נא להזין את השם שלך'); document.getElementById('online-name').focus(); return; }
   if(!fbReady){ showToast('אין חיבור ל-Firebase'); return; }
   roomCode = genRoomCode();
   isOnline = true; isHost = true; myOnlineSeat = 0;
-  roomRef = fbDB.ref('sheshiyot_rooms/'+roomCode);
-  await roomRef.set({
-    meta:{status:'waiting', host:myName, created:true},
+  const ref = fbDB.ref('sheshiyot_rooms/'+roomCode);
+  await ref.set({
+    meta:{status:'waiting', host:myName, created:true, createdAt:Date.now(), lastActive:Date.now()},
     players:{ 0:{name:myName, joined:true} }
   });
+  // Presence & auto-cleanup: if the host disconnects before the game starts (closes the tab,
+  // loses connection, etc.) the whole room is removed so it never lingers as a ghost room other
+  // players could stumble into. Left in place after the game starts too — a host dropping
+  // mid-game still means the room should go away.
+  ref.onDisconnect().remove();
+  ref.child('players/0').onDisconnect().remove();
+  roomRef = ref;
   showWaitingScreen(myName);
+
+  sendAdminAlert(`🎴 שישיות - ${myName} יצר/ה חדר חדש (קוד: ${roomCode})`);
 }
 async function joinRoom(){
   const myName = document.getElementById('online-name').value.trim();
@@ -1787,15 +1820,24 @@ async function joinRoom(){
   if(!snap.exists()){ showToast('חדר לא נמצא'); return; }
   const data = snap.val();
   if(data.meta && data.meta.status==='playing'){ showToast('המשחק כבר התחיל בחדר הזה'); return; }
+  // Ghost-room guard: a room with no lastActive heartbeat in the last 30 minutes is treated as
+  // abandoned rather than joinable, even if its onDisconnect cleanup never fired (e.g. the
+  // host's browser crashed instead of closing cleanly).
+  if(isRoomStale(data)){ showToast('החדר הזה לא פעיל יותר'); ref.remove().catch(()=>{}); return; }
   const players = data.players || {};
   let seat = -1;
   for(let s=1;s<4;s++){ if(!players[s]){ seat=s; break; } }
   if(seat===-1){ showToast('החדר מלא'); return; }
   await ref.child('players/'+seat).set({name:myName, joined:true});
+  await ref.child('meta/lastActive').set(Date.now());
+  // This player's own seat is cleaned up if they disconnect (closes tab, loses connection).
+  ref.child('players/'+seat).onDisconnect().remove();
   roomCode = code;
   isOnline = true; isHost = false; myOnlineSeat = seat;
   roomRef = ref;
   showWaitingScreen(myName);
+
+  sendAdminAlert(`👥 שישיות - ${myName} הצטרף/ה לחדר ${code}`);
 }
 function copyRoomCode(){
   if(!roomCode) return;
@@ -1951,6 +1993,10 @@ function pushStateToFirebase(){
   if(!roomRef) return;
   const clean = JSON.parse(JSON.stringify(S));
   roomRef.child('gameState').set(clean).catch(e=>console.error('pushState failed', e));
+  // Activity heartbeat: every state push also stamps meta/lastActive, so a room that's mid-game
+  // but between explicit player actions is never mistaken for a stale/ghost room by the
+  // 30-minute isRoomStale() check in joinRoom().
+  roomRef.child('meta/lastActive').set(Date.now()).catch(()=>{});
 }
 function submitRemoteAction(type, payload){
   if(!roomRef) return;
