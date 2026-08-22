@@ -272,10 +272,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .ds-rows{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:var(--cream);font-size:13px;}
 @keyframes dsPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.85);}10%{opacity:1;transform:translate(-50%,-50%) scale(1);}88%{opacity:1;}100%{opacity:0;}}
 
-.fan{position:relative;height:clamp(78px,15vmin,124px);width:clamp(240px,80vmin,620px);}
-.fan.side{height:clamp(130px,30vmin,220px);width:clamp(44px,9vmin,64px);}
+.fan{position:relative;height:clamp(92px,15vmin,112px);width:clamp(280px,78vmin,560px);}
+.fan.side{height:clamp(140px,28vmin,200px);width:clamp(52px,9vmin,58px);}
 .card{
-  position:absolute;width:clamp(38px,9vmin,70px);height:clamp(55px,13vmin,100px);border-radius:8px;background:var(--cream);
+  /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
+     purpose — this stays a per-viewer visual size that responds to each screen, but a wide
+     phone/tablet should not render noticeably larger cards than a normal phone; a low
+     ceiling keeps that gap between devices small instead of it being extremely visible. */
+  position:absolute;width:clamp(48px,9.5vmin,62px);height:clamp(68px,13.5vmin,88px);border-radius:8px;background:var(--cream);
   border:1px solid rgba(0,0,0,.35);box-shadow:0 3px 8px rgba(0,0,0,.4);
   display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;
   transition:transform .15s, box-shadow .15s, filter .15s;
@@ -285,11 +289,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 .card.dark{color:#141414;}
 .card.red{color:var(--brick);}
-.card .r-top{font-size:clamp(9px,2.3vmin,15px);font-weight:800;line-height:1;text-align:left;align-self:flex-start;}
-.card .r-top .s{display:block;font-size:clamp(8px,2.1vmin,14px);}
-.card .r-bot{font-size:clamp(9px,2.3vmin,15px);font-weight:800;line-height:1;align-self:flex-end;transform:rotate(180deg);text-align:left;}
-.card .r-bot .s{display:block;font-size:clamp(8px,2.1vmin,14px);}
-.card .center-sym{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(15px,4vmin,26px);opacity:.9;}
+.card .r-top{font-size:clamp(11px,2.3vmin,14px);font-weight:800;line-height:1;text-align:left;align-self:flex-start;}
+.card .r-top .s{display:block;font-size:clamp(10px,2.1vmin,13px);}
+.card .r-bot{font-size:clamp(11px,2.3vmin,14px);font-weight:800;line-height:1;align-self:flex-end;transform:rotate(180deg);text-align:left;}
+.card .r-bot .s{display:block;font-size:clamp(10px,2.1vmin,13px);}
+.card .center-sym{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(18px,3.8vmin,23px);opacity:.9;}
 .card.back{
   background:
     repeating-linear-gradient(45deg, transparent 0px, transparent 5px, rgba(240,216,150,.10) 5px, rgba(240,216,150,.10) 6px),
@@ -652,6 +656,47 @@ const RANK_LABEL = r => r<=10 ? String(r) : ({11:'J',12:'Q',13:'K',14:'A'}[r]);
 // Bot display names — a little royal court instead of "בוט 1/2/3", indexed 0-2 by the bot's
 // relative slot (never by seat position, since that shifts depending on how many humans join).
 const BOT_NAMES = ['ארתור','ויקטוריה',"צ'רצ'יל",'אליזבט'];
+
+/* ============================= BOT LEARNING (persisted across games) =============================
+   Each bot keeps a running "aggressiveness" multiplier per name, saved in localStorage, that
+   nudges its trump/count bidding up or down based on whether its past bids actually matched
+   the tricks it won. A bot that keeps OVER-bidding (declares more than it takes) is playing
+   too aggressively and gets dialed down a notch; one that keeps UNDER-bidding (takes more
+   than it declared) is being too conservative and gets dialed up. This is deliberately a
+   simple running-average calibration — not a full ML model — but it does mean the bots
+   really do get better-calibrated the more the household plays against them, per-bot,
+   forever (until someone clears their browser data), because it's just a small JSON blob in
+   localStorage rather than anything reset per session or per round.
+   Multiplier stays within [0.75, 1.25] so a bad run can't send a bot permanently haywire. */
+const BOT_LEARNING_KEY = 'whist_bot_learning_v1';
+function loadBotLearning(){
+  try{
+    const raw = localStorage.getItem(BOT_LEARNING_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed==='object') ? parsed : {};
+  } catch(e){ return {}; }
+}
+function saveBotLearning(data){
+  try{ localStorage.setItem(BOT_LEARNING_KEY, JSON.stringify(data)); } catch(e){ /* private mode etc — just skip persisting */ }
+}
+function botAggressiveness(name){
+  const data = loadBotLearning();
+  const rec = data[name];
+  return (rec && typeof rec.mult==='number') ? rec.mult : 1;
+}
+// Called once per bot at the end of every round with (bid, actualTricksWon). Nudges that
+// bot's stored multiplier a little toward "would have matched" based on the miss direction.
+function recordBotBidOutcome(name, bid, won){
+  const data = loadBotLearning();
+  const rec = data[name] || {mult:1, rounds:0};
+  const diff = won - bid; // positive: bot under-bid (too conservative); negative: over-bid (too aggressive)
+  const step = 0.015; // small per-round nudge — many rounds of consistent bias needed to drift far
+  let mult = rec.mult + Math.max(-1,Math.min(1,diff))*step;
+  mult = Math.max(0.75, Math.min(1.25, mult));
+  data[name] = {mult, rounds:(rec.rounds||0)+1};
+  saveBotLearning(data);
+}
 // Display order only (does NOT affect trump-bidding strength, which still uses the SUITS
 // array index: תלתן < מעוין < לב < עלה). This controls the order cards are sorted/shown in a
 // hand and in the suit-choice buttons, so black/red alternate: עלה, לב, תלתן, מעוין.
@@ -728,6 +773,7 @@ function freshState(){
     turnSig:'',
     turnSigTime:Date.now(),
     genId:0,
+    resolvingTrick:false,
   };
 }
 
@@ -745,6 +791,36 @@ function scheduleGameTimer(fn, delay){
   const stampedGen = S.genId;
   return setTimeout(()=>{
     if(!S || S.genId!==stampedGen) return;
+    fn();
+  }, delay);
+}
+// A turn "signature" identifies exactly which decision is being made right now (phase +
+// whose turn + how many cards are on the table). Bot moves and trick-resolution are always
+// scheduled together with the signature that was current at schedule time; when the timer
+// actually fires, it re-checks the signature first. If the game has moved on in the meantime
+// (a resume-from-background re-drive or the heartbeat watchdog already handled it, or a
+// human somehow acted first), the stale callback quietly no-ops instead of firing a second
+// time — this is what previously let a bot play two cards in one trick, or start playing
+// before every seat had declared, whenever a phone backgrounded/foregrounded at the wrong
+// moment and more than one "keep the game moving" trigger fired for the same turn.
+function currentTurnSig(){
+  if(!S) return 'none';
+  if(S.phase==='playing' && S.currentTrick.length===4) return 'playing:resolving';
+  let p=null;
+  try{
+    if(S.phase==='trump-bidding') p = S.bidTurn;
+    else if(S.phase==='trick-bidding') p = S.declareOrder[S.declareIdx];
+    else if(S.phase==='playing') p = currentTrickPlayer();
+  } catch(e){ p=null; }
+  return S.phase+':'+p+':'+(S.phase==='playing'?S.currentTrick.length:S.phase==='trick-bidding'?S.declareIdx:'');
+}
+function scheduleTurnAction(fn, delay){
+  if(!S) return;
+  const stampedGen = S.genId;
+  const sig = currentTurnSig();
+  return setTimeout(()=>{
+    if(!S || S.genId!==stampedGen) return;
+    if(currentTurnSig()!==sig) return;
     fn();
   }, delay);
 }
@@ -1009,6 +1085,7 @@ function startRound(){
   S.roundType=null;
   S.revealedHuman=-1;
   S.roundEndData=null;
+  S.resolvingTrick=false;
   document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
   document.getElementById('pill-round').className = 'pill round';
   document.getElementById('pill-trump').style.display='none';
@@ -1243,34 +1320,70 @@ function renderTrickArea(){
   });
 }
 
-/* ============================= HELPERS: strength ============================= */
+/* ============================= HELPERS: strength =============================
+   The bidding/estimation logic below follows a fairly literal "how many tricks can I
+   count on" reading of the cards, rather than an abstract point-count formula:
+     - An Ace of a suit is (almost) always a safe trick — nobody outranks it.
+     - A King is safe if you're also holding a LOWER card of that same suit: if someone
+       else holds the Ace, you can sacrifice ("feed") the low card into their Ace-led
+       trick, and once the Ace is gone your King is the new top of that suit. Without a
+       spare low card to feed, the King is stuck being forced out by the Ace with nothing
+       to show for it.
+     - A Queen is "fairly safe" only with TWO lower cards of that suit to feed away while
+       both the Ace and King get played out from other hands.
+     - Holding A+K+Q of the very same suit is an especially strong signal for that suit as
+       trump — all three are safe-ish trick winners, so it's worth exploring how high a
+       trump bid that suit can support.
+   estimateSafeTricks() below implements exactly this per-suit reasoning, once assuming
+   the suit is trump (all of it counts) and once for a non-trump suit (only cards that
+   are almost certain to win before being trumped over — effectively just a lone Ace, or
+   an Ace+King run at the very top). */
 function highCardPts(c){ return c.rank===14?4:c.rank===13?3:c.rank===12?2:c.rank===11?1:c.rank===10?0.5:0; }
-function suitScore(hand, suit){
-  const cards = hand.filter(c=>c.suit===suit);
-  return cards.length*1.4 + cards.reduce((s,c)=>s+highCardPts(c),0);
+
+// Counts "safe" tricks within a single suit, given the rest of that suit in hand.
+// isTrump=true is used when the suit will actually be the trump suit for the round (long
+// trump suits and the honors within them are far more reliably winning tricks); isTrump=
+// false estimates only the very top of a plain suit, since a plain-suit winner can still
+// be trumped over by anyone void in that suit.
+function suitSafeTricks(cardsOfSuit, isTrump){
+  const sorted = cardsOfSuit.slice().sort((a,b)=>b.rank-a.rank);
+  let safe = 0;
+  const hasAce = sorted[0] && sorted[0].rank===14;
+  const hasKing = sorted[0] && sorted[0].rank===13 || (sorted[1] && sorted[1].rank===13);
+  const hasQueen = sorted.some(c=>c.rank===12);
+  const lowCount = sorted.filter(c=>c.rank<12).length; // cards below Q available to "feed"
+  if(hasAce) safe += 1;
+  if(hasKing && (hasAce ? lowCount>=1 : lowCount>=1)) safe += 1; // needs a low card to sacrifice once the Ace surfaces
+  if(hasQueen && lowCount>=2) safe += 0.85; // "fairly safe", not fully certain — slightly discounted
+  if(isTrump){
+    // Extra trump length beyond the top three honors: each additional trump is very likely
+    // to take a trick over the course of the round (opponents run out of trump to follow
+    // with), so count them at a high-but-not-certain rate.
+    const extraTrump = Math.max(0, sorted.length - 3);
+    safe += extraTrump*0.55;
+  }
+  return safe;
+}
+// How many tricks could this hand support if `suit` becomes trump? Used both to pick which
+// suit to bid and to decide how high to bid once a suit is chosen.
+function safeTricksIfTrump(hand, suit){
+  const trumpCards = hand.filter(c=>c.suit===suit);
+  let total = suitSafeTricks(trumpCards, true);
+  const bySuit = {};
+  hand.forEach(c=>{ if(c.suit!==suit){ (bySuit[c.suit]=bySuit[c.suit]||[]).push(c); } });
+  Object.values(bySuit).forEach(cards=>{ total += suitSafeTricks(cards, false); });
+  return total;
 }
 function bestSuitFor(hand){
   let best=0, bestScore=-1;
-  for(let s=0;s<4;s++){ const sc=suitScore(hand,s); if(sc>bestScore){bestScore=sc; best=s;} }
+  for(let s=0;s<4;s++){ const sc=safeTricksIfTrump(hand,s); if(sc>bestScore){bestScore=sc; best=s;} }
   return {suit:best, score:bestScore};
 }
+// Once the trump suit is set (by anyone), how many tricks can this hand count on? Same
+// suit-by-suit safe-trick reasoning as above, just against a trump suit that's already fixed
+// rather than one being chosen.
 function estimateTricks(hand, trumpSuit){
-  let est=0;
-  const trumpCards = hand.filter(c=>c.suit===trumpSuit).sort((a,b)=>b.rank-a.rank);
-  const trumpWeights = [0.9,0.6,0.4,0.25,0.15,0.1];
-  trumpCards.forEach((c,i)=>{ est += trumpWeights[i]!==undefined ? trumpWeights[i] : 0.05; });
-  const bySuit = {};
-  hand.forEach(c=>{ if(c.suit!==trumpSuit){ (bySuit[c.suit]=bySuit[c.suit]||[]).push(c); } });
-  Object.values(bySuit).forEach(cards=>{
-    cards.sort((a,b)=>b.rank-a.rank);
-    cards.forEach((c,i)=>{
-      if(c.rank===14) est+=0.6;
-      else if(c.rank===13 && i===0) est+=0.3;
-      else if(c.rank===13) est+=0.12;
-      else if(c.rank===12 && i<=1) est+=0.08;
-    });
-  });
-  return Math.max(0, Math.min(13, est));
+  return Math.max(0, Math.min(13, safeTricksIfTrump(hand, trumpSuit)));
 }
 
 /* ============================= TRUMP BIDDING ============================= */
@@ -1311,7 +1424,7 @@ function advanceTrumpBidding(){
     gateFor(p, ()=>showTrumpBidUI(p));
   } else {
     hideControlPanel();
-    scheduleGameTimer(()=>botTrumpBid(p), 1000);
+    scheduleTurnAction(()=>botTrumpBid(p), 1000);
   }
 }
 function minCountForSuit(suit){
@@ -1382,22 +1495,39 @@ function humanTrumpPass(p){
   advanceTrumpBidding();
 }
 function botTrumpBid(p){
+  // Same double-dispatch guard as botPlay(): only act if it's genuinely still p's turn.
+  if(S.phase!=='trump-bidding' || S.bidTurn!==p || S.passedBidders.includes(p)) return;
   const hand = S.hands[p];
-  const {suit,score} = bestSuitFor(hand);
-  const potential = Math.max(0, Math.min(13, Math.round(score/1.6)));
+  // Bid the highest count this hand can genuinely support as trump, per-suit — not an
+  // abstract point score. safeTricksIfTrump() already counts Aces as certain, Kings as
+  // safe only with a low card of that suit to sacrifice, Queens as fairly safe with two
+  // low cards to spare, and extra trump length on top of that (see the big comment above
+  // suitSafeTricks()). The learned per-bot multiplier nudges this up/down a little based
+  // on whether this bot's past bids have tended to come up short or long.
+  const mult = botAggressiveness(S.names[p]);
+  let best = {suit:0, tricks:-1};
+  for(let s=0;s<4;s++){
+    const tricks = safeTricksIfTrump(hand, s) * mult;
+    if(tricks>best.tricks) best = {suit:s, tricks};
+  }
+  const potential = Math.max(0, Math.min(13, Math.round(best.tricks)));
   let bidMade=false;
   if(!S.trumpBid){
-    if(potential>=5 && Math.random()<0.8){
-      S.trumpBid = {count:5, suit, player:p};
-      S.playerLastBid[p] = '5 '+SUITS[suit].sym;
+    // A+K+Q (or strong trump length) all in the same suit is exactly the "look how high I
+    // can go" signal the rules describe — worth opening on if it clears a sensible floor.
+    if(potential>=5){
+      S.trumpBid = {count:potential, suit:best.suit, player:p};
+      S.playerLastBid[p] = potential+' '+SUITS[best.suit].sym;
       bidMade=true;
     }
   } else {
     const sameCount = S.trumpBid.count;
+    // Can this hand support outbidding the current trump bid, either by matching the count
+    // in a higher-ranked suit or by genuinely going one better in any suit?
     let candidate=null;
-    if(suit>S.trumpBid.suit && potential>=sameCount) candidate = {count:sameCount, suit};
-    else if(potential>=sameCount+1) candidate = {count:sameCount+1, suit};
-    if(candidate && Math.random()<0.75){
+    if(best.suit>S.trumpBid.suit && potential>=sameCount) candidate = {count:sameCount, suit:best.suit};
+    else if(potential>=sameCount+1) candidate = {count:Math.min(potential, sameCount+1), suit:best.suit};
+    if(candidate){
       S.trumpBid = {count:candidate.count, suit:candidate.suit, player:p};
       S.playerLastBid[p] = candidate.count+' '+SUITS[candidate.suit].sym;
       bidMade=true;
@@ -1457,7 +1587,7 @@ function advanceTrickBidding(){
     gateFor(p, ()=>showDeclareUI(p));
   } else {
     hideControlPanel();
-    scheduleGameTimer(()=>botDeclare(p), 930);
+    scheduleTurnAction(()=>botDeclare(p), 930);
   }
 }
 function showDeclareSummary(cb){
@@ -1504,21 +1634,70 @@ function confirmDeclare(p, v){
   hideControlPanel();
   advanceTrickBidding();
 }
-function botDeclare(p){
-  const isTrumpWinner = (p===S.trumpBid.player);
-  let v;
-  if(isTrumpWinner){
-    v = S.trumpBid.count;
-  } else {
-    const est = estimateTricks(S.hands[p], S.trumpSuit);
-    v = Math.max(0, Math.min(13, Math.round(est)));
-    const declaredSoFar = S.declareOrder.slice(0, S.declareIdx).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
-    const projectedTotal = declaredSoFar + v + (4-(S.declareIdx+1))*3.25;
-    const diff = projectedTotal - 13;
-    const frac = est - Math.floor(est);
-    if(diff > 3 && frac < 0.65 && v>0) v -= 1;
-    else if(diff < -3 && frac > 0.35 && v<13) v += 1;
+// "Every suit has at least one low card (2/3/4), but nothing better in any of them" — the
+// hand has no real trick-taking power anywhere, so bidding zero is worth considering even
+// though the raw estimate might round to 1 or so.
+function hasOnlyLowCardsEverySuit(hand){
+  for(let s=0;s<4;s++){
+    const cards = hand.filter(c=>c.suit===s);
+    if(cards.length===0) continue; // void in a suit is fine, that's not a "low card" but not a liability either
+    const hasLowOnly = cards.every(c=>c.rank<=6);
+    const hasAnyStrong = cards.some(c=>c.rank>=12);
+    if(!hasLowOnly || hasAnyStrong) return false;
   }
+  return true;
+}
+function botDeclare(p){
+  // Same double-dispatch guard as botPlay(): only act if it's genuinely still p's turn.
+  if(S.phase!=='trick-bidding' || S.declareOrder[S.declareIdx]!==p) return;
+  const isTrumpWinner = (p===S.trumpBid.player);
+  const hand = S.hands[p];
+  const mult = botAggressiveness(S.names[p]);
+  const est = estimateTricks(hand, S.trumpSuit) * mult;
+  const positionInOrder = S.declareIdx; // 0=trump winner already excluded, else 0..3 declare order slot
+  const isLastBidder = (S.declareIdx===3);
+  let v;
+
+  if(isTrumpWinner){
+    // Rule 1: whoever set the trump bids the highest count they think they can sustain —
+    // that's exactly the number they already committed to at auction time.
+    v = S.trumpBid.count;
+  } else if(!isLastBidder){
+    // Rule 2 (2nd/3rd bidder, not the trump-setter): count trump-suit length plus strong
+    // off-suit cards, i.e. the same safe-tricks estimate used everywhere else. Consider
+    // bidding zero outright if the hand is uniformly weak in every suit.
+    if(hasOnlyLowCardsEverySuit(hand)){
+      v = 0;
+    } else {
+      v = Math.max(0, Math.min(13, Math.round(est)));
+    }
+  } else {
+    // Rule 2, last bidder: the trickiest seat. Needs to weigh three things at once:
+    //  (a) if someone already bid zero and the total would land UNDER anyway, that zero
+    //      bidder is about to have a much harder time — nothing this bot can do about
+    //      that, it's just context, not a reason to change its own bid.
+    //  (b) same "every suit only has low cards" zero-bid consideration as rule 2.
+    //  (c) look at the running total so far — if it's meaningfully below 13, lean toward
+    //      pushing the total closer to 13 (an UNDER game favors most bidders and is the
+    //      "expected" outcome most rounds), unless this hand genuinely can't support it.
+    const declaredSoFar = S.declareOrder.slice(0,3).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
+    if(hasOnlyLowCardsEverySuit(hand)){
+      v = 0;
+    } else {
+      const baseline = Math.max(0, Math.min(13, Math.round(est)));
+      const neededFor13 = 13 - declaredSoFar;
+      // Only reach for "closer to 13" if it's actually within reach of what the hand can
+      // support (don't bid wildly above what the cards justify just to hit the number) —
+      // otherwise fall back to the honest estimate, on the assumption someone else's bid
+      // was off rather than forcing a bid this hand can't back up.
+      if(declaredSoFar < 10 && neededFor13>=0 && neededFor13<=est+1.5){
+        v = Math.max(baseline, Math.min(13, neededFor13));
+      } else {
+        v = baseline;
+      }
+    }
+  }
+
   const forbid = forbiddenLastValue();
   if(forbid!==null && v===forbid){ v = v<13 ? v+1 : v-1; }
   v = Math.max(isTrumpWinner?S.trumpBid.count:0, Math.min(13, v));
@@ -1564,7 +1743,7 @@ function advancePlaying(){
   } else {
     hideControlPanel();
     clearTimeout(window.__botWatchdog);
-    window.__botWatchdog = scheduleGameTimer(()=>{
+    window.__botWatchdog = scheduleTurnAction(()=>{
       try{ botPlay(p); } catch(err){ console.error('botPlay failed', err); }
     }, 800);
   }
@@ -1599,16 +1778,54 @@ function playCard(p, c){
   }
 }
 function botPlay(p){
+  // Guards against the rare double-dispatch this function used to be vulnerable to (a
+  // resume-from-background re-drive landing on the same bot turn a normal timer already
+  // handled): if it's not actually p's turn to play into the current trick anymore, or p's
+  // hand is already empty, silently do nothing instead of pushing a bad/duplicate card.
+  if(S.phase!=='playing' || S.currentTrick.length>=4 || currentTrickPlayer()!==p) return;
+  if(!S.hands[p] || S.hands[p].length===0) return;
   const legal = legalCardsFor(p);
+  if(legal.length===0) return;
   let choice;
   if(S.currentTrick.length===0){
+    // Opening the trick — this is where UP and UNDER strategy genuinely diverge, not just a
+    // matter of "do I need more tricks":
+    //   UP  (a shortage of tricks — everyone's fighting over too few): the leader wants a
+    //       CERTAIN trick, so they lead an Ace, or a King in a suit whose Ace has already
+    //       been played (making the King the new top of that suit).
+    //   UNDER (a surplus of tricks — someone's getting stuck with extras nobody wants):
+    //       nobody wants to be the one holding the lead, so — especially in the early
+    //       tricks of the round — the leader ducks out by leading a LOW card of a
+    //       non-trump suit, handing the lead to someone else. This matters most when
+    //       someone bid zero: everyone else quietly wants that player to trip up and take
+    //       a trick, so low-leading to pass the lead around keeps forcing the zero-bidder
+    //       to eventually have to follow suit into a trick they can't avoid.
     const needMore = S.tricksWon[p] < S.bids[p];
     const sorted = legal.slice().sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
     const iAmZero = (S.bids[p]===0);
     const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0) : [];
     const earlyInRound = S.trickHistory.length < 8;
+    // Cards already known to be gone this round (from completed tricks), used to tell
+    // whether a King etc. is now the effective top of its suit.
+    const playedCards = S.trickHistory.flatMap(h=>h.cards.map(pc=>pc.card));
+    const suitTopIsGone = (suit, aboveRank)=> playedCards.some(c=>c.suit===suit && c.rank>aboveRank);
     if(S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
       choice = sorted[0];
+    } else if(S.roundType==='UP' && needMore){
+      // Look for a genuinely safe winner to lead: an Ace, or (failing that) a King whose
+      // Ace has already fallen — in either case this card is essentially guaranteed to win
+      // the trick right now.
+      const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
+      const safeLead = nonTrump.find(c=>c.rank===14)
+        || nonTrump.find(c=>c.rank===13 && suitTopIsGone(c.suit,13))
+        || sorted.find(c=>c.suit===S.trumpSuit && c.rank===14)
+        || sorted.find(c=>c.suit===S.trumpSuit && c.rank===13 && suitTopIsGone(c.suit,13));
+      choice = safeLead || (nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1]);
+    } else if(S.roundType==='UNDER' && !iAmZero){
+      // Duck the lead with a low non-trump card whenever this bot doesn't urgently need
+      // more tricks itself — passing the lead around is the whole point in an UNDER round.
+      const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
+      choice = needMore ? (nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1]) : sorted[0];
     } else if(needMore){
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
       choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
@@ -1642,6 +1859,14 @@ function botPlay(p){
   playCard(p, choice);
 }
 function resolveTrick(){
+  // Guard against being called twice for the same trick (e.g. the heartbeat watchdog and a
+  // resume-from-background re-drive both deciding "this trick never resolved" at once) — the
+  // first call's finishTrick() already clears S.currentTrick, so a second call arriving after
+  // that would either resolve an empty/already-cleared trick or double-count the same 4
+  // cards into tricksWon. S.resolvingTrick makes the second call a no-op instead.
+  if(S.resolvingTrick) return;
+  if(S.currentTrick.length!==4) return;
+  S.resolvingTrick = true;
   let winnerPlayer;
   try{
     let winning = S.currentTrick[0];
@@ -1669,6 +1894,7 @@ function resolveTrick(){
   const finishTrick = ()=>{
     if(finished) return;
     finished = true;
+    S.resolvingTrick = false;
     clearTimeout(window.__trickWatchdog);
     const badge = document.getElementById('badge-'+displayFor(winnerPlayer));
     if(badge) badge.classList.remove('trick-winner');
@@ -1678,7 +1904,17 @@ function resolveTrick(){
     S.turnInTrick = 0;
     S.currentTrick=[];
     renderTable();
-    if(S.hands[0].length===0){
+    // Check every seat, not just seat 0 — if a double-dispatch bug ever let one bot play out
+    // of turn (emptying its hand early while others still hold cards), trusting only seat 0
+    // here made the round-end check silently wrong and the game could stall forever with no
+    // way back except a full reset. All 4 hands empty together is what actually means "the
+    // round is over"; anything else means play must continue.
+    const allEmpty = S.hands.every(h=>!h || h.length===0);
+    const anyEmpty = S.hands.some(h=>!h || h.length===0);
+    if(anyEmpty && !allEmpty){
+      console.error('Hand-count desync detected at trick end — hands:', S.hands.map(h=>h?h.length:null));
+    }
+    if(allEmpty){
       scheduleGameTimer(finishRound, 700);
     } else {
       scheduleGameTimer(advancePlaying, 700);
@@ -1734,6 +1970,10 @@ function finishRound(){
     }
     results.push({p, bid, won, pts, made});
   }
+  // Feed this round's bid-vs-actual outcome back into each bot's persisted learning record
+  // (see recordBotBidOutcome/botAggressiveness above) so their bidding keeps calibrating
+  // toward their own actual accuracy, game after game, on this browser.
+  for(const r of results){ if(!S.isHuman[r.p]) recordBotBidOutcome(S.names[r.p], r.bid, r.won); }
   // Voided round: if every single player missed their bid, no one earns or loses points —
   // the round is shown in the history (so the table isn't misleading about what happened)
   // but its points don't count toward anyone's total.
