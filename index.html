@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>הלובי — משחקי קלפים</title>
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@700;900&family=Heebo:wght@400;600;800&display=swap" rel="stylesheet">
+<!-- Shared "Luxury Card Club" design tokens — see js/ui/theme.css and
+     docs/premium-platform-proposal.md §1-2. Kept as a separate stylesheet (not inlined) so
+     whist.html/sheshiyot.html can eventually link the same file and the three pages stay
+     visually in sync from one source instead of drifting apart over time. -->
+<link rel="stylesheet" href="js/ui/theme.css">
 <!-- PWA: lets the site be installed to the home screen as an app -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0d2b22">
@@ -13,12 +18,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="קלפים">
 <style>
-  :root{
-    --felt-1:#0d2b22; --felt-2:#164434; --felt-3:#1f5a44;
-    --gold:#d4af5a; --gold-bright:#f0d896; --cream:#faf4e6; --ink:#211a10;
-  }
+  /* Page-specific styling only lives here — shared color/typography tokens and the .luxury-card
+     component come from js/ui/theme.css above. */
   *{box-sizing:border-box;}
-  @keyframes feltShimmer{0%,100%{opacity:.5;}50%{opacity:.85;}}
   @keyframes emblemGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 16px rgba(240,216,150,.65));}}
   @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
   body{
@@ -42,29 +44,44 @@
   h1{font-family:'Frank Ruhl Libre',serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;text-shadow:0 0 22px rgba(240,216,150,.3);}
   .sub{color:rgba(250,244,230,.65);margin-bottom:36px;font-size:14px;letter-spacing:.5px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;max-width:800px;width:100%;}
+
+  /* Game cards reuse .luxury-card from theme.css for the glass/hover treatment, and add only
+     the layout/content styling specific to a lobby tile (padding, the shine sweep, spacing for
+     the icon/title/subtitle stack). */
   a.card{
     text-decoration:none;color:inherit;
-    background:linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
-    border:1px solid rgba(212,175,90,.35);border-radius:14px;padding:26px 18px;text-align:center;
-    transition:.22s cubic-bezier(.2,.7,.3,1); position:relative;overflow:hidden;
-    box-shadow:0 0 0 1px rgba(212,175,90,.08) inset;
+    padding:26px 18px;text-align:center;
+    position:relative;overflow:hidden;
     opacity:0;animation:cardIn .55s ease forwards;
   }
   .grid a.card:nth-child(1){animation-delay:.05s;}
   .grid a.card:nth-child(2){animation-delay:.18s;}
+  /* Soft top-down gold sheen inside the glass, on top of theme.css's own frosted background —
+     gives the panel a sense of depth/light-from-above instead of a flat tint. */
   a.card::before{
-    content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.12) 50%,transparent 60%);
-    transform:translateX(-120%);transition:transform .6s ease;pointer-events:none;
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(160deg, rgba(240,216,150,.10), transparent 45%);
   }
-  a.card:hover::before{transform:translateX(120%);}
-  a.card:hover{border-color:var(--gold-bright);transform:translateY(-4px);box-shadow:0 14px 34px rgba(0,0,0,.4),0 0 0 1px rgba(212,175,90,.25) inset;}
-  .ic{margin-bottom:10px;display:flex;align-items:center;justify-content:center;height:52px;}
-  .ic svg{height:100%;width:auto;overflow:visible;transition:filter .25s;}
-  a.card:hover .ic svg{filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));}
+  /* The hover "shine sweep" — a diagonal light band that travels across the card. Separate
+     layer from ::before (used for the static top-light) since both need to coexist. */
+  a.card::after{
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.14) 50%,transparent 60%);
+    transform:translateX(-120%);transition:transform .6s ease;
+  }
+  a.card:hover::after{transform:translateX(120%);}
+  .ic{margin-bottom:10px;display:flex;align-items:center;justify-content:center;height:52px;position:relative;}
+  .ic svg{height:100%;width:auto;overflow:visible;transition:filter .25s, transform .25s;}
+  a.card:hover .ic svg{filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));transform:scale(1.05);}
   a.card h3{margin:0 0 4px;font-size:18px;color:var(--cream);font-family:'Frank Ruhl Libre',serif;}
-  a.card p{margin:0;font-size:12.5px;color:rgba(250,244,230,.6);}
+  a.card p{margin:0;font-size:12.5px;color:var(--gold-dim);}
   h1.brand-title{display:flex;align-items:center;gap:12px;justify-content:center;}
   h1.brand-title svg{height:40px;width:auto;animation:emblemGlow 3.2s ease-in-out infinite;}
+
+  @media (prefers-reduced-motion: reduce){
+    a.card{opacity:1;animation:none;}
+    h1.brand-title svg{animation:none;}
+  }
 </style>
 </head>
 <body>
@@ -80,7 +97,7 @@
   </h1>
   <div class="sub">בחרו משחק</div>
   <div class="grid">
-    <a class="card" href="whist.html">
+    <a class="card luxury-card" href="whist.html">
       <div class="ic">
         <!-- Whist: a fanned hand of 13 card-backs -->
         <svg viewBox="0 0 200 100" aria-hidden="true">
@@ -93,10 +110,20 @@
       <h3>וויסט</h3>
       <p>חוזים, שליטים ולקיחות</p>
     </a>
-    <a class="card" href="sheshiyot.html">
+    <a class="card luxury-card" href="sheshiyot.html">
       <div class="ic">
-        <!-- Sheshiyot: six face-up cards, 3 over 3 -->
+        <!-- Sheshiyot: six face-up cards with polished vector suit glyphs (paths, not emoji —
+             emoji rendering varies wildly across OS/browser font sets, while these paths render
+             identically everywhere and can be recolored/animated like any other vector shape). -->
         <svg viewBox="0 0 150 70" aria-hidden="true">
+          <defs>
+            <!-- Reusable suit glyphs, each drawn once and instanced via <use> below at whatever
+                 position/color is needed — avoids repeating the same path data six times. -->
+            <g id="suit-heart"><path d="M0,3.2 C0,-1 -4.6,-1 -4.6,2 C-4.6,5 0,8.4 0,10.5 C0,8.4 4.6,5 4.6,2 C4.6,-1 0,-1 0,3.2 Z"/></g>
+            <g id="suit-spade"><path d="M0,-6.5 C3.4,-3 5.2,-0.6 5.2,2.2 A3.4,3.4 0 0 1 0.6,5.4 A2.2,2.2 0 0 0 2.8,7.6 H-2.8 A2.2,2.2 0 0 0 -0.6,5.4 A3.4,3.4 0 0 1 -5.2,2.2 C-5.2,-0.6 -3.4,-3 0,-6.5 Z"/></g>
+            <g id="suit-diamond"><path d="M0,-6.6 L4.6,0 L0,6.6 L-4.6,0 Z"/></g>
+            <g id="suit-club"><path d="M0,-2 A2.7,2.7 0 1 1 2.4,2.1 A2.7,2.7 0 1 1 0.6,-1.4 A2.7,2.7 0 1 1 -2.4,2.1 A2.7,2.7 0 1 1 -0.6,-1.4 C-1,0.5 -1.6,2.4 -3,5.2 H3 C1.6,2.4 1,0.5 0,-2 Z"/></g>
+          </defs>
           <g stroke="#211a10" stroke-width="1.5">
             <rect x="4"  y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
             <rect x="62" y="2"  width="26" height="30" rx="3" fill="#faf4e6"/>
@@ -105,14 +132,12 @@
             <rect x="62" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
             <rect x="120" y="38" width="26" height="30" rx="3" fill="#faf4e6"/>
           </g>
-          <g font-family="Heebo, sans-serif" font-weight="800" font-size="13" text-anchor="middle">
-            <text x="17"  y="19" fill="#c0272d">♥</text>
-            <text x="75"  y="19" fill="#1a1a1a">♠</text>
-            <text x="133" y="19" fill="#c0272d">♦</text>
-            <text x="17"  y="55" fill="#1a1a1a">♣</text>
-            <text x="75"  y="55" fill="#c0272d">♥</text>
-            <text x="133" y="55" fill="#1a1a1a">♠</text>
-          </g>
+          <use href="#suit-heart"   x="17"  y="17" fill="#c0272d"/>
+          <use href="#suit-spade"   x="75"  y="17" fill="#1a1a1a"/>
+          <use href="#suit-diamond" x="133" y="17" fill="#c0272d"/>
+          <use href="#suit-club"    x="17"  y="53" fill="#1a1a1a"/>
+          <use href="#suit-heart"   x="75"  y="53" fill="#c0272d"/>
+          <use href="#suit-spade"   x="133" y="53" fill="#1a1a1a"/>
         </svg>
       </div>
       <h3>שישיות</h3>
