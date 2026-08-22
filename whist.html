@@ -642,6 +642,18 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
     <div class="round-end-card" id="round-end-content"></div>
   </div>
 
+  <!-- resume saved game -->
+  <div class="modal-bg" id="resume-modal">
+    <div class="modal" style="max-width:400px;text-align:center;">
+      <h2 style="font-size:20px;">נמצא משחק קודם שלא הסתיים</h2>
+      <p id="resume-modal-sub" style="margin:8px 0 20px;">האם תרצה להמשיך במקום שבו הפסקת?</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button class="tb-btn" id="resume-yes-btn" style="background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;font-weight:800;padding:10px 20px;">המשך משחק</button>
+        <button class="tb-btn close-btn" id="resume-no-btn" style="padding:10px 20px;">משחק חדש</button>
+      </div>
+    </div>
+  </div>
+
   <!-- instructions modal -->
   <div class="modal-bg" id="instr-modal">
     <div class="modal">
@@ -972,6 +984,11 @@ function goLobby(){
   document.getElementById('gate').classList.remove('show');
   gateCallback=null;
   updateRoomBadge();
+  // Leaving to the lobby is the only "end of match" signal a single-player game has (there's no
+  // final-score/winner screen — the scoreboard is open-ended) — so this is where a saved
+  // in-progress game gets cleared, whether the player got here via "New Game" or the round-end
+  // modal's "Back to lobby" button.
+  clearSavedGame();
 }
 function goHub(){
   cleanupOnlineListeners();
@@ -1013,6 +1030,97 @@ async function getSavedName(){
 }
 async function saveMyName(name){
   try{ localStorage.setItem('whist_player_name', name); } catch(e){}
+}
+
+/* ============================= AUTO-SAVE / RESUME (vs-computer only) ============================= */
+// Only single-player (vs-computer) games are ever saved — online/pass-and-play matches are
+// never persisted here, since Firebase already carries online state and pass-and-play doesn't
+// need a "come back later" story the same way a solo bot match does. Guarded on S.mode==='computer'
+// && !isOnline at every call site rather than once centrally, so a stray call from an unrelated
+// code path can never accidentally save/restore the wrong kind of match.
+const SAVED_GAME_KEY = 'whist_saved_game_v1';
+function isSavableSinglePlayerGame(){
+  return !!S && S.mode==='computer' && !isOnline && S.phase && S.phase!=='idle';
+}
+// Snapshots everything needed to faithfully resume: the whole S object (already JSON-safe —
+// every field is plain data, no functions/DOM refs), plus the couple of module-level bits that
+// live outside S but are still needed to redraw the table correctly (myOnlineSeat/isOnline are
+// deliberately NOT saved — a resumed game is always treated as local seat 0). genId/turnSig/
+// turnSigTime are intentionally excluded: they're pure timer-invalidation bookkeeping that means
+// nothing across a reload and get freshly reset on restore instead.
+function saveGame(){
+  if(!isSavableSinglePlayerGame()) return;
+  try{
+    const { genId, turnSig, turnSigTime, resolvingTrick, ...persisted } = S;
+    localStorage.setItem(SAVED_GAME_KEY, JSON.stringify({ savedAt: Date.now(), state: persisted }));
+  } catch(e){ /* private mode / quota — just skip persisting silently */ }
+}
+function loadSavedGame(){
+  try{
+    const raw = localStorage.getItem(SAVED_GAME_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(!parsed || !parsed.state || parsed.state.mode!=='computer') return null;
+    return parsed;
+  } catch(e){ return null; }
+}
+function clearSavedGame(){
+  try{ localStorage.removeItem(SAVED_GAME_KEY); } catch(e){}
+}
+// Restores S from a saved snapshot and re-drives whichever phase the game was in — mirrors the
+// visibilitychange handler's own "invalidate stale timers, one clean re-render, one clean re-
+// drive" approach below, since a page reload is really just a very long tab-hidden gap.
+function resumeSavedGame(saved){
+  S = Object.assign(freshState(), saved.state);
+  isOnline=false; isHost=false; myOnlineSeat=0;
+  S.genId = (S.genId||0)+1;
+  S.turnSig=''; S.turnSigTime=Date.now();
+  S.resolvingTrick=false;
+  showScreen('screen-game');
+  for(let actual=0;actual<4;actual++){
+    const disp = displayFor(actual);
+    document.getElementById('badge-'+disp).querySelector('.nm').textContent = S.names[actual];
+    document.getElementById('badge-'+disp).classList.remove('me');
+  }
+  updateRoomBadge();
+  document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
+  document.getElementById('pill-round').className = 'pill round';
+  renderTable();
+  try{
+    if(S.phase==='trump-bidding') advanceTrumpBidding();
+    else if(S.phase==='trick-bidding') advanceTrickBidding();
+    else if(S.phase==='playing'){
+      if(S.currentTrick.length===4) resolveTrick();
+      else advancePlaying();
+    }
+  } catch(e){ console.error('Resume re-drive failed', e); }
+}
+function showResumeGamePrompt(){
+  // A WhatsApp deep-link (?room=CODE) is an explicit request to join a specific online game —
+  // that takes priority over resuming an old solo match, so don't compete with it for the
+  // player's very first tap on the page.
+  try{
+    const code = (new URLSearchParams(location.search).get('room')||'').trim().toUpperCase();
+    if(/^[A-Z0-9]{6}$/.test(code)) return;
+  } catch(e){}
+  const saved = loadSavedGame();
+  if(!saved) return;
+  const bg = document.getElementById('resume-modal');
+  if(!bg) return;
+  const sub = document.getElementById('resume-modal-sub');
+  if(sub){
+    const names = (saved.state.names && saved.state.names[0]) || 'את/ה';
+    sub.textContent = `סיבוב ${saved.state.roundNum||1} באמצע — נשמר לאחרונה ב-${new Date(saved.savedAt).toLocaleString('he-IL')}.`;
+  }
+  bg.classList.add('show');
+  document.getElementById('resume-yes-btn').onclick = ()=>{
+    bg.classList.remove('show');
+    resumeSavedGame(saved);
+  };
+  document.getElementById('resume-no-btn').onclick = ()=>{
+    bg.classList.remove('show');
+    clearSavedGame();
+  };
 }
 
 /* ============================= LOBBY -> SETUP ============================= */
@@ -1176,6 +1284,11 @@ function renderTable(){
 
   // Host pushes state after every render so clients stay in sync
   if(isOnline && isHost) pushStateToFirebase();
+  // Local vs-computer games auto-save after every render for the same reason — renderTable()
+  // is called after essentially every meaningful state change (a bid, a play, a resolved trick,
+  // a new round), so this one call site covers all of them without needing a saveGame() call
+  // sprinkled into every individual mutator.
+  saveGame();
 }
 
 function positionSideBadges(){
@@ -2830,6 +2943,7 @@ function applyRoomDeepLink(){
   });
 }
 window.addEventListener('load', applyRoomDeepLink);
+window.addEventListener('load', showResumeGamePrompt);
 
 // PWA: register the service worker so the app shell can be installed / opened
 // offline. Safe to skip silently if unsupported (older browsers, non-https, etc).

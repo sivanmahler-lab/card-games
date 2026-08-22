@@ -503,6 +503,18 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
 </div>
 
+<!-- RESUME SAVED GAME -->
+<div class="modal-bg" id="resume-modal">
+  <div class="modal luxury-card" style="max-width:400px;text-align:center;">
+    <h2 style="font-size:20px;">נמצא משחק קודם שלא הסתיים</h2>
+    <p id="resume-modal-sub" style="margin:8px 0 20px;">האם תרצה להמשיך במקום שבו הפסקת?</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn-primary" id="resume-yes-btn" style="width:auto;margin-top:0;padding:11px 22px;">המשך משחק</button>
+      <button class="tb-btn close-btn" id="resume-no-btn" style="padding:11px 22px;">משחק חדש</button>
+    </div>
+  </div>
+</div>
+
 <!-- INSTRUCTIONS -->
 <div class="modal-bg" id="instr-modal">
   <div class="modal">
@@ -670,6 +682,89 @@ function ensureDrawPile(){
     S.drawPile = shuffle(S.discardPile);
     S.discardPile = [top];
   }
+}
+
+/* ============================= AUTO-SAVE / RESUME (vs-computer only) ============================= */
+// Only single-player (vs-computer) games are ever saved — online games already have Firebase
+// carrying their state, and there's no "come back later" story for them the same way there is
+// for a solo bot match. Gated on !isOnline at every call site (rather than once centrally) so a
+// stray call from an unrelated code path can never accidentally save/restore the wrong kind of
+// match. This file has no player-vs-computer distinction beyond mode/isOnline the way whist.html
+// has S.mode — mode==='computer' && !isOnline is the equivalent check here.
+const SAVED_GAME_KEY = 'sheshiyot_saved_game_v1';
+function isSavableSinglePlayerGame(){
+  return !!S && mode==='computer' && !isOnline && S.phase && S.phase!=='ended';
+}
+// Snapshots the whole S object (already plain JSON-safe data) plus the module-level bits that
+// live outside S but are still needed for a faithful resume: pendingDraw (a card the human has
+// drawn but not yet placed — this is NOT part of S, see the file's own comments on it) is
+// captured; botRevealedDraw (a bot's own mid-decision reveal) and peekedCards/resultsShownThisRound
+// (purely local UI toggles) are deliberately NOT persisted — see resumeSavedGame() for why.
+function saveGame(){
+  if(!isSavableSinglePlayerGame()) return;
+  try{
+    localStorage.setItem(SAVED_GAME_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      state: S,
+      pendingDraw: pendingDraw || null,
+    }));
+  } catch(e){ /* private mode / quota — just skip persisting silently */ }
+}
+function loadSavedGame(){
+  try{
+    const raw = localStorage.getItem(SAVED_GAME_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(!parsed || !parsed.state || parsed.state.phase==='ended') return null;
+    return parsed;
+  } catch(e){ return null; }
+}
+function clearSavedGame(){
+  try{ localStorage.removeItem(SAVED_GAME_KEY); } catch(e){}
+}
+function resumeSavedGame(saved){
+  mode='computer'; isOnline=false; isHost=false; myOnlineSeat=0;
+  S = saved.state;
+  pendingDraw = saved.pendingDraw || null;
+  // A bot's own mid-decision reveal (botRevealedDraw) is intentionally NOT restored even if it
+  // happened to be mid-flight at save time — it's a sub-2-second window with no hidden-
+  // information stakes for the player, so the simplest safe choice is to let maybeBotTurn()
+  // below just redrive that bot's turn fresh rather than trying to replay a half-finished
+  // two-phase reveal.
+  botRevealedDraw = null;
+  peekedCards = [false,false,false];
+  resultsShownThisRound = false;
+  showScreen('screen-game');
+  renderAll();
+  // Bot turns here are driven by plain setTimeout (no genId/watchdog guards the way whist.html
+  // has), so none of them survive a reload — if it's currently a bot's turn, nothing will ever
+  // move the game forward unless we explicitly kick it off again right now.
+  maybeBotTurn();
+}
+function showResumeGamePrompt(){
+  // A WhatsApp deep-link (?room=CODE) is an explicit request to join a specific online game —
+  // that takes priority over resuming an old solo match.
+  try{
+    const code = (new URLSearchParams(location.search).get('room')||'').trim().toUpperCase();
+    if(/^[A-Z0-9]{6}$/.test(code)) return;
+  } catch(e){}
+  const saved = loadSavedGame();
+  if(!saved) return;
+  const bg = document.getElementById('resume-modal');
+  if(!bg) return;
+  const sub = document.getElementById('resume-modal-sub');
+  if(sub){
+    sub.textContent = `סבב ${saved.state.roundNum||1} באמצע — נשמר לאחרונה ב-${new Date(saved.savedAt).toLocaleString('he-IL')}.`;
+  }
+  bg.classList.add('show');
+  document.getElementById('resume-yes-btn').onclick = ()=>{
+    bg.classList.remove('show');
+    resumeSavedGame(saved);
+  };
+  document.getElementById('resume-no-btn').onclick = ()=>{
+    bg.classList.remove('show');
+    clearSavedGame();
+  };
 }
 
 /* ============================= FLOW: LOCAL / VS COMPUTER ============================= */
@@ -1339,6 +1434,11 @@ function renderAll(){
   }
 
   if(isOnline && isHost) pushStateToFirebase();
+  // Local vs-computer games auto-save after every render, for the same reason online hosts
+  // push state after every render — renderAll() runs after essentially every meaningful state
+  // change (a draw, a swap, a declared finish, a new round), so this one call site covers all
+  // of them without needing a saveGame() call sprinkled into every individual mutator.
+  saveGame();
 }
 
 function renderPlayerGrid(disp, actual){
@@ -1499,6 +1599,11 @@ function goLobby(){
   showScreen('screen-lobby');
   document.getElementById('results-panel').classList.remove('show');
   document.getElementById('instr-modal').classList.remove('show');
+  // Leaving to the lobby is the only "end of match" signal a single-player game has (there's
+  // no final-score/winner screen — the scoreboard is open-ended) — so this is where a saved
+  // in-progress game gets cleared, whether the player got here via "New Game" or the round-end
+  // panel's "סיום המשחק" button.
+  clearSavedGame();
 }
 function goHub(){
   cleanupOnlineListeners();
@@ -1898,7 +2003,7 @@ function cleanupOnlineListeners(){
 
 /* ============================= INIT ============================= */
 document.addEventListener('DOMContentLoaded', ()=>{
-  // nothing to auto-init; user picks a mode from the lobby
+  showResumeGamePrompt();
 });
 
 // Deep-link join: a friend who taps a WhatsApp-shared link lands on this page with
