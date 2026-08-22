@@ -73,19 +73,29 @@ function ensureStyles(){
   const style = document.createElement('style');
   style.id = 'speech-bubble-styles';
   style.textContent = `
+    /* z-index is deliberately far above every other table element (trick-winner announcement
+       at 100, declare-summary modal at 120, the bottom seat itself at 60, etc.) — a bubble is
+       a small, short-lived, high-priority interruption and must never be buried behind any of
+       those, regardless of which seat (bottom/top/left/right) it's anchored to. */
     .speech-bubble{
-      position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%) translateY(4px) scale(.92);
-      background:rgba(10,20,16,.92); border:1px solid var(--gold-bright, #f0d896); color:var(--cream,#faf4e6);
-      font-size:11.5px; font-weight:600; white-space:nowrap; padding:5px 11px; border-radius:12px;
-      box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:none; z-index:40;
+      position:absolute; bottom:calc(100% + 10px); left:50%; transform:translateX(-50%) translateY(4px) scale(.9);
+      background:#0a1410; border:2px solid var(--gold-bright, #f0d896); color:var(--cream,#faf4e6);
+      font-size:12px; font-weight:700; white-space:nowrap; padding:6px 13px; border-radius:13px;
+      box-shadow:0 8px 22px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.3); pointer-events:none; z-index:9999;
       opacity:0; transition:opacity .18s ease-out, transform .18s ease-out;
     }
     .speech-bubble.show{ opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
     .speech-bubble::after{
       content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%);
-      border:5px solid transparent; border-top-color:var(--gold-bright,#f0d896);
+      border:6px solid transparent; border-top-color:var(--gold-bright,#f0d896);
     }
-    .speech-bubble.thinking{ font-style:italic; opacity:.9; }
+    .speech-bubble::before{
+      /* Inner triangle, 1px smaller and inset by the border width, so the arrow's fill color
+         matches the bubble's own dark background instead of showing only a solid gold wedge. */
+      content:''; position:absolute; top:calc(100% - 2px); left:50%; transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:#0a1410; z-index:1;
+    }
+    .speech-bubble.thinking{ font-style:italic; }
     @media (prefers-reduced-motion: reduce){
       .speech-bubble{ transition:none; }
     }
