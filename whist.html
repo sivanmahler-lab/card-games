@@ -1398,6 +1398,11 @@ function renderOwnFan(fan, actual){
   // Determine if this is a playable position for the current player
   const myActual = seatFor(0); // actual seat at display pos 0
   const isPlayable = (S.phase==='playing' && currentTrickPlayer()===myActual && S.isHuman[myActual] && (!isOnline || isHost || myActual===myOnlineSeat));
+  // Structural lock, not just "don't build a hit-overlay": the whole fan is pointer-events:none
+  // whenever it isn't actually this player's turn to play, so there is no click target of any
+  // kind sitting over the cards during a bot's turn / trick resolution — closes the same gap
+  // the playCard() guard closes, but one layer earlier (nothing to even mis-click on).
+  fan.style.pointerEvents = isPlayable ? 'auto' : 'none';
 
   const boundaries = [0];
   for(let k=1;k<n;k++){
@@ -1444,6 +1449,17 @@ function renderOwnFan(fan, actual){
       hit.style.cursor='pointer';
       hit.style.background='transparent';
       hit.onclick = ()=>{
+        // Re-check live at click time, not just at the moment this overlay was built — a tap
+        // can land here from a stale render (e.g. right after a bot wins a trick, in the gap
+        // before the next renderTable() tears this fan down and rebuilds it with fresh
+        // isPlayable/legal state). playCard() itself is the real, unbypassable guard against
+        // this; this check just avoids even flashing a "selected" highlight on a card the
+        // player can no longer act on.
+        const myActualNow = seatFor(0);
+        if(S.phase!=='playing' || currentTrickPlayer()!==myActualNow || !S.isHuman[myActualNow]){
+          selectedCard = null;
+          return;
+        }
         if(selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank){
           // second tap on the same card — actually play it
           selectedCard = null;
@@ -1996,9 +2012,36 @@ function playHumanCard(c){
   playCard(myActual, c);
 }
 function playCard(p, c){
+  // Hard turn/state guard — this is the single choke point BOTH playHumanCard() and botPlay()
+  // funnel through, so this is where an out-of-turn play gets stopped for good rather than
+  // relying only on the UI not offering a clickable card. That relied-on-UI-only approach is
+  // exactly what broke: a fast tap can land on a card's hit-overlay from the PREVIOUS render
+  // (built from the previous, already-stale isPlayable/legal state) in the gap before the next
+  // renderTable() call tears it down and rebuilds it — e.g. right after a bot wins a trick and
+  // before the ~900ms resolveTrick()->renderTable() cycle finishes. Without this guard, that
+  // stale click still reached playCard() and silently spliced a card out of the WRONG player's
+  // hand (or out-of-turn from the right player), corrupting hand/trick state and eventually
+  // stalling the round once a hand ran out of cards too early.
+  if(S.phase!=='playing' || S.resolvingTrick || S.currentTrick.length>=4){
+    console.warn('playCard: rejected — not a valid time to play a card', {phase:S.phase, resolvingTrick:S.resolvingTrick, trickLen:S.currentTrick.length, p});
+    return;
+  }
+  if(currentTrickPlayer()!==p){
+    console.warn('playCard: rejected — not player '+p+"'s turn (actual turn: "+currentTrickPlayer()+')');
+    return;
+  }
   const hand=S.hands[p];
   const idx = hand.findIndex(x=>x.suit===c.suit && x.rank===c.rank);
   if(idx===-1) return;
+  // Even holding the card and it being your turn isn't enough — it also has to be legal to
+  // play right now (must follow suit if able, must not lead trump before it's broken unless
+  // forced). legalCardsFor() is the same check the UI itself uses to decide what's clickable —
+  // re-checking it here closes the same stale-click gap for "right player, wrong card".
+  const legal = legalCardsFor(p);
+  if(!legal.some(lc=>lc.suit===c.suit && lc.rank===c.rank)){
+    console.warn('playCard: rejected — card is not legal to play right now', {p, c});
+    return;
+  }
   hand.splice(idx,1);
   S.currentTrick.push({player:p, card:c});
   if(c.suit===S.trumpSuit) S.trumpBroken=true;
