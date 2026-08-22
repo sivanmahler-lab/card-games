@@ -240,8 +240,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    anchored to the same top offset the fan used to start at, and the fan is pushed down below
    the badge's own height (badge height + a fixed breathing-room gap) so the two never overlap,
    at any viewport width. Using margin-top in em (relative to the badge's own font-size) plus a
-   small fixed gap keeps this in sync if the badge's font-size or padding changes later. */
-.side-badge{position:absolute;z-index:35;}
+   small fixed gap keeps this in sync if the badge's font-size or padding changes later.
+   max-width caps how far the badge's own content (name + bid/tricks pills) can reach toward
+   the center of the felt — without a cap, a longer bot name plus its stats pills could stretch
+   past the safe zone and encroach on the central trick area on narrow phones. */
+.side-badge{position:absolute;z-index:35;max-width:34%;}
 .side-badge.left-badge{left:6px;top:10%;}
 .side-badge.right-badge{right:6px;top:10%;}
 .fan.side{position:absolute;z-index:30;}
@@ -252,12 +255,18 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
      closer underneath it there instead of leaving oversized empty space. */
   .fan.left-fan{top:calc(10% + 46px);}
   .fan.right-fan{top:calc(10% + 46px);}
+  /* On the narrowest phones, stack name-above-stats instead of side-by-side so the badge's
+     own footprint stays narrow and short rather than stretching wide toward the center. */
+  .side-badge .name-badge{flex-direction:column;gap:2px;padding:5px 8px;}
+  .side-badge .badge-stats{flex-direction:row;gap:4px;}
 }
 
 .name-badge{
   background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
   padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--cream);display:flex;align-items:center;gap:6px;white-space:nowrap;
+  max-width:100%;box-sizing:border-box;overflow:hidden;
 }
+.side-badge .name-badge .nm{overflow:hidden;text-overflow:ellipsis;}
 .name-badge .turn-dot{width:7px;height:7px;border-radius:50%;background:transparent;}
 .name-badge.active .turn-dot{background:#5be27a;box-shadow:0 0 8px #5be27a;}
 .name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);animation:codePulse 1s ease-in-out infinite;}
@@ -328,8 +337,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .card-confirm-hint.show{display:block;}
 
 #trick-area{
+  /* Deliberately a SMALL, safely-centered box — not most of the felt. The old 80%x74% box
+     reached all the way up into the top seat's badge/fan and out into the side seats' fans,
+     so a played card (especially the top player's, at the box's own 30% mark) visually landed
+     underneath the top card stack instead of in a clean central zone. This box is sized to sit
+     well inside all four seats' badges/fans at every viewport width covered by the layout's
+     media queries, with room to spare. */
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:80%;height:74%;z-index:25;
+  width:52%;height:40%;z-index:25;
   pointer-events:none;
 }
 .played-card{position:absolute;width:58px;height:82px;}
@@ -1336,7 +1351,10 @@ function renderBackFan(fan, disp, n){
 function renderTrickArea(){
   const area = document.getElementById('trick-area');
   area.innerHTML='';
-  const dispPositions = { 0:{left:'50%',top:'66%'}, 1:{left:'22%',top:'50%'}, 2:{left:'50%',top:'30%'}, 3:{left:'78%',top:'50%'} };
+  // Percentages are relative to #trick-area's own box (now a small, safely-centered 52%x40%
+  // slice of the felt — see its CSS comment), not the whole felt, so these four positions form
+  // a tight diamond that never reaches the top/side seats' badges or fans.
+  const dispPositions = { 0:{left:'50%',top:'74%'}, 1:{left:'18%',top:'50%'}, 2:{left:'50%',top:'26%'}, 3:{left:'82%',top:'50%'} };
   S.currentTrick.forEach(pc=>{
     const disp = displayFor(pc.player);
     const pos = dispPositions[disp];
