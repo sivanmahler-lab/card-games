@@ -236,12 +236,23 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:60;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
+/* Side badges (left/right seats) sit ABOVE their card fan, not on top of it — the badge is
+   anchored to the same top offset the fan used to start at, and the fan is pushed down below
+   the badge's own height (badge height + a fixed breathing-room gap) so the two never overlap,
+   at any viewport width. Using margin-top in em (relative to the badge's own font-size) plus a
+   small fixed gap keeps this in sync if the badge's font-size or padding changes later. */
 .side-badge{position:absolute;z-index:35;}
-.side-badge.left-badge{left:6px;top:14%;}
-.side-badge.right-badge{right:6px;top:14%;}
+.side-badge.left-badge{left:6px;top:10%;}
+.side-badge.right-badge{right:6px;top:10%;}
 .fan.side{position:absolute;z-index:30;}
-.fan.left-fan{left:6px;top:14%;}
-.fan.right-fan{right:6px;top:14%;}
+.fan.left-fan{left:6px;top:calc(10% + 54px);}
+.fan.right-fan{right:6px;top:calc(10% + 54px);}
+@media(max-width:430px){
+  /* .name-badge shrinks a notch on narrow phones (see below), so the fan can start slightly
+     closer underneath it there instead of leaving oversized empty space. */
+  .fan.left-fan{top:calc(10% + 46px);}
+  .fan.right-fan{top:calc(10% + 46px);}
+}
 
 .name-badge{
   background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
@@ -397,6 +408,10 @@ table.match-table tr.totals-row td{border-top:2px solid var(--gold);font-weight:
   .tb-trump{font-size:11px;padding:2px 7px;margin-inline-start:3px;}
   .tb-btns{gap:3px;}
   .tb-btn{padding:6px 8px;font-size:11px;white-space:nowrap;}
+  /* Tighter name-badge footprint on narrow phones — smaller font/padding/gap so the badge
+     itself takes less vertical room, matching the reduced fan clearance above. */
+  .name-badge{font-size:11px;padding:4px 8px;gap:4px;}
+  .bid-badge,.tricks-badge{font-size:9.5px;padding:1px 6px;}
 }
 @media(max-width:360px){
   .tb-btn{padding:5px 6px;font-size:10px;}
