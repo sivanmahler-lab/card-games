@@ -2553,12 +2553,21 @@ function genRoomCode(){
 // actual room flow, hence the empty .catch().
 async function sendAdminAlert(text){
   try{
-    fetch('https://ntfy.sh/sivan-cards-live', {
+    // mode:'no-cors' + an ASCII-only header value: ntfy.sh's response is opaque either way (we
+    // never read it), but a non-ASCII header value (Hebrew text) is invalid per the Fetch/Headers
+    // spec and silently prevented the request from ever being sent — this keeps the header pure
+    // ASCII and lets the browser send the request as a simple, unblocked POST.
+    await fetch('https://ntfy.sh/sivan-cards-live', {
       method: 'POST',
+      mode: 'no-cors',
       body: text,
-      headers: { 'Title': 'התראת משחק קלפים' }
-    }).catch(()=>{});
-  } catch(e){}
+      headers: {
+        'Title': 'Card Game Alert'
+      }
+    });
+  } catch (e){
+    // Silent fail
+  }
 }
 
 // A room is considered a "ghost" (abandoned) once nobody is connected AND it's been more than
