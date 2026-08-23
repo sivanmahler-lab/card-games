@@ -76,20 +76,50 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 #splash-screen{
   position:fixed;inset:0;z-index:5000;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-  background:
+  /* All layers in ONE background-image declaration — the dark overlay and photo on top, the
+     original felt gradients kept underneath as a same-declaration fallback so a missing/slow-
+     to-load JPG still shows the felt look instead of a plain gray box (a background-image given
+     as several comma-separated layers paints each independently: an earlier layer whose url()
+     404s just shows nothing for that layer, not the whole property). */
+  background-image:
+    linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+    url('whist-pc.jpg'),
     repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
     radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.07), transparent 55%),
     radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  background-size:cover, cover, auto, cover, cover;
+  background-position:center;background-repeat:no-repeat;
   transition:opacity .5s ease, visibility .5s ease;
+}
+@media (max-width:768px){
+  #splash-screen{
+    background-image:
+      linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+      url('whist-mobile.jpg'),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
+      radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.07), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  }
 }
 #splash-screen.fade-out{opacity:0;visibility:hidden;pointer-events:none;}
 .splash-emblem{width:110px;height:auto;margin-bottom:6px;animation:splashEmblemGlow 2.6s ease-in-out infinite;}
 .splash-emblem svg{width:100%;height:auto;overflow:visible;}
-.splash-title{font-family:'Rubik',sans-serif;font-weight:800;font-size:38px;color:var(--gold-bright);text-shadow:0 0 22px rgba(240,216,150,.3);margin:0;}
-.splash-sub{font-size:13px;letter-spacing:1px;color:rgba(250,244,230,.6);margin-bottom:30px;}
-.splash-bar-track{width:220px;max-width:70vw;height:6px;border-radius:4px;background:rgba(0,0,0,.4);border:1px solid rgba(212,175,90,.3);overflow:hidden;}
-.splash-bar-fill{height:100%;width:0%;border-radius:4px;background:linear-gradient(90deg,var(--gold),var(--gold-bright));box-shadow:0 0 10px rgba(240,216,150,.5);transition:width .35s ease;}
-.splash-status{margin-top:14px;font-size:12.5px;color:rgba(250,244,230,.55);min-height:16px;transition:opacity .2s ease;}
+/* 3D luxury gold title: a layered text-shadow stack gives the letters physical depth (each
+   step offset by ~1px and darkened) topped with the usual soft glow, instead of a flat color. */
+.splash-title{
+  font-family:'Rubik',sans-serif;font-weight:800;font-size:38px;color:var(--gold-bright);margin:0;
+  text-shadow:
+    0 1px 0 #b8933f, 0 2px 0 #a67f34, 0 3px 0 #94702c, 0 4px 0 #826124,
+    0 5px 8px rgba(0,0,0,.5), 0 0 26px rgba(240,216,150,.55);
+}
+.splash-sub{font-size:13px;letter-spacing:1px;color:rgba(250,244,230,.75);margin-bottom:30px;text-shadow:0 1px 4px rgba(0,0,0,.6);}
+.splash-bar-track{width:220px;max-width:70vw;height:6px;border-radius:4px;background:rgba(0,0,0,.45);border:1px solid rgba(212,175,90,.4);overflow:hidden;}
+.splash-bar-fill{
+  height:100%;width:0%;border-radius:4px;background:linear-gradient(90deg,var(--gold),var(--gold-bright));
+  box-shadow:0 0 12px rgba(240,216,150,.65), 0 0 24px rgba(240,216,150,.35);
+  transition:width .35s ease;
+}
+.splash-status{margin-top:14px;font-size:12.5px;color:rgba(250,244,230,.7);min-height:16px;transition:opacity .2s ease;text-shadow:0 1px 4px rgba(0,0,0,.6);}
 @media (prefers-reduced-motion: reduce){
   .splash-emblem{animation:none;}
 }
@@ -505,7 +535,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 <g transform="rotate(27.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#6e1720" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
 <g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg>
   </div>
-  <h1 class="splash-title">וויסט</h1>
+  <h1 class="splash-title">וויסט ישראלי</h1>
   <div class="splash-sub">משחק הקלפים</div>
   <div class="splash-bar-track"><div class="splash-bar-fill" id="splash-bar-fill"></div></div>
   <div class="splash-status" id="splash-status">מערבב את החפיסה...</div>

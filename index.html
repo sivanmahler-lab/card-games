@@ -30,11 +30,31 @@
   body{
     margin:0;min-height:100vh;font-family:'Heebo',sans-serif;color:var(--cream);
     position:relative;
-    background:
-               repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
-               radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
-               radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+    /* All layers in ONE background-image declaration — the dark overlay and photo on top, the
+       original felt gradients kept underneath as a same-declaration fallback so a missing/slow-
+       to-load JPG still shows the felt look instead of a plain gray box (a background-image
+       given as several comma-separated layers paints each independently: an earlier layer whose
+       url() 404s just shows nothing for that layer, not the whole property). */
+    background-image:
+      linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+      url('lobby-pc.jpg'),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
+      radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+    background-size:cover, cover, auto, cover, cover;
+    background-position:center;background-attachment:fixed;background-repeat:no-repeat;
     display:flex;flex-direction:column;align-items:center;padding:40px 16px;
+  }
+  @media (max-width:768px){
+    body{
+      background-image:
+        linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+        url('lobby-mobile.jpg'),
+        repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
+        radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
+        radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+      background-attachment:scroll; /* fixed backgrounds can be janky on mobile Safari */
+    }
   }
   body::before{
     content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
@@ -45,8 +65,15 @@
     background:radial-gradient(circle at 50% 50%, transparent 40%, rgba(0,0,0,.35) 100%);
   }
   body > *{position:relative;z-index:1;}
-  h1{font-family:'Rubik',sans-serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;text-shadow:0 0 22px rgba(240,216,150,.3);}
-  .sub{color:rgba(250,244,230,.65);margin-bottom:36px;font-size:14px;letter-spacing:.5px;}
+  /* 3D luxury gold title: a layered text-shadow stack gives the letters physical depth (each
+     step offset by ~1px and darkened) topped with the usual soft glow, instead of a flat color. */
+  h1{
+    font-family:'Rubik',sans-serif;font-size:38px;color:var(--gold-bright);margin:0 0 6px;
+    text-shadow:
+      0 1px 0 #b8933f, 0 2px 0 #a67f34, 0 3px 0 #94702c, 0 4px 0 #826124,
+      0 5px 8px rgba(0,0,0,.5), 0 0 26px rgba(240,216,150,.55);
+  }
+  .sub{color:rgba(250,244,230,.8);margin-bottom:36px;font-size:14px;letter-spacing:.5px;text-shadow:0 1px 4px rgba(0,0,0,.6);}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;max-width:800px;width:100%;perspective:1200px;}
 
   /* Game cards reuse .luxury-card from theme.css for the glass/hover treatment, and add only
@@ -123,7 +150,7 @@
       <path d="M32 14c9 8 15 15 15 21a9 9 0 0 1-13 8 6 6 0 0 0 4 6h-12a6 6 0 0 0 4-6 9 9 0 0 1-13-8c0-6 6-13 15-21z"
         fill="#f0d896" stroke="#211a10" stroke-width="1"/>
     </svg>
-    הלובי
+    לובי משחקי קלפים
   </h1>
   <div class="sub">בחרו משחק</div>
   <div class="grid">
