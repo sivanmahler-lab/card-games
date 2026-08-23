@@ -938,7 +938,7 @@ let roomCode = '';
 let roomRef = null;
 let fbApp = null;
 let fbDb = null;
-let _actionListenerOff = null;  // cleanup for pendingAction listener
+let _actionListenerOff = null;  // cleanup for the actions-queue listener
 let _stateListenerOff = null;   // cleanup for gameState listener
 let _playersListenerOff = null; // cleanup for players listener
 let _resetVoteListenerOff = null; // cleanup for the mutual-consent "new game" vote listener
@@ -3247,17 +3247,28 @@ function pushStateToFirebase(){
   roomRef.child('meta/lastActive').set(Date.now()).catch(()=>{});
 }
 
+// Actions are pushed onto a QUEUE (roomRef.child('actions').push(...)), not written to one
+// shared node with .set(). A single .set() node is a race: if a client submits a second action
+// before the host's listener has consumed-and-removed the first (a fast double-tap, a client
+// re-sending after not seeing its own action reflected yet, two different clients acting close
+// together), the second .set() silently overwrites the first before it's ever read, and that
+// action just vanishes — exactly the "one player's move seems to never happen / clients fall
+// out of sync" symptom. push() gives every action its own unique, order-preserving key instead,
+// so no action can ever clobber another one.
 function listenForPendingActions(){
   if(!roomRef) return;
-  const actRef = roomRef.child('pendingAction');
-  const handler = actRef.on('value', snap=>{
-    if(!snap.exists()) return;
+  const actionsRef = roomRef.child('actions');
+  // child_added fires once per queued action, in submission order — exactly the FIFO
+  // processing this needs. Each action is applied then immediately removed from the queue, one
+  // at a time, so a reconnecting host never replays already-applied actions from before it went
+  // offline.
+  const handler = actionsRef.on('child_added', snap=>{
+    const key = snap.key;
     const action = snap.val();
-    if(!action || !action.type) return;
-    actRef.remove();
-    processRemoteAction(action);
+    if(action && action.type) processRemoteAction(action);
+    actionsRef.child(key).remove();
   });
-  _actionListenerOff = ()=>actRef.off('value', handler);
+  _actionListenerOff = ()=>actionsRef.off('child_added', handler);
 }
 
 // Host waits for a specific player's action (called before returning from advance* functions)
@@ -3293,7 +3304,7 @@ function processRemoteAction(action){
 
 function submitRemoteAction(type, data){
   if(!roomRef) return;
-  roomRef.child('pendingAction').set({
+  roomRef.child('actions').push({
     seat: myOnlineSeat,
     type,
     data,

@@ -2392,22 +2392,33 @@ function pushStateToFirebase(){
   // 30-minute isRoomStale() check in joinRoom().
   roomRef.child('meta/lastActive').set(Date.now()).catch(()=>{});
 }
+// Actions are pushed onto a QUEUE (roomRef.child('actions').push(...)), not written to one
+// shared node with .set(). A single .set() node is a race: if a client submits a second action
+// before the host's listener has consumed-and-removed the first (a very real timing window —
+// a fast double-tap, a client re-sending after not seeing its own action reflected yet, two
+// different clients acting close together), the second .set() silently overwrites the first
+// before it's ever read, and that action just vanishes — the exact "one player's move seems to
+// never happen / the room gets stuck out of sync" symptom reported. push() gives every action
+// its own unique, order-preserving key instead, so no action can ever clobber another one.
 function submitRemoteAction(type, payload){
   if(!roomRef) return;
   const myActual = seatFor(0);
-  roomRef.child('pendingAction').set({type, payload, from:myActual, ts:Date.now()}).catch(e=>console.error('submitRemoteAction failed', e));
+  roomRef.child('actions').push({type, payload, from:myActual, ts:Date.now()}).catch(e=>console.error('submitRemoteAction failed', e));
 }
 function listenForPendingActions(){
   if(!roomRef) return;
-  const actRef = roomRef.child('pendingAction');
-  const handler = actRef.on('value', snap=>{
-    if(!snap.exists()) return;
+  const actionsRef = roomRef.child('actions');
+  // child_added fires once per queued action, in the order they were pushed — exactly the
+  // FIFO processing the fix needs. Each action is applied and then immediately removed from
+  // the queue (so a reconnecting host never replays already-applied actions from before it
+  // went offline), one at a time, in submission order.
+  const handler = actionsRef.on('child_added', snap=>{
+    const key = snap.key;
     const act = snap.val();
-    if(!act || act.from===undefined) return;
-    applyHostAction(act);
-    actRef.remove();
-  }, err=>console.error('pendingAction listener error', err));
-  _actionListenerOff = ()=>actRef.off('value', handler);
+    if(act && act.from!==undefined) applyHostAction(act);
+    actionsRef.child(key).remove();
+  }, err=>console.error('actions queue listener error', err));
+  _actionListenerOff = ()=>actionsRef.off('child_added', handler);
 }
 function applyHostAction(act){
   const p = act.from;
