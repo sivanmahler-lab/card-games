@@ -156,6 +156,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   backdrop-filter:blur(4px);
   overflow:hidden;
 }
+/* The "משחק חוזר" (rematch/new-game) button must stay clickable in EVERY phase of the game —
+   z-index:500 above puts #topbar BELOW .modal-bg (z-index:800), so any open modal (instructions,
+   the reset-vote dialog itself, a confirm box) silently swallows clicks on it despite it
+   rendering "in front" visually within its own stacking context — a child's z-index can never
+   escape its own ancestor's. #topbar.above-modals (toggled by the MutationObserver near the
+   bottom of this file whenever any .modal-bg.show exists anywhere in the document, including
+   ones created on the fly) lifts the whole bar above every modal while one is open. */
+#topbar.above-modals{z-index:9999;}
 #topbar .brand{display:flex;align-items:center;gap:8px;font-family:'Rubik',sans-serif;font-weight:700;font-size:20px;color:var(--gold-bright);white-space:nowrap;}
 #topbar .brand .suits{font-size:15px;letter-spacing:2px;opacity:.85;}
 .tb-trump{
@@ -175,6 +183,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 .tb-btn:hover{background:rgba(212,175,90,0.25);}
 .tb-btn:active{transform:scale(.96);}
+.rematch-tb-short{display:none;}
+@media(max-width:480px){
+  .rematch-tb-full{display:none;}
+  .rematch-tb-short{display:inline;}
+  .rematch-tb-btn{padding:6px 8px;}
+}
 
 /* ---------- SCREENS ---------- */
 .screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;}
@@ -580,7 +594,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 <g transform="rotate(45.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#6e1720" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
 <g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span><span class="tb-room" id="tb-room" style="display:none;" onclick="copyRoomCode()" title="לחץ להעתקת קוד החדר"></span></div>
     <div class="tb-btns">
-      <button class="tb-btn" onclick="newGame()">משחק חדש</button>
+      <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חוזר באותו חדר</span><span class="rematch-tb-short">משחק חוזר</span></button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
       <button class="tb-btn" onclick="goHub()">לובי</button>
     </div>
@@ -1047,6 +1061,19 @@ document.addEventListener('visibilitychange', ()=>{
   S.genId++;
   clearTimeout(window.__botWatchdog);
   clearTimeout(window.__trickWatchdog);
+  // A remote CLIENT must never re-drive bidding/trick/play logic itself on tab-return — that
+  // logic is host-authoritative (see heartbeatCheck()'s own "clients don't drive logic" guard
+  // right above this handler), and the client's local S can already be a stale snapshot from
+  // before it was backgrounded. Re-running advance*()/resolveTrick() here would locally mutate
+  // that stale state instead of just waiting for the host's next gameState push — exactly the
+  // kind of divergence that leaves a returning player stuck looking at a table that disagrees
+  // with everyone else's. A plain renderTable() is enough: it repaints whatever S already holds,
+  // and the very next Firebase gameState update (the host is still driving the real game) will
+  // bring this client back in sync regardless.
+  if(isOnline && !isHost){
+    renderTable();
+    return;
+  }
   if(S.phase==='trump-bidding' || S.phase==='trick-bidding' || S.phase==='playing'){
     renderTable();
     try{
@@ -3414,6 +3441,22 @@ function applyRoomDeepLink(){
     if(nameInput) nameInput.focus();
   });
 }
+// Keeps the top bar (and therefore the always-available rematch button — see #topbar.above-
+// modals in the stylesheet) above whatever modal happens to be open, in every phase of the
+// game. Watches the WHOLE document rather than one fixed list of modal ids, because some
+// confirm dialogs are created on the fly rather than reusing a static element already in the
+// DOM — a fixed id-based listener would miss those entirely. subtree:true so a dynamically-
+// appended .modal-bg (child list changes) and any existing one toggling its "show" class
+// (attribute changes) both get picked up.
+function refreshTopbarStacking(){
+  const anyModalOpen = !!document.querySelector('.modal-bg.show');
+  document.getElementById('topbar')?.classList.toggle('above-modals', anyModalOpen);
+}
+new MutationObserver(refreshTopbarStacking).observe(document.body, {
+  attributes:true, attributeFilter:['class'], childList:true, subtree:true
+});
+refreshTopbarStacking();
+
 window.addEventListener('load', applyRoomDeepLink);
 window.addEventListener('load', showResumeGamePrompt);
 // The lobby's "חוקים" (rules) button links here as whist.html?rules=1 so a player can read the
