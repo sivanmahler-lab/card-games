@@ -563,6 +563,15 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   animation:pulseGlow 2.2s ease-in-out infinite;
 }
 .pcell.selectable:hover{transform:translateY(-14px) scale(1.04);box-shadow:0 10px 18px rgba(0,0,0,.4),0 0 0 2px var(--gold-bright),0 0 16px rgba(240,216,150,.5);animation-play-state:paused;}
+/* .clickable is for a cell that's legally tappable right now but should NOT get the pulse-glow
+   "tap here" push — the pre-graduation top row while a drawn card is pending, specifically. That
+   row IS a legal place to swap the drawn card into (doing so graduates the player on the spot),
+   so it still needs a plain pointer cursor to signal it responds to a tap — but pulsing it with
+   the same glow as the bottom row would visually invite a significant, one-way decision the
+   player hasn't chosen to make, every single time they do an ordinary bottom-row swap. No glow,
+   no lift, just a cursor — the deliberate, still-available-but-quiet middle ground between
+   .selectable (glowing) and .not-actionable (dimmed, truly unavailable). */
+.pcell.clickable{cursor:pointer;}
 /* Own face-up cells that are NOT currently actionable (e.g. the graduated-out bottom row while
    waiting to place a drawn card) are dimmed, matching whist.html's .card.illegal treatment — a
    quiet visual cue for "not clickable right now" without a separate disabled-looking overlay. */
@@ -2405,9 +2414,20 @@ function renderPlayerGrid(disp, actual){
   el.innerHTML = '';
   const myActual = seatFor(0);
   const isSelf = actual===myActual;
-  // Before graduating, either row can be swapped into (choosing a top-row card graduates
-  // you on the spot). After graduating, only the top row remains available.
+  // Before graduating, either row can LEGALLY be swapped into (choosing a top-row card
+  // graduates you on the spot, permanently). After graduating, only the top row remains
+  // available. activeRow is the full set of legally-clickable slots for a pending drawn card.
   const activeRow = S.graduated[actual] ? [0,1,2] : [0,1,2,3,4,5];
+  // glowRow is the NARROWER set that actually gets the pulse-glow "you can tap here" affordance.
+  // Both rows are legal pre-graduation, but lighting up the top row during ordinary bottom-row
+  // play reads as "you should tap here too" for a significant, one-way decision (graduating)
+  // the player hasn't chosen to make yet — so pre-graduation the glow is scoped to the bottom
+  // row only (the row actually in normal use); the top row only starts glowing once the player
+  // has ALREADY graduated onto it (matching the existing .row-active highlight's own meaning).
+  // The top row stays fully clickable throughout (activeRow above is unchanged) — this only
+  // narrows which cells get the pulse-glow/pointer-cursor affordance, never which cells respond
+  // to a tap.
+  const glowRow = S.graduated[actual] ? [0,1,2] : [3,4,5];
   const bottomRow = [3,4,5];
   // Cards are always face-down to everyone, with two exceptions: the player's own bottom
   // row during their initial peek window (each of the 3 cards toggled individually by
@@ -2445,7 +2465,11 @@ function renderPlayerGrid(disp, actual){
       // player hasn't clicked "התחל" yet.
       attachReorderDrag(cellEl, i, ()=>togglePeekCard(i));
     } else if(isSelf && S.phase==='playing' && S.turn===myActual && pendingDraw && activeRow.includes(i)){
-      cellEl.classList.add('selectable');
+      // Legal to tap either way (activeRow) — but only pulse-glow the row actually meant to
+      // draw the eye right now (glowRow, see its own comment above). A legal-but-not-glowing
+      // cell (the pre-graduation top row) still gets .clickable for a plain pointer cursor, so
+      // it never LOOKS unavailable — it just doesn't compete with the bottom row's glow.
+      cellEl.classList.add(glowRow.includes(i) ? 'selectable' : 'clickable');
       cellEl.onclick = ()=>useDrawnOnSlot(i);
     } else if(canReorderOwnHand && S.phase!=='ended'){
       attachReorderDrag(cellEl, i);
