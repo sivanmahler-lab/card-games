@@ -382,6 +382,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   line-height:16px;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);animation:codePulse 1.3s ease-in-out infinite;}
 .p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
+/* Round-end name badges (.magnify-target) hold BOTH the name/score text and the 🔍 tap hint —
+   the badge's own text-overflow:ellipsis above is exactly what was clipping the icon off on the
+   narrow side-seat badges (max-width:84-104px, see .side-badge/.pgrid-wrap.pos-1/pos-3 rules)
+   whenever the name+score text alone was already close to that width. Splitting into a flex row
+   with a separately-truncating text span and a flex:none icon span means the icon can never be
+   clipped — only the name/score text shrinks/ellipsizes, which is the one part that's fine to
+   lose characters from if space is tight. */
+.p-name.magnify-target{display:flex;align-items:center;gap:0;overflow:hidden;}
+.p-name.magnify-target .pn-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.p-name.magnify-target .magnify-hint{flex:none;}
 .pgrid-inner{display:flex;flex-direction:column;align-items:center;gap:1px;}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
 /* Marks the 3 cards that are actually still in play once a player graduates (only the top row
@@ -391,6 +401,53 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    the way a separate arrow element did (which also helped cause uneven row-start heights across
    the three opponent grids). */
 .pcell.row-active{box-shadow:0 0 0 2px var(--gold-bright), 0 0 10px 2px rgba(240,216,150,.55);}
+
+/* ---- Tap-to-magnify a hand at round end -----------------------------------------------------
+   Once every hand is revealed face-up on the felt (S.phase==='ended'), the three opponent grids
+   render quite small (.pgrid.small) even with the round-end legibility boost further below — for
+   someone who wants to actually verify a specific hand's math (not just glance at rank/suit),
+   tapping that player's name/cards zooms their whole hand up to a clearly readable size in place,
+   without leaving the table view or opening any modal. Applied to .pgrid-wrap (the name badge +
+   card grid together) so the whole "unit" scales and lifts as one piece, and only takes effect at
+   round end — see the [data-magnify-hint] / toggleMagnifiedSeat() JS for the click wiring and the
+   S.phase guard. */
+.pgrid-wrap.magnified-hand{
+  z-index:600;
+  transform:scale(1.35);
+  transform-origin:center bottom;
+  filter:drop-shadow(0 10px 26px rgba(0,0,0,.55)) drop-shadow(0 0 22px rgba(240,216,150,.45));
+  transition:transform .3s var(--spring), filter .3s var(--spring);
+}
+/* pos-1/pos-3 (side seats) scale from their own corner rather than center-bottom, so a magnified
+   side hand grows toward the middle of the felt (where there's room) instead of partly off the
+   edge of the table it's already pinned against. */
+.pgrid-wrap.pos-1.magnified-hand{transform-origin:top left;}
+.pgrid-wrap.pos-3.magnified-hand{transform-origin:top right;}
+.pgrid-wrap.pos-2.magnified-hand{transform-origin:top center;}
+/* Every OTHER hand dims slightly and drops in front-to-back priority while one is magnified, so
+   the zoomed hand reads unambiguously as "the thing currently in focus" rather than just one more
+   equally-weighted element floating over the felt. */
+#felt.has-magnified .pgrid-wrap:not(.magnified-hand){opacity:.55;}
+@media (prefers-reduced-motion: reduce){
+  .pgrid-wrap.magnified-hand{transition:none;}
+}
+/* Small "you can tap to zoom" affordance, shown next to every name badge only once the round has
+   actually ended (see the JS render — this element only ever gets created at that point) — makes
+   the tap target and its purpose obvious without relying on a hover state mobile doesn't have. */
+.magnify-hint{font-size:11px;opacity:.8;margin-inline-start:4px;flex:none;}
+.p-name.magnify-target{cursor:pointer;}
+/* The score-breakdown line that appears directly under a magnified hand — e.g.
+   "סך הכל: 7 נק' (7 = 7   •   K = 0   •   3+3 = 0)" — positioned in normal flow right after the
+   card grid (not absolutely positioned over anything) so it simply pushes into whatever empty
+   felt space is below/beside that hand, which the 1.35x scale + z-index:600 already guarantees
+   is visually clear. */
+.magnify-breakdown{
+  margin-top:6px;padding:5px 12px;border-radius:10px;
+  background:rgba(0,0,0,.75);border:1px solid var(--gold-bright);
+  color:var(--gold-bright);font-size:11px;font-weight:700;text-align:center;
+  white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.4);
+  animation:cardIn .25s var(--spring);
+}
 .pgrid.small{transform:scale(.62);}
 @media(min-width:700px){
   /* On wider screens there's plenty of room — don't shrink the other players' cards
@@ -399,6 +456,21 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 }
 @media(min-width:1000px){
   .pgrid.small{transform:scale(1);}
+}
+/* Round-end legibility fix: at the narrower breakpoints (see .pgrid.small .pcell/.r rules
+   further down), opponents' rank/suit shrink small enough to become genuinely hard to read —
+   fine while play is moving fast and glancing at an opponent's exact rank rarely matters, but
+   once the round ends and everyone is meant to actually READ every hand (that's the whole point
+   of the reveal), that's the wrong moment to also be squinting. #felt.round-ended (toggled by
+   renderAll() whenever S.phase==='ended') boosts every opponent grid back up to a fully legible
+   scale regardless of viewport width — overriding the narrow-screen rules below it in source
+   order via the more specific #felt.round-ended selector. */
+#felt.round-ended .pgrid.small{transform:scale(.78);}
+@media(min-width:480px){
+  #felt.round-ended .pgrid.small{transform:scale(.92);}
+}
+@media(min-width:700px){
+  #felt.round-ended .pgrid.small{transform:scale(1);}
 }
 /* On short viewports (wide window but little vertical room), the width-based rules
    above stop shrinking the opponents' card grids even though there isn't enough
@@ -489,7 +561,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 }
 .rp-standing-name{flex:1;font-size:14px;font-weight:700;color:var(--cream);}
 .rp-standing-score{font-family:'Rubik',sans-serif;font-variant-numeric:tabular-nums;font-weight:800;font-size:16px;color:var(--gold-bright);}
-.rp-rounds-wrap{max-height:20vh;overflow-y:auto;margin-bottom:16px;border-radius:10px;}
+/* overflow-x:auto (new) lets the table scroll horizontally instead of being crushed to fit —
+   with 4 players' names plus a round-label column, a 94vw modal on a narrow phone has no room
+   to show every column at a readable width, and width:100% on .score-table (below) used to force
+   exactly that: columns silently shrunk/clipped rather than the table just scrolling. Table now
+   gets its own natural width (min-width on .score-table below) and this wrapper handles the
+   scroll, so nothing gets cut off on the left (this is an RTL page — the cut-off columns were the
+   ones scrolled furthest, not necessarily the visual left) — it just becomes reachable by swipe. */
+.rp-rounds-wrap{max-height:20vh;overflow-y:auto;overflow-x:auto;margin-bottom:16px;border-radius:10px;-webkit-overflow-scrolling:touch;}
 .rp-carousel{border-top:1px solid rgba(212,175,90,.25);padding-top:14px;}
 .rp-carousel-tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;}
 .rp-carousel-tab{padding:6px 14px;border-radius:20px;border:1px solid rgba(212,175,90,.35);background:rgba(255,255,255,.05);
@@ -548,6 +627,27 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #btn-finish:not(:disabled):hover{box-shadow:0 0 14px rgba(224,85,74,.45);}
 .action-bar button:disabled{opacity:.4;cursor:default;}
 
+/* ---- Round-end summary bar ------------------------------------------------------------------
+   Non-blocking replacement for the old auto-opening full-screen results modal: the felt stays
+   fully visible underneath (cards already reveal there via renderPlayerGrid's revealAll), and
+   this bar is the only thing layered on top — a one-line outcome summary plus the three actions
+   a player actually needs right after a round ends. Reuses the same chunky-3D button treatment
+   (.btn-primary/.btn-secondary/.tb-btn) as the rest of the page so it doesn't read as a bolted-on
+   component. */
+.round-end-bar{
+  width:100%;max-width:520px;flex-direction:column;align-items:center;gap:10px;
+  margin-top:8px;z-index:200;flex-shrink:0;
+  background:rgba(0,0,0,.4);border:1px solid rgba(212,175,90,.35);border-radius:16px;
+  padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);
+  animation:cardIn .4s var(--spring);
+}
+@media(min-width:700px){ .round-end-bar{max-width:640px;} }
+@media(min-width:1000px){ .round-end-bar{max-width:760px;} }
+.reb-line{width:100%;text-align:center;font-size:13.5px;font-weight:700;color:var(--gold-bright);line-height:1.5;}
+.reb-actions{width:100%;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.reb-actions .btn-primary, .reb-actions .btn-secondary{width:auto;flex:1 1 160px;margin-top:0;}
+.reb-actions .reb-full-table{flex:0 0 auto;padding:9px 14px;}
+
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:var(--cream);
   padding:10px 18px;border-radius:20px;font-size:13.5px;z-index:900;opacity:0;transition:opacity .25s;pointer-events:none;}
 .toast.show{opacity:1;}
@@ -567,8 +667,12 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .modal h2{color:var(--gold-bright);margin-top:0;}
 .modal p{font-size:13.5px;line-height:1.7;color:rgba(250,244,230,.85);}
 .close-btn{margin-top:14px;}
-.score-table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;font-family:'Rubik',sans-serif;}
-.score-table th,.score-table td{padding:7px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08);}
+.score-table{width:100%;min-width:340px;border-collapse:collapse;margin:14px 0;font-size:13.5px;font-family:'Rubik',sans-serif;}
+.score-table th,.score-table td{padding:7px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08);white-space:nowrap;}
+@media(max-width:420px){
+  .score-table{min-width:0;}
+  .score-table th,.score-table td{padding:6px 5px;font-size:12.5px;}
+}
 .score-table th{color:var(--gold-bright);font-family:'Heebo',sans-serif;}
 .score-table tr.winner td{color:var(--gold-bright);font-weight:800;}
 
@@ -619,6 +723,15 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   .pgrid.small .pcell .r{font-size:8px;}
   .pile{width:40px;height:56px;}
 }
+/* Round-end legibility fix, continued (see the #felt.round-ended rules further up): these two
+   max-height rules shrink the opponent card BOX itself (not just a visual transform:scale, like
+   .pgrid.small alone does), so at round end they need their own override too — otherwise a short-
+   viewport phone would still show unreadable 8-9px rank text on every revealed opponent hand,
+   even with the scale boost above already applied. #felt.round-ended wins here on selector
+   specificity (an id-qualified compound selector beats a plain class one), regardless of source
+   order, so this can safely sit right after the rules it's overriding rather than needing !important. */
+#felt.round-ended .pgrid.small .pcell{width:44px;height:62px;font-size:20px;}
+#felt.round-ended .pgrid.small .pcell .r{font-size:12px;}
 </style>
 </head>
 <body>
@@ -803,7 +916,6 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 <div class="screen" id="screen-game">
   <div class="game-header">
     <div class="pill status" id="pill-status">מכינים משחק...</div>
-    <button class="pill" id="reopen-results-pill" style="display:none;cursor:pointer;" onclick="showRoundEndModal()">📊 תוצאות</button>
   </div>
   <div id="final-round-banner"></div>
   <div id="peek-overlay">
@@ -838,6 +950,21 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
          is actually enabled right now, so a player who's never touched this game before still
          knows what pressing either one does. See renderAll() for the swap logic. -->
     <div class="action-bar-hint" id="action-bar-hint"></div>
+  </div>
+  <!-- ROUND-END SUMMARY BAR — replaces the old auto-opening full-screen results modal. Cards are
+       revealed directly on the felt (renderPlayerGrid's revealAll, unchanged) so players see the
+       whole board exactly as it was during play, with each player's round score shown right next
+       to their own grid (see renderAll()'s per-seat score-badge block). This bar is the only thing
+       that appears on top of that view: the round's outcome plus the three actions a player needs
+       right after a round ends. "טבלת ניקוד מלאה" opens the full ranked/history modal (still
+       showRoundEndModal(), now purely on-demand) for anyone who wants the deeper view. -->
+  <div class="round-end-bar" id="round-end-bar" style="display:none;">
+    <div class="reb-line" id="round-end-summary"></div>
+    <div class="reb-actions">
+      <button class="btn-primary reb-next" onclick="onClickNextRound()">סבב נוסף ◀</button>
+      <button class="btn-secondary rematch-btn reb-rematch" onclick="newGame()">🔄 משחק חוזר באותו חדר</button>
+      <button class="tb-btn reb-full-table" onclick="showRoundEndModal()">📊 טבלת ניקוד מלאה</button>
+    </div>
   </div>
 </div>
 
@@ -920,6 +1047,17 @@ function symHTML(suit){
 // Bot display names — a little royal court instead of "בוט 1/2/3", indexed 0-2 by the bot's
 // relative slot (never by seat position, since that shifts depending on how many humans join).
 const BOT_NAMES = ['ארתור','ויקטוריה',"צ'רצ'יל",'אליזבט'];
+// Player-entered names (S.names) are plain data everywhere else in this file (assigned via
+// .textContent, which is always safe), but the round-end magnify-hint (see renderAll()) needs to
+// mix a name with a literal <span> for the 🔍 icon, which means building innerHTML instead — this
+// is the one place in the file a name string reaches innerHTML, so it needs its own escape rather
+// than relying on the browser to have done it for us. In an online game a name comes from another
+// player's own input and is otherwise never sanitized before display, so this also closes what
+// would otherwise be a stored-XSS opening (one player setting their display name to a payload
+// that runs in every other player's browser once the round ends).
+function escapeHTML(str){
+  return String(str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function rankLabel(r){ if(r===1) return 'A'; if(r===11) return 'J'; if(r===12) return 'Q'; if(r===13) return 'K'; return String(r); }
 function cardValue(r){ if(r===13) return 0; if(r>=11) return 10; return r; }
 function buildDeck(){
@@ -984,6 +1122,7 @@ function newRound(){
 function buildRoundState(names, isHuman, matchHistory, roundNum, starter, active){
   resultsShownThisRound = false;
   peekedCards = [false,false,false];
+  magnifiedSeat = null;
   const deck = shuffle(buildDeck());
   S = {
     phase:'peek',
@@ -1628,6 +1767,24 @@ function computeRawScore(hand){
   });
   return total;
 }
+// Human-readable breakdown of computeRawScore's grouping logic, for the magnified-hand view
+// (see toggleMagnifiedSeat()) — same matched-rank-groups-are-worth-0 rule, but expressed as a
+// short list of terms a player can actually check their hand against, e.g. "2+2 = 0, K = 0,
+// 7 + 9 = 16" rather than just handing them the final number with no way to verify it.
+function computeScoreBreakdown(hand){
+  const groups = {};
+  hand.forEach(c=>{ (groups[c.rank]=groups[c.rank]||[]).push(c); });
+  const terms = [];
+  Object.values(groups).forEach(g=>{
+    const labels = g.map(c=>rankLabel(c.rank)).join('+');
+    if(g.length>=2){
+      terms.push(`${labels} = 0`);
+    } else {
+      terms.push(`${labels} = ${cardValue(g[0].rank)}`);
+    }
+  });
+  return terms.join('   •   ');
+}
 function endRound(){
   S.phase='ended';
   const raw = S.hands.map(computeRawScore);
@@ -1656,22 +1813,31 @@ function endRound(){
   // only point where that data still exists and can be captured for the results carousel in
   // showRoundEndModal() below.
   S.matchHistory.push({raw, final, caller, names:S.names.slice(), hands:S.hands.map(h=>h.slice())});
-  // Cards get revealed face-up for everyone right away (renderAll/renderPlayerGrid does
-  // this automatically once phase is 'ended') as a quick glance at the raw table if someone
-  // wants it. But cramming all 4 players' full 6-card hands onto one small phone screen at
-  // once is unreadable, which is exactly the scoreboard modal (showRoundEndModal(), with its
-  // ranked standings + full-size per-player card carousel) was built to fix — so it's opened
-  // automatically right here instead of leaving it as an easy-to-miss opt-in "הצג תוצאות"
-  // button. The "הצג תוצאות" pill (see renderAll()) still exists too, in case someone closes
-  // the modal but wants to reopen it without waiting for the next round.
+  // Cards reveal face-up directly on the felt, in their original positions (renderPlayerGrid's
+  // revealAll turns on automatically once phase is 'ended' — see there) — the whole board stays
+  // visible exactly as it was during play, nothing modal covers it. The compact round-end-bar
+  // (see renderAll()) is the only thing layered on top, with a one-line outcome summary and the
+  // three actions a player needs; the full ranked/history scoreboard (showRoundEndModal(), with
+  // its per-player card carousel) is still available on demand via that bar's "טבלת ניקוד מלאה"
+  // button, but never opens automatically anymore.
   document.getElementById('results-panel').classList.remove('show');
   renderAll();
-  showRoundEndModal();
 }
 // Which seat's cards the carousel is currently showing — reset every time the modal opens
 // (see showRoundEndModal()) so it always starts on the round's own lowest-score (leading)
 // player rather than remembering whatever seat was last viewed from a previous round.
 let rpCarouselSeat = 0;
+// Which seat (actual, not disp) has its hand tap-magnified on the felt right now, at round end —
+// null when nothing is magnified. Seat-based (not disp-based) like everything else keyed by
+// player identity, since which DOM position ("disp") a seat renders into can change between
+// renders in a 2-player game (see layoutSlotFor()). Reset to null on every new round/game so a
+// magnified hand from a previous round never carries over onto a fresh, still-hidden one.
+let magnifiedSeat = null;
+function toggleMagnifiedSeat(actual){
+  if(S.phase!=='ended') return;
+  magnifiedSeat = (magnifiedSeat===actual) ? null : actual;
+  renderAll();
+}
 
 function renderRpCarousel(activeSeats){
   const history = S.matchHistory || [];
@@ -1823,15 +1989,43 @@ function renderAll(){
     if(wrapEl) wrapEl.style.display = usedSlots.has(slot) ? '' : 'none';
   }
 
+  // Once the round has ended, each player's name badge also shows their computed score for
+  // THIS round (see endRound()'s S.matchHistory push) — requested so a player can look straight
+  // at the felt (where every hand is now revealed face-up in place) and immediately see both
+  // whose cards are whose AND what each of them scored, without opening any modal at all.
+  const roundEnded = S.phase==='ended';
+  const lastRoundScores = (roundEnded && S.matchHistory && S.matchHistory.length)
+    ? S.matchHistory[S.matchHistory.length-1].final : null;
+  // #felt.has-magnified dims every other hand (see the CSS) so the zoomed one reads as the
+  // clear focus rather than just one more equally-weighted element on the table.
+  document.getElementById('felt')?.classList.toggle('has-magnified', roundEnded && magnifiedSeat!==null);
   for(const disp of activeDisps){
     const actual = seatFor(disp);
     const slot = layoutSlotFor(disp);
     const nameEl = document.getElementById('pn-'+slot);
+    const wrapEl = document.getElementById('pw-'+slot);
     const declared = S.finishCaller===actual;
-    nameEl.textContent = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
+    let label = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
+    if(lastRoundScores) label += ` · ${lastRoundScores[actual]} נק'`;
+    if(roundEnded){
+      // Tap-to-magnify (round end only): the name badge itself is the tap target, plus a small
+      // 🔍 hint so it's obvious at a glance — without hover, mobile has no other way to discover
+      // this. onclick set directly (not addEventListener) since nameEl.textContent above already
+      // implied a fresh element isn't being reused across renders in a way that would double up
+      // listeners — but this file's own convention throughout is plain .onclick=, kept consistent
+      // here too.
+      nameEl.innerHTML = `<span class="pn-text">${escapeHTML(label)}</span><span class="magnify-hint">🔍</span>`;
+      nameEl.classList.add('magnify-target');
+      nameEl.onclick = ()=>toggleMagnifiedSeat(actual);
+    } else {
+      nameEl.textContent = label;
+      nameEl.classList.remove('magnify-target');
+      nameEl.onclick = null;
+    }
     nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
     nameEl.classList.toggle('declared-finish', declared);
-    renderPlayerGrid(slot, actual);
+    if(wrapEl) wrapEl.classList.toggle('magnified-hand', roundEnded && magnifiedSeat===actual);
+    renderPlayerGrid(slot, actual, roundEnded && magnifiedSeat===actual);
   }
 
   // piles
@@ -1910,19 +2104,28 @@ function renderAll(){
     peekGoBtn.classList.toggle('needs-peek', !hasPeekedAny);
   }
 
-  // Once the round ends, hands are revealed on the felt AND the scoreboard modal now opens
-  // automatically (see endRound()) instead of waiting for the player to find an opt-in
-  // button. This "תוצאות" pill in the status bar (up top, never over the felt — a floating
-  // button placed over the table used to sit right on top of the player's own cards on
-  // shorter screens) is what's left to REOPEN the modal if the player closed it and wants
-  // another look before the next round starts. It pulses to draw the eye until the panel
-  // has been opened at least once this round.
+  // Once the round ends, hands reveal directly on the felt (renderPlayerGrid's revealAll) and
+  // the compact round-end-bar below takes over as the only overlay — the old floating
+  // "הצג תוצאות" button (which used to sit right on top of the felt, and on short screens ended
+  // up over the player's own cards) and its reopen-pill successor are both gone; the bar's own
+  // "טבלת ניקוד מלאה" button is what opens the full scoreboard now, purely on demand.
   const revealOverlay = document.getElementById('reveal-results-overlay');
   revealOverlay.classList.remove('show');
-  const reopenPill = document.getElementById('reopen-results-pill');
-  if(reopenPill){
-    reopenPill.style.display = S.phase==='ended' ? 'inline-block' : 'none';
-    reopenPill.classList.toggle('attn', S.phase==='ended' && !resultsShownThisRound);
+
+  document.getElementById('felt')?.classList.toggle('round-ended', S.phase==='ended');
+
+  const reb = document.getElementById('round-end-bar');
+  if(S.phase==='ended'){
+    reb.style.display = 'flex';
+    const history = S.matchHistory || [];
+    const activeSeats = [0,1,2,3].filter(p => !S.active || S.active[p]);
+    const totals = [0,0,0,0];
+    history.forEach(r=>{ activeSeats.forEach(i=>totals[i]+=r.final[i]); });
+    const leader = activeSeats.slice().sort((a,b)=>totals[a]-totals[b])[0];
+    const summaryEl = document.getElementById('round-end-summary');
+    summaryEl.textContent = `🏆 סבב ${S.roundNum||1} הסתיים — ${S.names[leader]} מוביל/ה עם ${totals[leader]} נק'`;
+  } else {
+    reb.style.display = 'none';
   }
 
   // action bar
@@ -1957,7 +2160,7 @@ function renderAll(){
   saveGame();
 }
 
-function renderPlayerGrid(disp, actual){
+function renderPlayerGrid(disp, actual, isMagnified){
   const el = document.getElementById('pg-'+disp);
   if(dragReorder && el.contains(dragReorder.cellEl)){
     // A render landed while the player has a card actively mid-drag in THIS grid (e.g. a
@@ -2021,6 +2224,32 @@ function renderPlayerGrid(disp, actual){
       cellEl.classList.add('not-actionable');
     }
     el.appendChild(cellEl);
+  }
+
+  // Score-breakdown line under a tap-magnified hand (round end only — see toggleMagnifiedSeat()
+  // in the state section above). Lives in .pgrid-inner (the grid's own parent), right after the
+  // grid itself, in normal document flow — not absolutely positioned over anything — so it simply
+  // takes up the felt space the 1.35x scale + z-index:600 on .magnified-hand already clears.
+  // Removed and rebuilt on every render rather than toggled, since renderPlayerGrid rebuilds
+  // el.innerHTML from scratch anyway and this is simplest kept in lockstep with that.
+  const pgridInner = el.parentElement;
+  const existingBreakdown = pgridInner.querySelector('.magnify-breakdown');
+  if(existingBreakdown) existingBreakdown.remove();
+  if(isMagnified){
+    // Show the same FINAL score already displayed on the name badge (raw hand value plus any
+    // declared-finish +10/-10 adjustment — see endRound()), not the plain raw total, so this
+    // breakdown line agrees with what the player already sees next to the name rather than
+    // showing a second, different-looking number for the same round.
+    const history = S.matchHistory || [];
+    const lastRound = history[history.length-1];
+    const total = lastRound ? lastRound.final[actual] : computeRawScore(S.hands[actual]);
+    const rawTotal = computeRawScore(S.hands[actual]);
+    const breakdown = computeScoreBreakdown(S.hands[actual]);
+    const adjustNote = (total!==rawTotal) ? `   •   ${total>rawTotal?'קנס איחור +10':'בונוס סיום 10-'}` : '';
+    const line = document.createElement('div');
+    line.className = 'magnify-breakdown';
+    line.textContent = `סך הכל: ${total} נק' (${breakdown}${adjustNote})`;
+    pgridInner.appendChild(line);
   }
 }
 
