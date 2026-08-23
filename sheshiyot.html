@@ -37,12 +37,35 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;margin:0;}
+/* The game table background: the same sheshiyot-pc/mobile.jpg photo used on the splash screen
+   stays visible as the table backdrop for the whole session, not just during loading — with a
+   dark overlay on top so cards/text stay readable over a busy photo. All layers live in ONE
+   background-image declaration (photo+overlay first, felt gradients kept as same-declaration
+   fallback layers) — see the #splash-screen comment above for why that matters when the photo
+   404s. Deliberately no background-attachment:fixed (see index.html's body rule for why: it
+   causes background flicker/vanish on mobile when the address bar shows/hides) — background-size
+   :cover on a height:100dvh body covers the same ground without that failure mode. height:100dvh
+   (falling back to 100vh) replaces the old fixed height:100vh for the same mobile-chrome reason. */
 body{
-  background:
+  background-image:
+    linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+    url('sheshiyot-pc.jpg'),
     repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 5px),
     radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
     radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
-  font-family:'Heebo',sans-serif;color:var(--cream);overflow:hidden;height:100vh;
+  background-size:cover, cover, auto, cover, cover;
+  background-position:center;background-repeat:no-repeat;
+  font-family:'Heebo',sans-serif;color:var(--cream);overflow:hidden;height:100vh;height:100dvh;
+}
+@media (max-width:768px){
+  body{
+    background-image:
+      linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+      url('sheshiyot-mobile.jpg'),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 5px),
+      radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  }
 }
 h1,h2,h3{font-family:'Rubik',sans-serif;}
 button{font-family:'Heebo',sans-serif;}
@@ -243,6 +266,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #peek-overlay .btn-primary{max-width:200px;margin-left:auto;margin-right:auto;}
 #peek-overlay.show{display:block;}
 #peek-overlay button{white-space:nowrap;}
+#peek-overlay button:disabled,#peek-overlay button.needs-peek{opacity:.45;cursor:not-allowed;filter:grayscale(.3);}
 
 .pgrid-wrap{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
 .pgrid-wrap.pos-0{bottom:6px;left:50%;transform:translateX(-50%);z-index:40;}
@@ -323,19 +347,41 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
 #reveal-results-overlay{position:absolute;left:50%;top:50%;transform:translate(-50%, -108px);z-index:80;display:none;text-align:center;}
 #reveal-results-overlay.show{display:block;}
-.results-panel{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:420px;max-height:38vh;overflow-y:auto;
-  background:rgba(8,26,20,.96);border:2px solid var(--gold);border-radius:16px 16px 0 0;
-  padding:0 16px 16px;z-index:850;display:none;box-shadow:0 -10px 34px rgba(0,0,0,.55);animation:modalIn .25s cubic-bezier(.2,.7,.3,1);}
-.results-panel.show{display:block;}
-.results-panel .rp-head{cursor:grab;margin:0 -16px 10px;padding:12px 16px;border-radius:16px 16px 0 0;
-  user-select:none;touch-action:none;text-align:center;font-size:13px;font-weight:700;color:var(--gold-bright);
-  background:#0d3327;border-bottom:1px solid rgba(212,175,90,.3);
-  position:sticky;top:0;z-index:2;}
-.results-panel .rp-head:active{cursor:grabbing;}
-.results-panel.dragging{transition:none;}
-.results-panel .rp-close{position:absolute;top:10px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
-  color:var(--cream);border-radius:8px;width:26px;height:26px;font-size:14px;cursor:pointer;z-index:2;}
-@media(min-width:700px){ .results-panel{max-width:480px;} }
+/* ---- Results / Scoreboard modal ----------------------------------------------------------
+   Replaces the old draggable 38vh-max bottom-sheet: on a small phone screen, 4 players' names
+   and per-round scores in one narrow table were unreadably cramped, and there was no way to
+   actually see anyone's cards. This is now a proper centered modal (reusing .modal-bg/.modal)
+   sized generously (min(94vw), tall max-height with internal scroll for the rankings, and a
+   dedicated non-scrolling zone for the per-player card carousel so the 6 cards always render
+   at a legible, consistent size regardless of how many rounds are in the history table above). */
+.results-modal{max-width:640px;width:94vw;max-height:92vh;padding:20px 18px;}
+.rp-close{position:absolute;top:10px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
+  color:var(--cream);border-radius:8px;width:28px;height:28px;font-size:14px;cursor:pointer;z-index:2;}
+.rp-standings{display:flex;flex-direction:column;gap:8px;margin:14px 0 18px;}
+.rp-standing-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(212,175,90,.15);}
+.rp-standing-row.first{background:linear-gradient(90deg, rgba(212,175,90,.22), rgba(212,175,90,.05));
+  border-color:var(--gold-bright);box-shadow:0 0 18px rgba(240,216,150,.15);}
+.rp-standing-rank{font-family:'Rubik',sans-serif;font-weight:800;font-size:15px;color:var(--gold-bright);
+  width:28px;text-align:center;flex-shrink:0;}
+.rp-standing-name{flex:1;font-size:14px;font-weight:700;color:var(--cream);}
+.rp-standing-score{font-family:'Rubik',sans-serif;font-variant-numeric:tabular-nums;font-weight:800;font-size:16px;color:var(--gold-bright);}
+.rp-rounds-wrap{max-height:20vh;overflow-y:auto;margin-bottom:16px;border-radius:10px;}
+.rp-carousel{border-top:1px solid rgba(212,175,90,.25);padding-top:14px;}
+.rp-carousel-tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;}
+.rp-carousel-tab{padding:6px 14px;border-radius:20px;border:1px solid rgba(212,175,90,.35);background:rgba(255,255,255,.05);
+  color:var(--cream);font-size:12.5px;font-weight:700;cursor:pointer;}
+.rp-carousel-tab.active{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border-color:transparent;}
+.rp-carousel-body{display:flex;flex-direction:column;align-items:center;gap:10px;}
+.rp-carousel-cards{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;}
+.rp-carousel-cards .pcell{position:static;width:44px;height:62px;}
+.rp-carousel-cards .pcell .r{font-size:10px;}
+@media(min-width:400px){ .rp-carousel-cards{gap:8px;} .rp-carousel-cards .pcell{width:52px;height:74px;} .rp-carousel-cards .pcell .r{font-size:12px;} }
+.rp-carousel-score{font-family:'Rubik',sans-serif;font-size:14px;color:var(--gold-bright);font-weight:700;}
+.rp-carousel-nav{display:flex;align-items:center;gap:14px;}
+.rp-carousel-nav button{background:rgba(255,255,255,.08);border:1px solid rgba(212,175,90,.4);color:var(--cream);
+  border-radius:50%;width:32px;height:32px;font-size:15px;cursor:pointer;}
+@media(min-width:700px){ .results-modal{max-width:680px;} }
 
 .center-pot{display:flex;align-items:center;gap:18px;}
 .pile{width:58px;height:82px;border-radius:7px;position:relative;display:flex;align-items:center;justify-content:center;}
@@ -350,6 +396,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pile .sym svg{width:100%;height:100%;overflow:visible;}
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
 .pile.closed.drawn.disabled{opacity:1;}
+@keyframes pileTurnPulse{0%,100%{box-shadow:0 0 0 0 rgba(240,216,150,.55);}50%{box-shadow:0 0 0 8px rgba(240,216,150,0);}}
+/* "קח קלף" — the your-turn hint pulse on both piles (see renderAll()'s pile-rendering block).
+   Layered on top of whatever background/border the pile already has (closed pattern or open
+   face) rather than replacing it, so the card art stays legible while it pulses. */
+.pile.turn-hint{animation:pileTurnPulse 1.4s ease-in-out infinite;}
+@media (prefers-reduced-motion: reduce){
+  .pile.turn-hint{animation:none;box-shadow:0 0 0 3px rgba(240,216,150,.55);}
+}
 
 .action-bar{width:100%;max-width:520px;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
   padding:10px 14px;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;flex-shrink:0;}
@@ -635,6 +689,19 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
 </div>
 
+<!-- Mutual-consent "start new game?" vote — shown to every OTHER online player when someone
+     proposes a restart; see proposeNewGame()/listenForResetVote() further down this file. -->
+<div class="modal-bg" id="reset-vote-modal">
+  <div class="modal" style="max-width:400px;text-align:center;">
+    <h2 style="font-size:19px;">🔄 בקשה להתחלת משחק חדש</h2>
+    <p id="reset-vote-msg" style="margin:10px 0 20px;"></p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn-primary" id="reset-vote-yes" style="max-width:160px;">מאשר/ת</button>
+      <button class="tb-btn close-btn" id="reset-vote-no" style="padding:11px 22px;">מסרב/ת</button>
+    </div>
+  </div>
+</div>
+
 <!-- INSTRUCTIONS -->
 <div class="modal-bg" id="instr-modal">
   <div class="modal">
@@ -649,13 +716,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
 </div>
 
-<!-- ROUND END (a non-blocking bottom sheet, not a full modal — the point is to let the
-     player keep looking at everyone's revealed cards on the felt above it while reading
-     the score breakdown) -->
-<div class="results-panel" id="results-panel">
-  <div class="rp-head" id="rp-head">⠿⠿⠿ גרור/י כאן כדי להזיז ולראות את הקלפים ⠿⠿⠿</div>
-  <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
-  <div id="round-end-content"></div>
+<!-- ROUND END — a full-screen scoreboard modal. Replaced the old cramped bottom-sheet table
+     (unreadable once 4 players' names/scores all had to fit across one ~380px-wide strip) with
+     a clear ranked scoreboard plus a per-player tab/carousel that shows each player's actual 6
+     cards at full size, one player at a time, instead of trying to cram everyone's hand into the
+     same tiny view. See showRoundEndModal() further down this file. -->
+<div class="modal-bg" id="results-panel">
+  <div class="modal results-modal">
+    <button class="rp-close" onclick="document.getElementById('results-panel').classList.remove('show')">✕</button>
+    <div id="round-end-content"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -717,7 +787,7 @@ let S = null;
 let mode = null; // 'computer' | 'online'
 let isOnline=false, isHost=false, myOnlineSeat=0, roomCode='', roomRef=null;
 let firebaseApp=null, fbDB=null, fbReady=false;
-let _playersListenerOff=null, _stateListenerOff=null, _actionListenerOff=null;
+let _playersListenerOff=null, _stateListenerOff=null, _actionListenerOff=null, _resetVoteListenerOff=null;
 let _pendingAnim=null; // set by applyHostAction right before renderAll(), fired right after
 let pendingDraw = null; // {source, card} — locally held while deciding (host or local human)
 function seatFor(disp){ return (disp + myOnlineSeat) % 4; }
@@ -945,6 +1015,13 @@ function togglePeekCard(slotIdx){
 function startFromPeek(){
   const myActual = seatFor(0);
   if(S.phase!=='peek' || S.peeked[myActual]) return;
+  // Belt-and-suspenders: the button itself is disabled until at least one card has been
+  // peeked (see renderAll()'s peek-overlay block), but this guard covers a stale click that
+  // slips through the gap between a state change and the next render.
+  if(!peekedCards.some(Boolean)){
+    showToast('יש להציץ קודם בשני הקלפים שלך!');
+    return;
+  }
   // Whatever is still face-up flips back down right here, for good — once "התחל" is
   // clicked there's no way back into this player's own peek window.
   peekedCards = [false,false,false];
@@ -1375,7 +1452,11 @@ function endRound(){
     }
   }
   if(!S.matchHistory) S.matchHistory = [];
-  S.matchHistory.push({raw, final, caller, names:S.names.slice()});
+  // Snapshot each player's actual 6 cards for this round too (not just the computed score) —
+  // S.hands gets reshuffled/overwritten by the next round's buildRoundState(), so this is the
+  // only point where that data still exists and can be captured for the results carousel in
+  // showRoundEndModal() below.
+  S.matchHistory.push({raw, final, caller, names:S.names.slice(), hands:S.hands.map(h=>h.slice())});
   // Cards get revealed face-up for everyone right away (renderAll/renderPlayerGrid does
   // this automatically once phase is 'ended'). The results panel itself stays closed —
   // each player opens it in their own time via the "הצג תוצאות" button, so nobody's view
@@ -1383,45 +1464,99 @@ function endRound(){
   document.getElementById('results-panel').classList.remove('show');
   renderAll();
 }
+// Which seat's cards the carousel is currently showing — reset every time the modal opens
+// (see showRoundEndModal()) so it always starts on the round's own lowest-score (leading)
+// player rather than remembering whatever seat was last viewed from a previous round.
+let rpCarouselSeat = 0;
+
+function renderRpCarousel(activeSeats){
+  const history = S.matchHistory || [];
+  const lastRound = history[history.length-1];
+  const idx = activeSeats.indexOf(rpCarouselSeat)>=0 ? rpCarouselSeat : activeSeats[0];
+  rpCarouselSeat = idx;
+
+  const tabs = activeSeats.map(seat=>
+    `<button class="rp-carousel-tab ${seat===idx?'active':''}" onclick="rpCarouselSeat=${seat};renderRpCarouselOnly();">${S.names[seat]}</button>`
+  ).join('');
+
+  const hand = lastRound && lastRound.hands ? lastRound.hands[idx] : (S.hands ? S.hands[idx] : []);
+  const cardsHTML = (hand||[]).map(c=>cardHTML(c)).join('');
+  const roundScore = lastRound ? lastRound.final[idx] : 0;
+
+  const pos = activeSeats.indexOf(idx);
+  const prevSeat = activeSeats[(pos-1+activeSeats.length)%activeSeats.length];
+  const nextSeat = activeSeats[(pos+1)%activeSeats.length];
+
+  document.getElementById('rp-carousel-content').innerHTML = `
+    <div class="rp-carousel-tabs">${tabs}</div>
+    <div class="rp-carousel-body">
+      <div class="rp-carousel-cards">${cardsHTML}</div>
+      <div class="rp-carousel-score">${S.names[idx]} — ${roundScore} נק' בסבב זה</div>
+      <div class="rp-carousel-nav">
+        <button onclick="rpCarouselSeat=${prevSeat};renderRpCarouselOnly();">›</button>
+        <button onclick="rpCarouselSeat=${nextSeat};renderRpCarouselOnly();">‹</button>
+      </div>
+    </div>
+  `;
+}
+// Re-renders only the carousel section (tab click / prev-next nav) without rebuilding the
+// whole scoreboard modal from scratch.
+function renderRpCarouselOnly(){
+  const activeSeats = [0,1,2,3].filter(p => !S.active || S.active[p]);
+  renderRpCarousel(activeSeats);
+}
+
 function showRoundEndModal(){
   const history = S.matchHistory || [];
   const activeSeats = [0,1,2,3].filter(p => !S.active || S.active[p]);
   const totals = [0,0,0,0];
   history.forEach(r=>{ activeSeats.forEach(i=>totals[i]+=r.final[i]); });
-  const minTotal = Math.min(...activeSeats.map(i=>totals[i]));
+
+  // Rank standings low-to-high (lowest total = 1st place, matching the game's scoring —
+  // see computeRawScore/endRound where lower is better).
+  const ranked = activeSeats.slice().sort((a,b)=>totals[a]-totals[b]);
+  const place = ['🥇','🥈','🥉','4'];
+  const standingsHTML = ranked.map((seat,i)=>`
+    <div class="rp-standing-row ${i===0?'first':''}">
+      <div class="rp-standing-rank">${place[i]||(i+1)}</div>
+      <div class="rp-standing-name">${S.names[seat]}</div>
+      <div class="rp-standing-score">${totals[seat]}</div>
+    </div>
+  `).join('');
 
   let headerCells = activeSeats.map(i=>`<th>${S.names[i]}</th>`).join('');
   let rows = history.map((r,idx)=>{
-    // Just the round number — who came out ahead for THIS round is shown by circling
-    // their score below; who declared "finished" isn't repeated here since the circle
-    // already makes the round's outcome clear at a glance.
     const roundLabel = 'סבב '+(idx+1);
     const roundMin = Math.min(...activeSeats.map(i=>r.final[i]));
     const cells = activeSeats.map(i=>{
       const v = r.final[i];
-      // Circle the lowest (winning) score for this specific round.
       return v===roundMin
         ? `<td><span style="display:inline-block;border:2px solid var(--gold-bright);border-radius:50%;width:26px;height:26px;line-height:22px;">${v}</span></td>`
         : `<td>${v}</td>`;
     }).join('');
     return `<tr><td>${roundLabel}</td>${cells}</tr>`;
   }).join('');
-  let totalsCells = activeSeats.map(i=>{
-    const t = totals[i];
-    return `<td>${t===minTotal?'<b>'+t+'</b>':t}</td>`;
-  }).join('');
 
   const box = document.getElementById('round-end-content');
   box.innerHTML = `
-    <h2>🏆 סוף סבב ${S.roundNum||1}</h2>
-    <table class="score-table">
-      <tr><th>סבב</th>${headerCells}</tr>
-      ${rows}
-      <tr class="winner" style="border-top:2px solid var(--gold);"><td>סה"כ</td>${totalsCells}</tr>
-    </table>
-    <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף</button>
-    <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">סיום המשחק</button>
+    <h2>🏆 טבלת דירוג — סוף סבב ${S.roundNum||1}</h2>
+    <div class="rp-standings">${standingsHTML}</div>
+    <div class="rp-rounds-wrap">
+      <table class="score-table">
+        <tr><th>סבב</th>${headerCells}</tr>
+        ${rows}
+      </table>
+    </div>
+    <div class="rp-carousel">
+      <div id="rp-carousel-content"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף</button>
+      <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">סיום המשחק</button>
+    </div>
   `;
+  rpCarouselSeat = ranked[0];
+  renderRpCarousel(activeSeats);
   document.getElementById('results-panel').classList.add('show');
   resultsShownThisRound = true;
   renderAll();
@@ -1435,7 +1570,16 @@ function renderAll(){
   const pill = document.getElementById('pill-status');
   const roundPrefix = 'סבב '+(S.roundNum||1)+' — ';
   if(S.phase==='peek'){
-    pill.textContent = roundPrefix + (allPeeked() ? 'מתחילים...' : 'שלב הצצה — כל שחקן מציץ בשלושת הקלפים התחתונים שלו');
+    if(allPeeked()){
+      pill.textContent = roundPrefix + 'מתחילים...';
+    } else if(S.peeked[myActual]){
+      // This player already confirmed — name whoever's still deciding, so waiting doesn't
+      // feel like the game stalled with no explanation.
+      const waitingOn = [0,1,2,3].filter(p=>(!S.active || S.active[p]) && !S.peeked[p]).map(p=>S.names[p]);
+      pill.textContent = roundPrefix + 'ממתינים שכל השחקנים יסיימו להציץ... (' + waitingOn.join(', ') + ')';
+    } else {
+      pill.textContent = roundPrefix + 'שלב הצצה — כל שחקן מציץ בשלושת הקלפים התחתונים שלו';
+    }
   } else if(S.phase==='playing'){
     const turnName = S.names[S.turn];
     const finishNote = S.finishCaller!==null
@@ -1495,6 +1639,8 @@ function renderAll(){
     closedEl.innerHTML = `<div class="r">${rankLabel(pendingDraw.card.rank)}</div>${symHTML(pendingDraw.card.suit)}`;
     closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     closedEl.classList.add('drawn','disabled');
+    closedEl.classList.remove('turn-hint');
+    document.getElementById('pile-open').classList.remove('turn-hint');
     closedEl.onclick = null;
   } else if(botRevealedDraw && botRevealedDraw.source==='closed'){
     // A bot is "thinking" mid-turn with a card drawn from the closed pile — reveal it
@@ -1503,12 +1649,20 @@ function renderAll(){
     closedEl.innerHTML = `<div class="r">${rankLabel(botRevealedDraw.card.rank)}</div>${symHTML(botRevealedDraw.card.suit)}`;
     closedEl.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     closedEl.classList.add('drawn','disabled');
+    closedEl.classList.remove('turn-hint');
+    document.getElementById('pile-open').classList.remove('turn-hint');
     closedEl.onclick = null;
   } else {
     closedEl.innerHTML = '🎴';
     closedEl.style.color = '';
     closedEl.classList.remove('drawn');
-    closedEl.classList.toggle('disabled', !isMyTurnLocal());
+    const myTurnNow = isMyTurnLocal();
+    closedEl.classList.toggle('disabled', !myTurnNow);
+    // "קח קלף" turn hint: a soft pulse/glow on both piles the moment it's actually this
+    // player's turn to draw — same idea as a casual mobile game nudging you toward the one
+    // thing you can do right now, rather than leaving the player to notice the status pill.
+    closedEl.classList.toggle('turn-hint', myTurnNow);
+    document.getElementById('pile-open').classList.toggle('turn-hint', myTurnNow);
     closedEl.onclick = onDrawClosed;
   }
   if(botRevealedDraw && botRevealedDraw.source==='open'){
@@ -1537,11 +1691,19 @@ function renderAll(){
   }
   openEl.onclick = onTakeOpen;
 
-  // peek prompt: a hint plus a single "התחל" button — the cards themselves are what's
-  // clickable now, so there's nothing else here to toggle between two button states.
+  // peek prompt: a hint plus a single "התחל" button. The button stays disabled until the
+  // player has peeked at at least one of their three bottom cards — starting the round having
+  // looked at literally nothing defeats the point of the peek window, and a disabled button
+  // (rather than just letting the click through) makes that obvious before it's too late.
   const peekOverlay = document.getElementById('peek-overlay');
   const inPeekWindow = S.phase==='peek' && !S.peeked[myActual];
   peekOverlay.classList.toggle('show', inPeekWindow);
+  const peekGoBtn = document.getElementById('peek-go-btn');
+  if(peekGoBtn){
+    const hasPeekedAny = peekedCards.some(Boolean);
+    peekGoBtn.disabled = !hasPeekedAny;
+    peekGoBtn.classList.toggle('needs-peek', !hasPeekedAny);
+  }
 
   // Once the round ends, hands are revealed on the felt and each player opens the score
   // panel at their own pace via the "תוצאות" pill in the status bar (up top, never over
@@ -1698,41 +1860,6 @@ function doReorderSwap(a, b){
   renderAll();
 }
 
-/* ============================= RESULTS PANEL DRAG ============================= */
-// Lets the results panel be dragged anywhere on screen, so it can be pulled aside to
-// see the revealed cards underneath instead of blocking them. Starts docked at the
-// bottom-center (via CSS); the first drag switches it to a free-floating top/left
-// position that's then kept for the rest of the session.
-(function initResultsPanelDrag(){
-  const panel = document.getElementById('results-panel');
-  const head = document.getElementById('rp-head');
-  if(!panel || !head) return;
-  let drag = null;
-  head.addEventListener('pointerdown', (ev)=>{
-    const rect = panel.getBoundingClientRect();
-    drag = {startX:ev.clientX, startY:ev.clientY, rectLeft:rect.left, rectTop:rect.top};
-    panel.classList.add('dragging');
-    try{ head.setPointerCapture(ev.pointerId); } catch(e){}
-  });
-  head.addEventListener('pointermove', (ev)=>{
-    if(!drag) return;
-    const dx = ev.clientX - drag.startX;
-    const dy = ev.clientY - drag.startY;
-    let left = drag.rectLeft + dx;
-    let top = drag.rectTop + dy;
-    const rect = panel.getBoundingClientRect();
-    left = Math.max(4, Math.min(left, window.innerWidth - rect.width - 4));
-    top = Math.max(4, Math.min(top, window.innerHeight - rect.height - 4));
-    panel.style.left = left+'px';
-    panel.style.top = top+'px';
-    panel.style.bottom = 'auto';
-    panel.style.transform = 'none';
-  });
-  const stop = ()=>{ drag = null; panel.classList.remove('dragging'); };
-  head.addEventListener('pointerup', stop);
-  head.addEventListener('pointercancel', stop);
-})();
-
 /* ============================= NAV ============================= */
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -1754,8 +1881,100 @@ function goHub(){
   cleanupOnlineListeners();
   window.location.href = 'https://sivanmahler-lab.github.io/card-games/';
 }
+// "Start a new game" needs mutual consent only when at least 2 real people are actually
+// sharing the table online — a solo vs-computer game, or an online room where this is the only
+// active human seat, has nobody else whose match could be pulled out from under them, so it
+// stays the plain local confirm-and-reset it always was. Everywhere a genuine second human is
+// present, tearing down their in-progress hand without asking would be a rude surprise.
+function otherHumansPresent(){
+  if(!isOnline || !S) return false;
+  return [0,1,2,3].some(s=>s!==myOnlineSeat && S.active && S.active[s] && S.isHuman[s]);
+}
 function newGame(){
-  showConfirmBox('להתחיל משחק חדש?', 'הסבב הנוכחי יתאפס.', ()=>{ goLobby(); });
+  if(!otherHumansPresent()){
+    showConfirmBox('להתחיל משחק חדש?', 'הסבב הנוכחי יתאפס.', ()=>{ goLobby(); });
+    return;
+  }
+  showConfirmBox(
+    'להציע התחלת משחק חדש?',
+    'שאר השחקנים יצטרכו לאשר. אם מישהו יסרב, המשחק הנוכחי ימשיך כרגיל.',
+    ()=>{ proposeNewGame(); }
+  );
+}
+// Broadcast a "start new game?" proposal to every other real player in the room and wait for
+// all of them to approve before actually resetting — the existing pendingAction pipeline is a
+// one-shot client->host action, not a multi-party ack, so this gets its own small Firebase node
+// instead of being squeezed into that unrelated mechanism.
+function proposeNewGame(){
+  if(!roomRef) return;
+  const myActual = seatFor(0);
+  const votes = {};
+  votes[myActual] = true; // the proposer's own vote is automatic
+  roomRef.child('resetVote').set({
+    proposer: myActual,
+    proposerName: S.names[myActual],
+    votes,
+    ts: Date.now()
+  }).catch(e=>showToast('שגיאה בשליחת הבקשה: '+e.message));
+}
+function listenForResetVote(){
+  if(!roomRef) return;
+  const voteRef = roomRef.child('resetVote');
+  const handler = voteRef.on('value', snap=>{
+    const vote = snap.val();
+    if(!vote){
+      const modal = document.getElementById('reset-vote-modal');
+      if(modal) modal.classList.remove('show');
+      return;
+    }
+    handleResetVoteUpdate(vote, voteRef);
+  }, err=>console.error('resetVote listener error', err));
+  _resetVoteListenerOff = ()=>voteRef.off('value', handler);
+}
+function handleResetVoteUpdate(vote, voteRef){
+  const myActual = seatFor(0);
+  const humanSeats = [0,1,2,3].filter(s=>S.active && S.active[s] && S.isHuman[s]);
+  const votes = vote.votes || {};
+  const anyNo = humanSeats.some(s=>votes[s]===false);
+  if(anyNo){
+    document.getElementById('reset-vote-modal').classList.remove('show');
+    if(isHost) roomRef.child('resetVote').remove();
+    showToast('הבקשה נדחתה, המשחק נמשך');
+    return;
+  }
+  const allYes = humanSeats.every(s=>votes[s]===true);
+  if(allYes){
+    document.getElementById('reset-vote-modal').classList.remove('show');
+    if(isHost){
+      roomRef.child('resetVote').remove();
+      // Fresh deal, same seats/names/active-flags as the match that was just running —
+      // matchHistory (score history) is what actually resets; buildRoundState() takes care
+      // of everything else (hands, peeked flags, deck, turn order).
+      buildRoundState(S.names.slice(), S.isHuman.slice(), [], 1, 0, S.active.slice());
+      renderAll();
+      pushStateToFirebase();
+    }
+    return;
+  }
+  if(votes[myActual]===undefined){
+    showResetVoteModal(vote, voteRef);
+  }
+}
+function showResetVoteModal(vote, voteRef){
+  const myActual = seatFor(0);
+  const modal = document.getElementById('reset-vote-modal');
+  const msgEl = document.getElementById('reset-vote-msg');
+  if(!modal || !msgEl) return;
+  msgEl.textContent = `${vote.proposerName} מבקש/ת להתחיל משחק חדש. האם לאשר?`;
+  modal.classList.add('show');
+  document.getElementById('reset-vote-yes').onclick = ()=>{
+    modal.classList.remove('show');
+    voteRef.child('votes/'+myActual).set(true);
+  };
+  document.getElementById('reset-vote-no').onclick = ()=>{
+    modal.classList.remove('show');
+    voteRef.child('votes/'+myActual).set(false);
+  };
 }
 function showConfirmBox(title, sub, onYes){
   const bg = document.createElement('div');
@@ -1943,11 +2162,40 @@ function copyRoomCode(){
 // bottom of this file, applyRoomDeepLink()) — a friend who taps it lands straight on the
 // online-join screen with the code already filled in and the join row already open, instead of
 // having to copy the code out of the message text and paste it in by hand.
-function shareRoomWhatsapp(){
+async function shareRoomWhatsapp(){
   if(!roomCode) return;
   const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomCode);
   const msg = `בוא/י לשחק איתי שישיות! לחצו להצטרפות ישירה לשולחן: ${link}`;
-  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  // Prefer the native Web Share sheet on mobile — it hands off to the OS's own share UI (which
+  // can send straight into WhatsApp among other apps) rather than forcing WhatsApp specifically,
+  // and critically it's a same-tab handoff rather than window.open()'s new-tab/new-webview jump,
+  // which is exactly the kind of navigation mobile browsers sometimes reclaim memory from and
+  // reload from scratch when the player switches back — see the visibilitychange handler further
+  // down for the matching fix on the return trip either way.
+  if(navigator.share){
+    try{
+      await navigator.share({ text: msg });
+      return;
+    } catch(e){
+      // AbortError just means the player canceled the share sheet — not a failure worth
+      // falling back from. Any other error (unsupported data, etc) falls through below.
+      if(e && e.name==='AbortError') return;
+    }
+  }
+  // Fallback chain: try the native WhatsApp app deep link first (works on a phone that has
+  // WhatsApp installed, without going through a browser tab at all), then the web fallback.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    const appLink = 'whatsapp://send?text=' + encodeURIComponent(msg);
+    const webLink = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(msg);
+    // If the app deep link doesn't have a handler, most mobile browsers simply do nothing
+    // (no error thrown) rather than navigating away — so opening the web fallback in parallel,
+    // in a new tab, is the safe way to guarantee the player always lands somewhere usable.
+    window.location.href = appLink;
+    setTimeout(()=>{ window.open(webLink, '_blank'); }, 700);
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  }
 }
 function showWaitingScreen(myName){
   showScreen('screen-waiting');
@@ -2041,12 +2289,14 @@ async function hostStartGame(){
   renderAll();
   pushStateToFirebase();
   listenForPendingActions();
+  listenForResetVote();
 }
 function startOnlineClientGame(remoteState, players){
   isOnline=true;
   applyRemoteState(remoteState);
   showScreen('screen-game');
   renderAll();
+  listenForResetVote();
 
   const ongoingStateRef = roomRef.child('gameState');
   const ongoingStateHandler = ongoingStateRef.on('value', snap=>{
@@ -2209,53 +2459,57 @@ function cleanupOnlineListeners(){
   if(_playersListenerOff){ try{ _playersListenerOff(); }catch(e){} _playersListenerOff=null; }
   if(_stateListenerOff){ try{ _stateListenerOff(); }catch(e){} _stateListenerOff=null; }
   if(_actionListenerOff){ try{ _actionListenerOff(); }catch(e){} _actionListenerOff=null; }
+  if(_resetVoteListenerOff){ try{ _resetVoteListenerOff(); }catch(e){} _resetVoteListenerOff=null; }
 }
 
 /* ============================= INIT ============================= */
 // ---------- Splash / loading screen driver ----------
-// A simple staged progress bar: each named stage jumps the bar to a fixed percentage and swaps
-// the status line, rather than a real byte-level progress measurement (there's nothing here to
-// measure bytes of — it's a single static HTML file). sheshiyot.html doesn't connect to Firebase
-// until the player actually chooses online mode, so unlike whist.html this sequence has no real
-// "connecting" step — the stages instead cover shuffling in and laying the table out.
+// A fixed 2-second timeline, not a real byte-level progress measurement (there's nothing here to
+// measure bytes of — it's a single static HTML file, and the lobby/table setup below usually
+// finishes in well under 2s). Earlier this fired SplashScreen.finish() as soon as the setup work
+// resolved, which on a fast device meant the splash flashed for a fraction of a second and read
+// as a glitch rather than an intentional loading screen — so the bar/status text are now driven
+// purely by elapsed time, independent of how fast that setup actually runs. sheshiyot.html
+// doesn't connect to Firebase until the player actually chooses online mode, so unlike
+// whist.html this sequence has no real "connecting" step — the stages instead cover shuffling in
+// and laying the table out. The setup work (showResumeGamePrompt/applyRoomDeepLink) still runs
+// in parallel underneath — it's just no longer what gates the splash's own timing.
 const SplashScreen = {
+  totalMs: 2000,
   stages: [
-    { pct: 20,  text: 'מערבב את החפיסה...' },
-    { pct: 60,  text: 'מכין את השולחן...' },
-    { pct: 100, text: 'מוכן!' },
+    { at: 0,    text: 'מערבב את החפיסה...' },
+    { at: 1000, text: 'מכין את השולחן...' },
   ],
-  _idx: 0,
   _done: false,
-  set(stageIdx){
-    if(this._done) return;
-    const s = this.stages[Math.min(stageIdx, this.stages.length-1)];
+  _startedAt: null,
+  start(){
+    if(this._startedAt!==null) return;
+    this._startedAt = performance.now();
     const fill = document.getElementById('splash-bar-fill');
     const status = document.getElementById('splash-status');
-    if(fill) fill.style.width = s.pct+'%';
-    if(status) status.textContent = s.text;
+    // Force a reflow before animating width so the browser doesn't collapse the 0%->100% change
+    // into a single paint (same iOS Safari batching issue noted elsewhere in this file).
+    if(fill){ void fill.offsetHeight; fill.style.transition = `width ${this.totalMs}ms linear`; fill.style.width = '100%'; }
+    this.stages.forEach(s=>{
+      setTimeout(()=>{ if(!this._done && status) status.textContent = s.text; }, s.at);
+    });
+    setTimeout(()=> this.finish(), this.totalMs);
   },
   finish(){
     if(this._done) return;
     this._done = true;
-    this.set(this.stages.length-1);
+    const status = document.getElementById('splash-status');
+    if(status) status.textContent = 'מוכן!';
     const el = document.getElementById('splash-screen');
     if(!el) return;
-    setTimeout(()=>{
-      el.classList.add('fade-out');
-      setTimeout(()=>{ el.remove(); }, 550);
-    }, 250);
+    el.classList.add('fade-out');
+    setTimeout(()=>{ el.remove(); }, 550);
   }
 };
-SplashScreen.set(0);
+SplashScreen.start();
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  SplashScreen.set(1);
   showResumeGamePrompt();
-  // Give the lobby one frame to actually paint before declaring readiness, then close out the
-  // splash — applyRoomDeepLink() (registered as its own 'load' listener below) may still swap
-  // the visible screen shortly after this, but that transition happens underneath the
-  // already-faded splash rather than blocking it.
-  requestAnimationFrame(()=> requestAnimationFrame(()=> SplashScreen.finish()));
 });
 
 // Deep-link join: a friend who taps a WhatsApp-shared link lands on this page with
@@ -2299,6 +2553,31 @@ function applyRoomDeepLink(){
     if(nameInput) nameInput.focus();
   });
 }
+// Tab-backgrounding resilience: this file's bot turns are driven by plain setTimeout (see
+// maybeBotTurn()/botTakeTurn()), which mobile browsers routinely throttle or fully suspend once
+// a tab is backgrounded (e.g. the player switches to WhatsApp to share the room code, or the OS
+// just deprioritizes a hidden tab) — a bot turn scheduled right before that can simply never
+// fire, leaving the game silently stuck with no visible error, which read as "the page crashed /
+// went white" even though the DOM was actually still intact underneath. On return to the
+// foreground, force one clean re-render and re-check of whatever's actually going on: if it's a
+// bot's turn with nothing already in flight, kick it off again (a `setTimeout` from before
+// backgrounding either already fired-and-no-op'd via the S.turn!==p guard in botTakeTurn(), or
+// never fired at all — either way, redriving here is always safe and never double-fires a turn).
+let __sheshiyotHiddenSince = null;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    __sheshiyotHiddenSince = Date.now();
+    return;
+  }
+  const wasHiddenMs = __sheshiyotHiddenSince ? (Date.now()-__sheshiyotHiddenSince) : 0;
+  __sheshiyotHiddenSince = null;
+  if(!S || wasHiddenMs < 1200) return;
+  renderAll();
+  if(S.phase==='playing' && !S.isHuman[S.turn] && !pendingDraw && !botRevealedDraw){
+    maybeBotTurn();
+  }
+});
+
 window.addEventListener('load', applyRoomDeepLink);
 // The lobby's "חוקים" (rules) button links here as sheshiyot.html?rules=1 so a player can read
 // the rules before ever entering a game mode — openInstructions() itself doesn't depend on any

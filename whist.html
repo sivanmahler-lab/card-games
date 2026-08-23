@@ -39,12 +39,35 @@
   --danger:#c14b3f;
 }
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;height:100%;background:var(--felt-1);color:var(--cream);font-family:'Heebo',sans-serif;overflow-y:auto;overflow-x:hidden;}
+html{min-height:100%;}
+html,body{margin:0;padding:0;min-height:100%;background:var(--felt-1);color:var(--cream);font-family:'Heebo',sans-serif;overflow-y:auto;overflow-x:hidden;}
+/* The game table background: the same whist-pc/mobile.jpg photo used on the splash screen stays
+   visible as the table backdrop for the whole session, not just during loading — with a dark
+   overlay on top so cards/text stay readable over a busy photo. All layers live in ONE
+   background-image declaration (photo+overlay first, felt gradients kept as same-declaration
+   fallback layers) — see the #splash-screen comment above for why that matters when the photo
+   404s. Deliberately no background-attachment:fixed (see index.html's body rule for why: it
+   causes background flicker/vanish on mobile when the address bar shows/hides) — background-size
+   :cover on a min-height:100% body covers the same ground without that failure mode. */
 body{
-  background:
+  background-image:
+    linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+    url('whist-pc.jpg'),
     repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 5px),
     radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.06), transparent 55%),
     radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  background-size:cover, cover, auto, cover, cover;
+  background-position:center;background-repeat:no-repeat;
+}
+@media (max-width:768px){
+  body{
+    background-image:
+      linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
+      url('whist-mobile.jpg'),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 1px, transparent 1px, transparent 5px),
+      radial-gradient(ellipse at 50% 20%, rgba(255,255,255,0.06), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
+  }
 }
 h1,h2,h3{font-family:'Rubik',sans-serif;margin:0;}
 button{font-family:'Heebo',sans-serif;cursor:pointer;}
@@ -762,6 +785,20 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
     </div>
   </div>
 
+  <!-- Mutual-consent "start new game?" vote — shown to every OTHER online player when someone
+       proposes a restart; see proposeNewGame()/listenForResetVote() near the bottom of this
+       file. -->
+  <div class="modal-bg" id="reset-vote-modal">
+    <div class="modal" style="max-width:400px;text-align:center;">
+      <h2 style="font-size:19px;">🔄 בקשה להתחלת משחק חדש</h2>
+      <p id="reset-vote-msg" style="margin:10px 0 20px;"></p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button class="tb-btn" id="reset-vote-yes" style="background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;font-weight:800;padding:10px 20px;">מאשר/ת</button>
+        <button class="tb-btn close-btn" id="reset-vote-no" style="padding:10px 20px;">מסרב/ת</button>
+      </div>
+    </div>
+  </div>
+
   <!-- instructions modal -->
   <div class="modal-bg" id="instr-modal">
     <div class="modal">
@@ -904,6 +941,7 @@ let fbDb = null;
 let _actionListenerOff = null;  // cleanup for pendingAction listener
 let _stateListenerOff = null;   // cleanup for gameState listener
 let _playersListenerOff = null; // cleanup for players listener
+let _resetVoteListenerOff = null; // cleanup for the mutual-consent "new game" vote listener
 
 /* Seat rotation helpers */
 function displayFor(actualSeat){
@@ -1102,8 +1140,104 @@ function goHub(){
   cleanupOnlineListeners();
   window.location.href = 'https://sivanmahler-lab.github.io/card-games/';
 }
+// "Start a new game" needs mutual consent only when at least 2 real people are actually
+// sharing the table online — restarting a solo vs-computer game, or an online room where every
+// OTHER seat is a bot, has nobody else whose match could be pulled out from under them, so it
+// stays the plain local confirm-and-reset it always was. Everywhere a genuine second human is
+// present, tearing down their in-progress hand without asking would be a rude surprise.
+function otherHumansPresent(){
+  return isOnline && [0,1,2,3].some(s=>s!==myOnlineSeat && S && S.isHuman[s]);
+}
 function newGame(){
-  showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
+  if(!otherHumansPresent()){
+    showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
+    return;
+  }
+  showConfirmBox(
+    'להציע התחלת משחק חדש?',
+    'שאר השחקנים יצטרכו לאשר. אם מישהו יסרב, המשחק הנוכחי ימשיך כרגיל.',
+    ()=>{ proposeNewGame(); }
+  );
+}
+// Broadcast a "start new game?" proposal to every other real player in the room and wait for
+// all of them to approve before actually resetting. This is the first place either game needs
+// a genuine broadcast-and-collect-votes exchange (the existing pendingAction pipeline is a
+// one-shot client->host action, not a multi-party ack) — modeled as its own small node so it
+// doesn't have to be squeezed into that unrelated mechanism.
+function proposeNewGame(){
+  if(!roomRef) return;
+  const votes = {};
+  votes[myOnlineSeat] = true; // the proposer's own vote is automatic
+  roomRef.child('resetVote').set({
+    proposer: myOnlineSeat,
+    proposerName: S.names[myOnlineSeat],
+    votes,
+    ts: Date.now()
+  }).catch(e=>showToast('שגיאה בשליחת הבקשה: '+e.message));
+}
+function listenForResetVote(){
+  if(!roomRef) return;
+  const voteRef = roomRef.child('resetVote');
+  const handler = voteRef.on('value', snap=>{
+    const vote = snap.val();
+    if(!vote){
+      const modal = document.getElementById('reset-vote-modal');
+      if(modal) modal.classList.remove('show');
+      return;
+    }
+    handleResetVoteUpdate(vote, voteRef);
+  }, err=>console.error('resetVote listener error', err));
+  _resetVoteListenerOff = ()=>voteRef.off('value', handler);
+}
+function handleResetVoteUpdate(vote, voteRef){
+  const humanSeats = [0,1,2,3].filter(s=>S && S.isHuman[s]);
+  const votes = vote.votes || {};
+  // Any explicit "no" immediately kills the proposal for everyone watching — no need to wait
+  // out the rest of the room once one person has declined.
+  const anyNo = humanSeats.some(s=>votes[s]===false);
+  if(anyNo){
+    document.getElementById('reset-vote-modal').classList.remove('show');
+    if(isHost) roomRef.child('resetVote').remove();
+    showToast('הבקשה נדחתה, המשחק נמשך');
+    return;
+  }
+  const allYes = humanSeats.every(s=>votes[s]===true);
+  if(allYes){
+    document.getElementById('reset-vote-modal').classList.remove('show');
+    if(isHost){
+      roomRef.child('resetVote').remove();
+      // Reuse the same reset-and-redeal shape startOnlineHostGame() already knows how to do —
+      // just carrying over the current names/seats as-is, since nobody's seat assignment
+      // changed and freshState() already resets everything else (hands, bids, totals, etc).
+      const names = S.names.slice(), isHuman = S.isHuman.slice();
+      S = freshState();
+      S.mode = 'online';
+      S.names = names;
+      S.isHuman = isHuman;
+      beginMatch();
+    }
+    return;
+  }
+  // Still waiting on someone — the proposer already auto-voted yes, so this only ever shows to
+  // players who haven't answered yet.
+  if(votes[myOnlineSeat]===undefined){
+    showResetVoteModal(vote, voteRef);
+  }
+}
+function showResetVoteModal(vote, voteRef){
+  const modal = document.getElementById('reset-vote-modal');
+  const msgEl = document.getElementById('reset-vote-msg');
+  if(!modal || !msgEl) return;
+  msgEl.textContent = `${vote.proposerName} מבקש/ת להתחיל משחק חדש. האם לאשר?`;
+  modal.classList.add('show');
+  document.getElementById('reset-vote-yes').onclick = ()=>{
+    modal.classList.remove('show');
+    voteRef.child('votes/'+myOnlineSeat).set(true);
+  };
+  document.getElementById('reset-vote-no').onclick = ()=>{
+    modal.classList.remove('show');
+    voteRef.child('votes/'+myOnlineSeat).set(false);
+  };
 }
 function showConfirmBox(title, sub, onYes){
   const bg = document.createElement('div');
@@ -2869,11 +3003,40 @@ function copyRoomCode(){
 // bottom of this file, applyRoomDeepLink()) — a friend who taps it lands straight on the
 // online-join screen with the code already filled in and the join row already open, instead of
 // having to copy the code out of the message text and paste it in by hand.
-function shareRoomWhatsapp(){
+async function shareRoomWhatsapp(){
   if(!roomCode) return;
   const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomCode);
   const msg = `בוא נשחק וויסט! לחץ על הקישור כדי להצטרף ישירות לשולחן שלי: ${link}`;
-  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  // Prefer the native Web Share sheet on mobile — it hands off to the OS's own share UI (which
+  // can send straight into WhatsApp among other apps) rather than forcing WhatsApp specifically,
+  // and critically it's a same-tab handoff rather than window.open()'s new-tab/new-webview jump,
+  // which is exactly the kind of navigation mobile browsers sometimes reclaim memory from and
+  // reload from scratch when the player switches back — see the visibilitychange handler further
+  // down for the matching fix on the return trip either way.
+  if(navigator.share){
+    try{
+      await navigator.share({ text: msg });
+      return;
+    } catch(e){
+      // AbortError just means the player canceled the share sheet — not a failure worth
+      // falling back from. Any other error (unsupported data, etc) falls through below.
+      if(e && e.name==='AbortError') return;
+    }
+  }
+  // Fallback chain: try the native WhatsApp app deep link first (works on a phone that has
+  // WhatsApp installed, without going through a browser tab at all), then the web fallback.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    const appLink = 'whatsapp://send?text=' + encodeURIComponent(msg);
+    const webLink = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(msg);
+    // If the app deep link doesn't have a handler, most mobile browsers simply do nothing
+    // (no error thrown) rather than navigating away — so opening the web fallback in parallel,
+    // in a new tab, is the safe way to guarantee the player always lands somewhere usable.
+    window.location.href = appLink;
+    setTimeout(()=>{ window.open(webLink, '_blank'); }, 700);
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  }
 }
 
 function leaveRoom(){
@@ -2907,6 +3070,7 @@ function startOnlineHostGame(){
 
     // Listen for pending actions from remote players
     listenForPendingActions();
+    listenForResetVote();
 
     roomRef.child('meta/status').set('playing');
     beginMatch();
@@ -2933,6 +3097,7 @@ function startOnlineClientGame(remoteState, playersData){
 
   applyRemoteState(remoteState);
   beginMatchClientSide();
+  listenForResetVote();
 
   // Now listen for ongoing state updates. As above: keep the ref + handler pair and clean
   // up via ref.off(), never by calling the handler directly.
@@ -3124,58 +3289,59 @@ function cleanupOnlineListeners(){
   if(_actionListenerOff){ try{ _actionListenerOff(); }catch(e){} _actionListenerOff=null; }
   if(_stateListenerOff){ try{ _stateListenerOff(); }catch(e){} _stateListenerOff=null; }
   if(_playersListenerOff){ try{ _playersListenerOff(); }catch(e){} _playersListenerOff=null; }
+  if(_resetVoteListenerOff){ try{ _resetVoteListenerOff(); }catch(e){} _resetVoteListenerOff=null; }
 }
 
 // ---------- Splash / loading screen driver ----------
-// A simple staged progress bar: each named stage jumps the bar to a fixed percentage and swaps
-// the status line, rather than a real byte-level progress measurement (there's nothing here to
-// measure bytes of — it's a single static HTML file) — the stages represent the meaningful
-// startup steps a player would actually recognize (shuffling in, connecting online, laying the
-// table out), which reads as more honest than an arbitrary fake progress animation.
+// A fixed 2-second timeline, not a real byte-level progress measurement (there's nothing here to
+// measure bytes of — it's a single static HTML file, and Firebase init/table setup both usually
+// finish in well under 2s). Earlier this fired SplashScreen.finish() as soon as the async setup
+// work resolved, which on a fast connection meant the splash flashed for a fraction of a second
+// and read as a glitch rather than an intentional loading screen — so the bar/status text are now
+// driven purely by elapsed time, independent of how fast Firebase actually responds. The async
+// setup (Firebase init, deep-link/resume checks) still runs in parallel underneath — it's just no
+// longer what gates the splash's own timing.
 const SplashScreen = {
+  totalMs: 2000,
   stages: [
-    { pct: 15,  text: 'מערבב את החפיסה...' },
-    { pct: 45,  text: 'מתחבר ל-Firebase...' },
-    { pct: 75,  text: 'מכין את השולחן...' },
-    { pct: 100, text: 'מוכן!' },
+    { at: 0,    text: 'מערבב את החפיסה...' },
+    { at: 700,  text: 'מתחבר ל-Firebase...' },
+    { at: 1400, text: 'מכין את השולחן...' },
   ],
-  _idx: 0,
   _done: false,
-  set(stageIdx){
-    if(this._done) return;
-    const s = this.stages[Math.min(stageIdx, this.stages.length-1)];
+  _startedAt: null,
+  start(){
+    if(this._startedAt!==null) return;
+    this._startedAt = performance.now();
     const fill = document.getElementById('splash-bar-fill');
     const status = document.getElementById('splash-status');
-    if(fill) fill.style.width = s.pct+'%';
-    if(status) status.textContent = s.text;
+    // Force a reflow before animating width so the browser doesn't collapse the 0%->100% change
+    // into a single paint (same iOS Safari batching issue noted elsewhere in this file).
+    if(fill){ void fill.offsetHeight; fill.style.transition = `width ${this.totalMs}ms linear`; fill.style.width = '100%'; }
+    this.stages.forEach(s=>{
+      setTimeout(()=>{ if(!this._done && status) status.textContent = s.text; }, s.at);
+    });
+    setTimeout(()=> this.finish(), this.totalMs);
   },
   finish(){
     if(this._done) return;
     this._done = true;
-    this.set(this.stages.length-1);
+    const status = document.getElementById('splash-status');
+    if(status) status.textContent = 'מוכן!';
     const el = document.getElementById('splash-screen');
     if(!el) return;
-    setTimeout(()=>{
-      el.classList.add('fade-out');
-      setTimeout(()=>{ el.remove(); }, 550);
-    }, 250);
+    el.classList.add('fade-out');
+    setTimeout(()=>{ el.remove(); }, 550);
   }
 };
-SplashScreen.set(0);
+SplashScreen.start();
 
-// Init Firebase status when page loads
+// Init Firebase status when page loads — runs independently of the splash's own 2s timeline
+// above; whichever finishes last simply means the game screen was already ready and waiting
+// underneath the splash when it faded out.
 window.addEventListener('load', ()=>{
-  SplashScreen.set(1);
   const cfg = loadFirebaseConfig();
-  const initPromise = cfg ? tryInitFirebase().then(ok=>updateFirebaseStatus(ok)) : Promise.resolve();
-  initPromise.finally(()=>{
-    SplashScreen.set(2);
-    // Give the table layout one frame to actually paint before declaring readiness, then close
-    // out the splash — applyRoomDeepLink()/showResumeGamePrompt() (registered as their own
-    // 'load' listeners below) may still swap the visible screen shortly after this, but that
-    // transition happens underneath the already-faded splash rather than blocking it.
-    requestAnimationFrame(()=> requestAnimationFrame(()=> SplashScreen.finish()));
-  });
+  if(cfg) tryInitFirebase().then(ok=>updateFirebaseStatus(ok));
 });
 
 // Seamless deep-link join: if the page was opened via a shareRoomWhatsapp() link (see above),
