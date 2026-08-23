@@ -147,6 +147,15 @@ button{font-family:'Heebo',sans-serif;}
   padding:0 14px;background:linear-gradient(180deg, rgba(6,17,13,0.95), rgba(6,17,13,0.75));border-bottom:1px solid rgba(212,175,90,.35);z-index:100;
   backdrop-filter:blur(4px);
 }
+/* A child's z-index is capped by its own ancestor's stacking context — .topbar's z-index:100
+   above means the rematch button's z-index:9999 (further below) could never actually rise
+   above a z-index:800 .modal-bg, no matter how high, since it never escapes .topbar's own
+   context. Raising the WHOLE topbar's stacking context specifically while a modal is open is
+   what actually lets the button clear every overlay in the file (results/instructions/reset-
+   vote modals at 800, the toast at 900) without permanently living above the splash screen
+   (5000) the rest of the time — this class is toggled by JS exactly when a .modal-bg opens
+   (see the modal-open observer near the bottom of this file). */
+.topbar.above-modals{z-index:9999;}
 .brand{font-weight:700;font-size:16px;color:var(--gold-bright);display:flex;align-items:center;gap:8px;font-family:'Rubik',sans-serif;}
 .brand .suits{font-size:14px;letter-spacing:2px;}
 .tb-btns{display:flex;gap:6px;}
@@ -156,6 +165,15 @@ button{font-family:'Heebo',sans-serif;}
 }
 .tb-btn:hover{background:rgba(212,175,90,0.25);}
 .tb-btn:active{transform:scale(.96);}
+/* The rematch button must stay clickable in EVERY phase of the game — peek, mid-round, and
+   at the end — including while a modal is open over the table (peek confirmation, the results
+   scoreboard, the reset-vote dialog itself, instructions). .modal-bg backdrops are position:
+   fixed;inset:0 at z-index:800, which sits ABOVE the topbar's z-index:100 and would silently
+   swallow every click on it whenever a modal happened to be open — exactly the reported bug.
+   Lifting just this button (not the whole topbar, to avoid touching "לובי"/"הוראות" placement)
+   above every modal/overlay in the file, and forcing pointer-events:auto so it can never
+   inherit a disabled/none value from an ancestor, guarantees it's always live. */
+.rematch-tb-btn{position:relative;z-index:9999;pointer-events:auto;}
 /* The rematch button's label is long ("משחק חוזר באותו חדר") — fine next to "הוראות"/"לובי"
    on a wide screen, but the three buttons together would overflow the fixed 52px top bar on a
    narrow phone. Swap to a shorter label there instead of letting it wrap/overflow. */
@@ -302,6 +320,24 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pgrid-wrap.pos-1{left:2px;top:var(--opp-top,4px);transform:none;z-index:20;max-width:104px;}
 .pgrid-wrap.pos-2{top:var(--opp-top,4px);left:50%;transform:translateX(-50%);z-index:20;}
 .pgrid-wrap.pos-3{right:2px;top:var(--opp-top,4px);transform:none;z-index:20;max-width:104px;}
+/* Desktop overflow fix: .pgrid.small's transform:scale() only shrinks the cards VISUALLY —
+   the grid's actual layout box stays at its full pre-scale size (3 cards x 50px + 2x4px gaps
+   = 158px). At the desktop breakpoints below, that scale factor grows toward 1 (near-full-size)
+   while pos-1/pos-3 stayed pinned flush (left/right:2px) against the felt's own edge with no
+   room to spare — so the visually-scaled-up cards poked straight out past the gold border, cut
+   off by the felt's overflow:visible. Padding the felt on the sides and pulling pos-1/pos-3
+   inward (instead of flush against the edge) at each breakpoint keeps the full grid — at
+   whatever size .pgrid.small is actually rendering it at that width — inside the felt. */
+@media(min-width:700px){
+  #felt{padding:0 28px;}
+  .pgrid-wrap.pos-1{left:28px;max-width:150px;}
+  .pgrid-wrap.pos-3{right:28px;max-width:150px;}
+}
+@media(min-width:1000px){
+  #felt{padding:0 32px;}
+  .pgrid-wrap.pos-1{left:32px;max-width:170px;}
+  .pgrid-wrap.pos-3{right:32px;max-width:170px;}
+}
 .p-name{font-size:12.5px;font-weight:700;background:rgba(0,0,0,.6);border:1px solid rgba(212,175,90,.4);border-radius:14px;
   padding:3px 12px;white-space:nowrap;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;
   /* Fixed line-height (not just font-size) so the badge is always exactly the same height
@@ -423,10 +459,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   .pile.turn-hint{animation:none;box-shadow:0 0 0 3px rgba(240,216,150,.55);}
 }
 
-.action-bar{width:100%;max-width:520px;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
-  padding:10px 14px;margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;z-index:200;flex-shrink:0;}
-@media(min-width:700px){ .action-bar{max-width:640px;} }
-@media(min-width:1000px){ .action-bar{max-width:760px;} }
+/* .action-bar-wrap is the element renderAll() actually shows/hides (display:flex/none) —
+   .action-bar itself is just the button row now, so its own display stays a plain flex
+   and doesn't need touching from JS. */
+.action-bar-wrap{width:100%;max-width:520px;flex-direction:column;align-items:center;gap:0;margin-top:8px;z-index:200;flex-shrink:0;}
+@media(min-width:700px){ .action-bar-wrap{max-width:640px;} }
+@media(min-width:1000px){ .action-bar-wrap{max-width:760px;} }
+.action-bar{width:100%;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
+  padding:10px 14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.action-bar-hint{width:100%;text-align:center;font-size:11.5px;line-height:1.5;color:rgba(250,244,230,.75);
+  padding:6px 10px 0;}
 .action-bar button{padding:9px 16px;border-radius:10px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);
   color:var(--cream);font-size:13px;font-weight:700;cursor:pointer;}
 .action-bar button.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
@@ -708,9 +750,17 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
       </div>
     </div>
   </div>
-  <div class="action-bar" id="action-bar" style="display:none;">
-    <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
-    <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
+  <div class="action-bar-wrap" id="action-bar-wrap" style="display:none;">
+    <div class="action-bar" id="action-bar">
+      <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
+      <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
+    </div>
+    <!-- Persistent micro-copy under the two buttons above — mobile has no hover state, so the
+         title="" tooltips on the buttons themselves are invisible there. This explanatory line
+         is always on screen (not hover- or tap-dependent) and swaps text based on which button
+         is actually enabled right now, so a player who's never touched this game before still
+         knows what pressing either one does. See renderAll() for the swap logic. -->
+    <div class="action-bar-hint" id="action-bar-hint"></div>
   </div>
 </div>
 
@@ -1799,14 +1849,27 @@ function renderAll(){
   }
 
   // action bar
-  const bar = document.getElementById('action-bar');
+  const barWrap = document.getElementById('action-bar-wrap');
   const finBtn = document.getElementById('btn-finish');
   const endBtn = document.getElementById('btn-endturn');
+  const hintEl = document.getElementById('action-bar-hint');
   const myTurnNow = S.phase==='playing' && S.turn===myActual && S.isHuman[myActual];
-  bar.style.display = myTurnNow ? 'flex' : 'none';
+  barWrap.style.display = myTurnNow ? 'flex' : 'none';
   if(myTurnNow){
-    finBtn.disabled = !S.turnActed || hasFinishCaller() || !!pendingDraw;
-    endBtn.disabled = !S.turnActed || !!pendingDraw;
+    const finDisabled = !S.turnActed || hasFinishCaller() || !!pendingDraw;
+    const endDisabled = !S.turnActed || !!pendingDraw;
+    finBtn.disabled = finDisabled;
+    endBtn.disabled = endDisabled;
+    // Persistent micro-copy (see the action-bar-hint comment in the HTML) — always visible,
+    // not dependent on hover/tap, and reflects whichever action is actually available right
+    // now: before a move is made neither button does anything yet, so the hint explains what
+    // unlocks them; once turnActed is true, it explains what each of the two live buttons
+    // will actually do if pressed.
+    if(!S.turnActed || pendingDraw){
+      hintEl.textContent = 'משוך קלף מהחפיסה או מהערימה הפתוחה, ואז בחר/י קלף להחלפה כדי לפתוח את הכפתורים.';
+    } else {
+      hintEl.textContent = '◀ העבר תור: סיום המהלך שלך והעברת התור לשחקן הבא   •   🔔 הכרז סיום: פותח סבב אחרון לכולם ומסיים את המשחק!';
+    }
   }
 
   if(isOnline && isHost) pushStateToFirebase();
@@ -2689,6 +2752,23 @@ document.addEventListener('visibilitychange', ()=>{
     maybeBotTurn();
   }
 });
+
+// Keeps the top bar (and therefore the always-available rematch button — see .topbar.above-
+// modals in the stylesheet) above whatever modal happens to be open, in every phase of the
+// game. Watches the WHOLE document rather than one fixed list of modal ids, because
+// showConfirmBox() creates a brand-new .modal-bg element on the fly each time it's called
+// (the "מסרב/ת"/"כן" confirm dialogs) rather than reusing a static one already in the DOM —
+// a fixed id-based listener would miss those entirely. subtree:true so a dynamically-appended
+// .modal-bg (child list changes) and any existing one toggling its "show" class (attribute
+// changes) both get picked up.
+function refreshTopbarStacking(){
+  const anyModalOpen = !!document.querySelector('.modal-bg.show');
+  document.querySelector('.topbar')?.classList.toggle('above-modals', anyModalOpen);
+}
+new MutationObserver(refreshTopbarStacking).observe(document.body, {
+  attributes:true, attributeFilter:['class'], childList:true, subtree:true
+});
+refreshTopbarStacking();
 
 window.addEventListener('load', applyRoomDeepLink);
 // The lobby's "חוקים" (rules) button links here as sheshiyot.html?rules=1 so a player can read
