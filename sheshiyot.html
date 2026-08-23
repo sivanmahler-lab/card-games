@@ -465,7 +465,20 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    renderAll() whenever S.phase==='ended') boosts every opponent grid back up to a fully legible
    scale regardless of viewport width — overriding the narrow-screen rules below it in source
    order via the more specific #felt.round-ended selector. */
-#felt.round-ended .pgrid.small{transform:scale(.78);}
+/* Scale tiers here now track the SAME width breakpoints .pgrid-wrap.pos-1/pos-3's own max-width
+   already uses (360px/480px/700px — see those rules further down) instead of one flat value up
+   to 480px. That flat value was the actual bug reported: at a narrow-but-not-360px width (e.g.
+   340px) the wrap's max-width was already down to 72px, but this rule still boosted the grid to
+   scale(.78) — a scale tuned for the WIDER 480px tier's more generous wrap box. transform:scale()
+   grows a grid outward from its own center regardless of its wrap's max-width, so an
+   oversized-for-its-tier scale pushes the grid's rendered edges past the wrap AND past the felt's
+   own left/right border — exactly the clipped/overflowing cards seen in that report. Each tier
+   below is sized to the smallest scale that still fits inside its matching wrap width, verified
+   via getBoundingClientRect() at 340/390/480/700px. */
+#felt.round-ended .pgrid.small{transform:scale(.58);}
+@media(min-width:360px){
+  #felt.round-ended .pgrid.small{transform:scale(.7);}
+}
 @media(min-width:480px){
   #felt.round-ended .pgrid.small{transform:scale(.92);}
 }
@@ -537,6 +550,34 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
 #reveal-results-overlay{position:absolute;left:50%;top:50%;transform:translate(-50%, -108px);z-index:80;display:none;text-align:center;}
 #reveal-results-overlay.show{display:block;}
+
+/* ---- One-shot "X declared finished!" announcement ---------------------------------------------
+   Fired once via announceFinishCalled() (see JS, called from doDeclareFinished()) the moment ANY
+   player — human OR bot — declares "סיימתי". Fixes the "bots declare and the game just ends,
+   surprising everyone" complaint: the #final-round-banner further up is a small persistent inline
+   strip in the header, easy to miss the instant it first appears since nothing draws the eye to
+   it — this is a large, centered, hard-to-miss pop specifically for that first moment, which then
+   fades itself out on its own; the persistent banner is what stays up afterward as the ongoing
+   reminder for the rest of the final round. */
+#finish-announce-overlay{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;pointer-events:none;padding:20px;}
+.finish-announce-card{
+  background:linear-gradient(160deg,#c0272d,#8a1f2b);border:2px solid var(--gold-bright);border-radius:20px;
+  padding:20px 28px;text-align:center;max-width:90vw;
+  box-shadow:0 20px 60px rgba(0,0,0,.55), 0 0 50px rgba(240,216,150,.35);
+  animation:finishAnnouncePop 3.2s var(--spring) forwards;
+}
+.finish-announce-card .fa-bell{font-size:34px;display:block;margin-bottom:6px;}
+.finish-announce-card .fa-text{font-size:19px;font-weight:800;color:#fff;line-height:1.4;}
+@keyframes finishAnnouncePop{
+  0%{opacity:0;transform:scale(.6);}
+  12%{opacity:1;transform:scale(1.06);}
+  20%{transform:scale(1);}
+  82%{opacity:1;transform:scale(1);}
+  100%{opacity:0;transform:scale(.96);}
+}
+@media (prefers-reduced-motion: reduce){
+  .finish-announce-card{animation:none;}
+}
 /* ---- Results / Scoreboard modal ----------------------------------------------------------
    Replaces the old draggable 38vh-max bottom-sheet: on a small phone screen, 4 players' names
    and per-round scores in one narrow table were unreadably cramped, and there was no way to
@@ -596,6 +637,23 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pile .r{position:absolute;top:3px;right:4px;font-size:11px;font-weight:800;line-height:1;}
 .pile .sym{width:45%;height:45%;display:flex;align-items:center;justify-content:center;}
 .pile .sym svg{width:100%;height:100%;overflow:visible;}
+/* Drawing a card from either pile (closed or open) reveals it face-up in the SAME element in
+   place — there's no second element for a ghost-clone flight (flyGhostCard's mechanism) to travel
+   between, since "draw" isn't a move from A to B so much as a reveal at a fixed spot. This is the
+   card-flight ask's "hovers up out of the pile" half: a brief lift+scale pop timed to the reveal
+   itself (.drawn is added in the same renderAll() call that swaps the pile's innerHTML from the
+   closed-back/previous-discard look to the newly-drawn card's face), so the moment of drawing
+   still reads as physical motion rather than the art just instantly changing underneath the
+   player's cursor. */
+.pile.drawn{animation:pileDrawPop .4s var(--spring);}
+@keyframes pileDrawPop{
+  0%{transform:translateY(6px) scale(.85);}
+  60%{transform:translateY(-10px) scale(1.08);}
+  100%{transform:translateY(0) scale(1);}
+}
+@media (prefers-reduced-motion: reduce){
+  .pile.drawn{animation:none;}
+}
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
 .pile.closed.drawn.disabled{opacity:1;}
 @keyframes pileTurnPulse{0%,100%{box-shadow:0 0 0 0 rgba(240,216,150,.55);}50%{box-shadow:0 0 0 8px rgba(240,216,150,0);}}
@@ -918,6 +976,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <div class="pill status" id="pill-status">מכינים משחק...</div>
   </div>
   <div id="final-round-banner"></div>
+  <!-- One-shot, hard-to-miss announcement the moment ANY player (human or bot) declares
+       "finished" — the persistent #final-round-banner above stays up for the whole final round,
+       but it's a quiet inline strip that's easy to miss the instant it appears, which is exactly
+       the "bots declare and the game just ends, surprising everyone" complaint this fixes. This
+       is shown once via announceFinishCalled() (see the JS), pops in big and centered over the
+       felt, and fades itself out after a few seconds — the persistent banner underneath is what
+       actually stays up as the ongoing reminder. -->
+  <div id="finish-announce-overlay"></div>
   <div id="peek-overlay">
     <div class="peek-hint">לחצו על שלושת הקלפים התחתונים שלכם כדי להציץ בהם — אפשר כמה פעמים שרוצים, קלף קלף או כולם יחד</div>
     <button class="btn-primary" id="peek-go-btn" onclick="startFromPeek()">התחל</button>
@@ -1533,15 +1599,28 @@ function useDrawnOnSlot(slotIdx){
   if(S.graduated[myActual] && slotIdx>2){ showToast('כבר עברת לשחק עם השורה העליונה'); return; }
   const isTopSlot = slotIdx<=2;
   const closedEl = document.getElementById('pile-closed');
+  const openEl = document.getElementById('pile-open');
   const slotEl = document.getElementById('pg-0').children[slotIdx];
   const fromRect = closedEl ? closedEl.getBoundingClientRect() : null;
   const toRect = slotEl ? slotEl.getBoundingClientRect() : null;
+  // Captured BEFORE the swap below overwrites it — this is the card currently sitting in the
+  // slot, which is about to be bumped out to the discard pile and needs its own outgoing flight
+  // (see the flyGhostCard call for it further down): "the replaced card is thrown to the discard
+  // pile" (requirement 4's swap-animation ask) was previously silent — S.discardPile.push(old)
+  // happened with zero visual feedback for where that card actually went.
+  const replacedCard = S.hands[myActual][slotIdx];
   const flownCard = pendingDraw.card;
   if(isOnline && !isHost){
     submitRemoteAction('useSlot', {slot:slotIdx});
     pendingDraw=null;
     renderAll();
     flyGhostCard(flownCard, fromRect, toRect);
+    // The replaced card's outgoing flight (slot -> discard pile) fires from the CLIENT side too,
+    // using the pre-swap rect captured above and the discard pile's rect — applyHostAction() on
+    // the host performs the actual S mutation and pushes the authoritative state back down, but
+    // the animation itself is purely cosmetic and can safely run optimistically here rather than
+    // waiting a round-trip, exactly like flownCard's own flight two lines up already does.
+    flyGhostCard(replacedCard, toRect, openEl ? openEl.getBoundingClientRect() : null);
     return;
   }
   const old = S.hands[myActual][slotIdx];
@@ -1554,6 +1633,10 @@ function useDrawnOnSlot(slotIdx){
   }
   finishTurnAction();
   flyGhostCard(flownCard, fromRect, toRect);
+  // Outgoing flight for the card just bumped out of the slot, landing on the open (discard)
+  // pile — fired after finishTurnAction()'s renderAll() so openEl's rect reflects the CURRENT
+  // (pre-this-card) pile position, matching the incoming flight's own timing convention above.
+  flyGhostCard(replacedCard, toRect, openEl ? openEl.getBoundingClientRect() : null);
 }
 function declareFinished(){
   const myActual = seatFor(0);
@@ -1581,6 +1664,34 @@ function doDeclareFinished(p){
   // Who declared and that it's the last round is shown via the persistent
   // #final-round-banner (driven by renderAll off S.finishCaller) rather than a toast —
   // a toast auto-hides and can be missed; the banner stays up for the whole final round.
+  // The one-shot big centered pop (see announceFinishCalled()) is ALSO fired from right here —
+  // this is the single function every "someone declared finished" path (the local human's own
+  // declareFinished(), the bot heuristic in botResolveTurn(), and applyHostAction() for a remote
+  // online declaration) funnels through, and each of those three call sites is already guarded
+  // to call this exactly once per declaration (never on a re-render/rehydrate), so it's the
+  // correct place to fire a one-time announcement from without needing any extra guard here.
+  announceFinishCalled(p);
+}
+// Big, hard-to-miss, self-dismissing announcement the instant anyone (human or bot) declares
+// "finished" — see the #finish-announce-overlay CSS for why this exists alongside the smaller
+// persistent #final-round-banner (driven separately by renderAll()).
+function announceFinishCalled(p){
+  const overlay = document.getElementById('finish-announce-overlay');
+  if(!overlay) return;
+  const name = (S.names && S.names[p]) ? S.names[p] : 'שחקן';
+  const card = document.createElement('div');
+  card.className = 'finish-announce-card';
+  card.innerHTML = `<span class="fa-bell">🔔</span><span class="fa-text">${escapeHTML(name)} הכריז/ה סיימתי!<br>לכולם נשאר תור אחרון!</span>`;
+  overlay.innerHTML = '';
+  overlay.appendChild(card);
+  // The CSS animation (finishAnnouncePop) fades itself out and holds at opacity:0 at the end, but
+  // the element is still there taking up space in #finish-announce-overlay (position:fixed, so no
+  // layout impact, but it stays pointer-events:none and would silently block nothing — still,
+  // removing it after its own animation finishes keeps the DOM clean rather than accumulating a
+  // stale card on every subsequent declaration in the same game, and reduced-motion (animation:
+  // none) needs its own fallback removal since no animationend would ever fire there). 3400ms >
+  // the 3.2s animation duration is a small buffer for the timer to fire after the animation.
+  setTimeout(()=>{ if(overlay.contains(card)) overlay.removeChild(card); }, 3400);
 }
 function finishTurnAction(){
   S.turnActed = true;
