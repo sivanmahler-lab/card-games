@@ -37,6 +37,16 @@
   --amber:#e0a83a;
   --panel:#0a1f18;
   --danger:#c14b3f;
+  /* CASUAL 3D — Travel-Town-inspired tokens shared across index.html/whist.html/sheshiyot.html
+     (kept identical value-for-value in each file's own inline <style> — see the matching
+     "CASUAL 3D" comment in js/ui/theme.css for the rationale on why this is duplicated inline
+     rather than linked, and in sheshiyot.html for the sibling copy). --spring is the bouncy
+     overshoot-then-settle easing used for card lift/deal/flip and button press-release. */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pulseGlow{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(240,216,150,.0), 0 0 14px 2px rgba(240,216,150,.35); }
+  50%{ box-shadow: 0 0 0 0 rgba(240,216,150,.0), 0 0 22px 6px rgba(240,216,150,.65); }
 }
 *{box-sizing:border-box;}
 html{min-height:100%;}
@@ -77,6 +87,16 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 ::selection{background:var(--gold);color:var(--ink);}
 @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
 @keyframes modalIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
+/* Bouncy celebration pop-in for the results/round-end/rematch-vote modals — overshoots past
+   100% then settles, instead of modalIn's plain ease-to-100%, so a big moment (round scoring,
+   game over) reads as more of an event. Regular utility modals (instructions, confirm boxes)
+   keep the calmer modalIn above; see the round-end/results-card rules below for where this is
+   used instead. */
+@keyframes modalPopIn{
+  0%{opacity:0;transform:scale(.7) translateY(10px);}
+  60%{opacity:1;transform:scale(1.04) translateY(-2px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
 @keyframes glowPulse{0%,100%{text-shadow:0 0 18px rgba(240,216,150,.3);}50%{text-shadow:0 0 30px rgba(240,216,150,.6);}}
 @keyframes codePulse{0%,100%{box-shadow:0 0 0 rgba(240,216,150,0);}50%{box-shadow:0 0 22px rgba(240,216,150,.35);}}
 /* Note: .btn-primary is deliberately excluded from this shine treatment — on iOS
@@ -186,12 +206,24 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 .tb-room:hover{background:rgba(63,154,139,.3);}
 #topbar .tb-btns{display:flex;gap:6px;flex-shrink:0;}
+/* Chunky 3D topbar buttons: a solid lower lip (border-bottom) gives real thickness; on :active
+   the button sinks by the lip's own height and the lip compresses to 0, so pressing/releasing
+   reads as a physical action rather than a flat opacity/scale change (see the old :active{
+   transform:scale(.96)} this replaces — that read as a shrink, not a press). */
 .tb-btn{
-  background:rgba(212,175,90,0.10);border:1px solid rgba(212,175,90,0.4);color:var(--gold-bright);
-  padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;transition:.15s;white-space:nowrap;
+  background:rgba(212,175,90,0.14);border:1px solid rgba(212,175,90,0.4);border-bottom:3px solid rgba(140,105,40,.55);
+  color:var(--gold-bright);
+  padding:7px 12px;border-radius:10px;font-size:13px;font-weight:600;white-space:nowrap;
+  cursor:pointer;
+  transform:translateY(0);
+  transition:background .15s ease, transform .12s var(--spring), border-bottom-width .1s ease, box-shadow .12s var(--spring);
 }
 .tb-btn:hover{background:rgba(212,175,90,0.25);}
-.tb-btn:active{transform:scale(.96);}
+.tb-btn:active{transform:translateY(3px);border-bottom-width:0;}
+@media (prefers-reduced-motion: reduce){
+  .tb-btn{transition:background .15s ease;}
+  .tb-btn:active{transform:none;}
+}
 .rematch-tb-short{display:none;}
 @media(max-width:480px){
   .rematch-tb-full{display:none;}
@@ -213,10 +245,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 @media(max-width:640px){.mode-grid{grid-template-columns:1fr;}}
 .mode-card{
   background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
-  border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
-  transition:.18s; position:relative; overflow:hidden; cursor:pointer;
+  border:1px solid rgba(212,175,90,0.35);border-radius:18px;padding:22px 16px;text-align:center;
+  box-shadow:0 4px 6px rgba(0,0,0,.12), 0 10px 20px rgba(0,0,0,.16);
+  transition:transform .28s var(--spring), box-shadow .28s var(--spring), border-color .18s ease;
+  position:relative; overflow:hidden; cursor:pointer;
 }
-.mode-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.mode-card:hover{border-color:var(--gold-bright);transform:translateY(-5px);box-shadow:0 8px 14px rgba(0,0,0,.2), 0 20px 38px rgba(0,0,0,.4);}
 .mode-card .ic{font-size:30px;margin-bottom:10px;color:var(--gold-bright);display:flex;align-items:center;justify-content:center;height:46px;}
 .mode-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
 .mode-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
@@ -226,10 +260,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 @media(max-width:640px){.game-grid{grid-template-columns:1fr;}}
 .game-card{
   background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
-  border:1px solid rgba(212,175,90,0.35);border-radius:14px;padding:22px 16px;text-align:center;
-  transition:.18s; position:relative; overflow:hidden; cursor:pointer;
+  border:1px solid rgba(212,175,90,0.35);border-radius:18px;padding:22px 16px;text-align:center;
+  box-shadow:0 4px 6px rgba(0,0,0,.12), 0 10px 20px rgba(0,0,0,.16);
+  transition:transform .28s var(--spring), box-shadow .28s var(--spring), border-color .18s ease;
+  position:relative; overflow:hidden; cursor:pointer;
 }
-.game-card:hover{border-color:var(--gold-bright);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.game-card:hover{border-color:var(--gold-bright);transform:translateY(-5px);box-shadow:0 8px 14px rgba(0,0,0,.2), 0 20px 38px rgba(0,0,0,.4);}
 .game-card .ic{font-size:34px;margin-bottom:10px;}
 .game-card h3{font-size:18px;color:var(--cream);margin-bottom:6px;}
 .game-card p{font-size:12.5px;color:rgba(250,244,230,.6);line-height:1.5;margin:0;}
@@ -252,16 +288,30 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   background:rgba(255,255,255,.06);color:var(--cream);font-size:15px;
 }
 .field input:focus,.field select:focus{outline:2px solid var(--gold);}
+/* Chunky 3D primary/secondary action buttons — same lip-and-press pattern as .tb-btn above,
+   scaled up for the bigger tap targets these buttons need (setup screens, confirm dialogs). */
 .btn-primary{
-  width:100%;padding:13px;border-radius:10px;border:none;margin-top:8px;
+  width:100%;padding:13px;padding-bottom:11px;border-radius:14px;border:none;border-bottom:4px solid #8a6d28;margin-top:8px;
   background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:var(--ink);font-weight:800;font-size:16px;
+  cursor:pointer;position:relative;overflow:hidden;
   box-shadow:0 6px 18px rgba(212,175,90,.25);
+  transform:translateY(0);
+  transition:filter .15s ease, transform .12s var(--spring), border-bottom-width .1s ease, box-shadow .12s var(--spring);
 }
 .btn-primary:hover{filter:brightness(1.06);}
-.btn-primary:disabled{opacity:.4;cursor:not-allowed;filter:none;}
+.btn-primary:active{transform:translateY(3px);border-bottom-width:0;}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;filter:none;transform:none;}
 .btn-secondary{
-  width:100%;padding:11px;border-radius:10px;margin-top:10px;border:1px solid rgba(212,175,90,.4);
-  background:transparent;color:var(--gold-bright);font-weight:600;font-size:14px;
+  width:100%;padding:11px;padding-bottom:9px;border-radius:14px;margin-top:10px;border:1px solid rgba(212,175,90,.4);border-bottom:3px solid rgba(212,175,90,.35);
+  background:transparent;color:var(--gold-bright);font-weight:600;font-size:14px;cursor:pointer;
+  transform:translateY(0);
+  transition:background .15s ease, transform .12s var(--spring), border-bottom-width .1s ease;
+}
+.btn-secondary:hover{background:rgba(212,175,90,.08);}
+.btn-secondary:active{transform:translateY(3px);border-bottom-width:0;}
+@media (prefers-reduced-motion: reduce){
+  .btn-primary, .btn-secondary{transition:filter .15s ease, background .15s ease;}
+  .btn-primary:active, .btn-secondary:active{transform:none;}
 }
 
 /* ---------- ONLINE SETUP ---------- */
@@ -418,11 +468,15 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
      purpose — this stays a per-viewer visual size that responds to each screen, but a wide
      phone/tablet should not render noticeably larger cards than a normal phone; a low
-     ceiling keeps that gap between devices small instead of it being extremely visible. */
-  position:absolute;width:clamp(48px,9.5vmin,62px);height:clamp(68px,13.5vmin,88px);border-radius:8px;background:var(--cream);
-  border:1px solid rgba(0,0,0,.35);box-shadow:0 3px 8px rgba(0,0,0,.4);
+     ceiling keeps that gap between devices small instead of it being extremely visible.
+     border-radius widened (8px -> 11px) and the shadow given a soft layered stack (a tight
+     contact shadow plus a wider ambient one) instead of one flat drop-shadow, so a resting
+     card reads as a small physical object with real thickness sitting on the felt. */
+  position:absolute;width:clamp(48px,9.5vmin,62px);height:clamp(68px,13.5vmin,88px);border-radius:11px;background:var(--cream);
+  border:1px solid rgba(0,0,0,.35);
+  box-shadow:0 2px 3px rgba(0,0,0,.22), 0 5px 10px rgba(0,0,0,.28);
   display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;
-  transition:transform .18s ease, box-shadow .18s ease, filter .15s, opacity .18s ease;
+  transition:transform .22s var(--spring), box-shadow .22s var(--spring), filter .15s, opacity .18s ease;
   cursor:default;user-select:none;
   direction:ltr;
   background-image:linear-gradient(160deg, rgba(255,255,255,.55) 0%, transparent 30%);
@@ -443,10 +497,21 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   box-shadow:inset 0 0 0 3px rgba(240,216,150,.18), 0 3px 8px rgba(0,0,0,.4);
 }
 .card.back .center-sym{display:none;}
-.card.legal{cursor:pointer;filter:brightness(1);opacity:1;transform:translateY(-8px);box-shadow:0 6px 14px rgba(0,0,0,.35),0 0 10px rgba(240,216,150,.25);}
-.card.legal:hover{transform:translateY(-16px);box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:30;}
-.card.illegal{filter:saturate(.7);opacity:.55;}
-.card.selected{transform:translateY(-20px) scale(1.06);box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);}
+/* Legal (playable) cards get a soft breathing glow — the "you can play this" affordance called
+   for in the visual-affordance pass — layered on top of the lift/shadow already used to mark
+   them as raised off the fan. Illegal cards dim further (opacity .55 -> .7 territory handled via
+   saturate+opacity together) so at a glance the legal ones are unambiguously the "lit" ones. */
+.card.legal{
+  cursor:pointer;filter:brightness(1);opacity:1;transform:translateY(-8px);
+  box-shadow:0 6px 14px rgba(0,0,0,.35),0 0 10px rgba(240,216,150,.25);
+  animation:pulseGlow 2.2s ease-in-out infinite;
+}
+.card.legal:hover{transform:translateY(-16px) scale(1.05);box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:30;animation-play-state:paused;}
+.card.illegal{filter:saturate(.65) brightness(.92);opacity:.7;}
+.card.selected{transform:translateY(-20px) scale(1.08);box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);animation:none;}
+@media (prefers-reduced-motion: reduce){
+  .card.legal{animation:none;}
+}
 
 .card-confirm-hint{
   position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
@@ -467,7 +532,19 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   width:52%;height:40%;z-index:25;
   pointer-events:none;
 }
-.played-card{position:absolute;width:58px;height:82px;}
+/* Cards land on the trick area with a small bouncy pop instead of just appearing — a brief lift
+   +scale that settles back down, echoing the "throw a card, it hops slightly then lands softly"
+   physics requested for card play. Purely a CSS entrance animation on the element the render code
+   already creates fresh each play (see renderTable()'s ~line 2546 area), so it needs no new JS. */
+.played-card{position:absolute;width:58px;height:82px;animation:cardLand .38s var(--spring);}
+@keyframes cardLand{
+  0%{opacity:0;transform:scale(1.08) translateY(-14px);}
+  70%{opacity:1;transform:scale(1.03) translateY(-3px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
+@media (prefers-reduced-motion: reduce){
+  .played-card{animation:none;}
+}
 
 #control-panel{
   width:100%;flex-shrink:0;
@@ -495,7 +572,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .count-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
 .count-row input[type=number]{width:70px;text-align:center;padding:8px;border-radius:8px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.08);color:var(--cream);font-size:16px;}
 
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:800;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:800;display:none;align-items:center;justify-content:center;padding:20px;}
 .modal-bg.show{display:flex;}
 .modal{background:var(--panel);border:1px solid rgba(212,175,90,.4);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 24px;animation:modalIn .25s cubic-bezier(.2,.7,.3,1);}
 .modal h2{color:var(--gold-bright);margin-bottom:14px;font-size:24px;}
@@ -515,7 +592,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    backdrop, but the combination still let the bright felt/badges directly behind it show
    through visibly (reported as stray player-name/score text "floating" behind the modal). A
    solid, only-slightly-translucent panel is what actually stops that: */
-.round-end-card{background:rgba(8,20,15,.97);border:1px solid rgba(212,175,90,.4);border-radius:14px;padding:20px;max-width:640px;width:96%;max-height:82vh;overflow-y:auto;animation:modalIn .3s cubic-bezier(.2,.7,.3,1);}
+.round-end-card{background:rgba(8,20,15,.97);border:1px solid rgba(212,175,90,.4);border-radius:18px;padding:20px;max-width:640px;width:96%;max-height:82vh;overflow-y:auto;animation:modalPopIn .45s var(--spring);box-shadow:0 20px 60px rgba(0,0,0,.55), 0 0 40px rgba(240,216,150,.1);}
 /* ---- Round-end results: per-player CARD rows (see showRoundEndModal()) ----------------------
    Replaces the old 4-players-x-2-sub-columns wide table, which relied on horizontal scrolling
    that silently hid a column with no indication there was more to see, especially in this RTL

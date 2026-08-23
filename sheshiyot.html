@@ -34,6 +34,14 @@
 :root{
   --felt:#0f3d2e; --felt-1:#0d2b22; --felt-2:#164434; --felt-3:#1f5a44;
   --gold:#d4af5a; --gold-bright:#f0d896; --cream:#faf4e6; --teal:#3f9a8b; --amber:#d99a3f; --ink:#211a10;
+  /* CASUAL 3D — see the matching "CASUAL 3D" comment in whist.html/js/ui/theme.css: identical
+     token kept inline here so this file stays a self-contained single page. --spring is the
+     bouncy overshoot-then-settle easing used for card lift/deal/flip and button press-release. */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pulseGlow{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(240,216,150,.0), 0 0 14px 2px rgba(240,216,150,.35); }
+  50%{ box-shadow: 0 0 0 0 rgba(240,216,150,.0), 0 0 22px 6px rgba(240,216,150,.65); }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;margin:0;}
@@ -159,12 +167,22 @@ button{font-family:'Heebo',sans-serif;}
 .brand{font-weight:700;font-size:16px;color:var(--gold-bright);display:flex;align-items:center;gap:8px;font-family:'Rubik',sans-serif;}
 .brand .suits{font-size:14px;letter-spacing:2px;}
 .tb-btns{display:flex;gap:6px;}
+/* Chunky 3D topbar buttons: border-bottom acts as a solid lower lip giving real thickness; on
+   :active the button sinks by the lip's own height and the lip compresses to 0, so pressing reads
+   as a tactile physical action instead of the old flat scale-down. */
 .tb-btn{
-  background:rgba(255,255,255,.08);border:1px solid rgba(212,175,90,.4);color:var(--cream);cursor:pointer;
-  padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;transition:.15s;white-space:nowrap;
+  background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);border-bottom:3px solid rgba(140,105,40,.55);
+  color:var(--cream);cursor:pointer;
+  padding:7px 12px;border-radius:10px;font-size:13px;font-weight:600;white-space:nowrap;
+  transform:translateY(0);
+  transition:background .15s ease, transform .12s var(--spring), border-bottom-width .1s ease;
 }
 .tb-btn:hover{background:rgba(212,175,90,0.25);}
-.tb-btn:active{transform:scale(.96);}
+.tb-btn:active{transform:translateY(3px);border-bottom-width:0;}
+@media (prefers-reduced-motion: reduce){
+  .tb-btn{transition:background .15s ease;}
+  .tb-btn:active{transform:none;}
+}
 /* The rematch button must stay clickable in EVERY phase of the game — peek, mid-round, and
    at the end — including while a modal is open over the table (peek confirmation, the results
    scoreboard, the reset-vote dialog itself, instructions). .modal-bg backdrops are position:
@@ -197,11 +215,16 @@ button{font-family:'Heebo',sans-serif;}
 .mode-card{
   /* Glassmorphism via theme.css's .luxury-card (background/backdrop-filter/border/hover are
      applied through that class on the element itself — see the mode-card markup below); this
-     rule only adds the layout/content styling specific to a lobby mode-tile. */
-  border-radius:14px;padding:22px 16px;text-align:center;
+     rule only adds the layout/content styling specific to a lobby mode-tile. Border radius
+     widened and given a soft layered shadow (Travel-Town banner look) plus a spring-eased hover
+     lift on top of whatever .luxury-card itself provides. */
+  border-radius:18px;padding:22px 16px;text-align:center;
   position:relative; overflow:hidden; cursor:pointer;
-  opacity:0;animation:cardIn .55s ease forwards;
+  opacity:0;animation:cardIn .55s var(--spring) forwards;
+  box-shadow:0 4px 6px rgba(0,0,0,.12), 0 10px 20px rgba(0,0,0,.16);
+  transition:transform .28s var(--spring), box-shadow .28s var(--spring), border-color .18s ease;
 }
+.mode-card:hover{transform:translateY(-5px);box-shadow:0 8px 14px rgba(0,0,0,.2), 0 20px 38px rgba(0,0,0,.4);}
 .mode-grid .mode-card:nth-child(1){animation-delay:.05s;}
 .mode-grid .mode-card:nth-child(2){animation-delay:.15s;}
 .mode-grid .mode-card:nth-child(3){animation-delay:.25s;}
@@ -211,17 +234,29 @@ button{font-family:'Heebo',sans-serif;}
 .mode-card.online-card{border-color:var(--teal);}
 .mode-card.online-card .ic{color:var(--teal);}
 
+/* Chunky 3D primary/secondary action buttons — same lip-and-press pattern as .tb-btn above,
+   scaled up for the bigger tap targets these buttons need (setup screens, mode choice). */
 .btn-primary{
-  background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;border-radius:10px;
-  padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;width:100%;margin-top:14px;transition:.15s;
+  background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;border-bottom:4px solid #8a6d28;border-radius:14px;
+  padding:12px 18px;padding-bottom:10px;font-size:15px;font-weight:700;cursor:pointer;width:100%;margin-top:14px;
+  transform:translateY(0);
+  transition:transform .12s var(--spring), box-shadow .12s var(--spring), border-bottom-width .1s ease;
 }
 .btn-primary:disabled{opacity:.45;cursor:default;}
 .btn-primary:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(212,175,90,.3);}
+.btn-primary:not(:disabled):active{transform:translateY(3px);border-bottom-width:0;}
 .btn-secondary{
-  background:transparent;color:var(--cream);border:1px solid rgba(250,244,230,.3);border-radius:10px;
-  padding:10px 16px;font-size:13.5px;cursor:pointer;width:100%;margin-top:10px;
+  background:transparent;color:var(--cream);border:1px solid rgba(250,244,230,.3);border-bottom:3px solid rgba(250,244,230,.25);border-radius:14px;
+  padding:10px 16px;padding-bottom:8px;font-size:13.5px;cursor:pointer;width:100%;margin-top:10px;
+  transform:translateY(0);
+  transition:border-color .15s ease, transform .12s var(--spring), border-bottom-width .1s ease;
 }
 .btn-secondary:hover{border-color:var(--gold-bright);}
+.btn-secondary:active{transform:translateY(3px);border-bottom-width:0;}
+@media (prefers-reduced-motion: reduce){
+  .btn-primary, .btn-secondary{transition:box-shadow .15s ease;}
+  .btn-primary:active, .btn-secondary:active{transform:none;}
+}
 /* Rematch is a distinct action from "another round" (which keeps score running) — it fully
    resets the match while staying in the same room/seats. Styled as its own prominent, gold-
    bordered pill (not the plain .btn-secondary look) so it doesn't read as an afterthought
@@ -370,13 +405,32 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    height for them — leaving almost no gap between the top player's row and the
    center piles. Scale back down whenever height is tight, regardless of width. */
 .pcell{
-  width:50px;height:70px;border-radius:6px;position:relative;cursor:default;
+  width:50px;height:70px;border-radius:11px;position:relative;cursor:default;
   background:repeating-linear-gradient(45deg, #8a1f2b, #8a1f2b 6px, #5c1219 6px, #5c1219 12px);
   border:1px solid rgba(240,216,150,.4);box-shadow:inset 0 0 0 2px rgba(240,216,150,.12);
   display:flex;align-items:center;justify-content:center;font-size:20px;color:rgba(255,255,255,.15);
   transition:transform .12s, box-shadow .12s;
 }
-.pcell.face{background:linear-gradient(160deg, rgba(255,255,255,.6) 0%, transparent 30%), #fdfaf1;color:#222;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+/* 3D flip reveal: since each render cycle rebuilds these cells fresh from HTML (see the render
+   functions below), a class of "face" or "back" newly present on a freshly-created element always
+   plays its animation once from the start — no JS changes needed to trigger this per peek/deal.
+   perspective on the wrapping .pgrid/.pgrid-inner (added below) gives the rotateY real depth
+   instead of a flat squash. */
+.pcell.face{
+  background:linear-gradient(160deg, rgba(255,255,255,.6) 0%, transparent 30%), #fdfaf1;color:#222;
+  box-shadow:0 2px 3px rgba(0,0,0,.2), 0 5px 10px rgba(0,0,0,.25);
+  animation:flipReveal .4s var(--spring);
+  backface-visibility:hidden;
+}
+@keyframes flipReveal{
+  0%{transform:rotateY(90deg) scale(.94);}
+  60%{transform:rotateY(0deg) scale(1.03);}
+  100%{transform:rotateY(0deg) scale(1);}
+}
+.pgrid, .pgrid-inner{perspective:600px;}
+@media (prefers-reduced-motion: reduce){
+  .pcell.face{animation:none;}
+}
 .pcell.face .r{position:absolute;top:2px;right:3px;font-size:11px;font-weight:800;line-height:1;}
 /* .sym now holds an inline vector <svg> (see symHTML()) instead of a plain unicode glyph — a
    real font-rendered ♣/♠/♥/♦ character varies wildly in visual weight/size across OS/browser
@@ -388,14 +442,24 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pcell.red{color:#c0272d;}
 .pcell.black{color:#1a1a1a;}
 .pcell.empty{visibility:hidden;}
-.pcell{transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease;}
-.pcell.selectable{cursor:pointer;transform:translateY(-8px);box-shadow:0 6px 14px rgba(0,0,0,.3),0 0 0 2px var(--gold-bright),0 0 10px rgba(240,216,150,.35);}
-.pcell.selectable:hover{transform:translateY(-14px);box-shadow:0 10px 18px rgba(0,0,0,.4),0 0 0 2px var(--gold-bright),0 0 16px rgba(240,216,150,.5);}
+.pcell{transition:transform .22s var(--spring), box-shadow .22s var(--spring), opacity .18s ease;}
+/* Selectable (legal-to-play-into) cells get the same soft breathing glow as whist.html's
+   .card.legal — the "you can place/swap here" affordance, most useful the moment a card is
+   drawn/held and the player needs to see at a glance where it can land. */
+.pcell.selectable{
+  cursor:pointer;transform:translateY(-8px);
+  box-shadow:0 6px 14px rgba(0,0,0,.3),0 0 0 2px var(--gold-bright),0 0 10px rgba(240,216,150,.35);
+  animation:pulseGlow 2.2s ease-in-out infinite;
+}
+.pcell.selectable:hover{transform:translateY(-14px) scale(1.04);box-shadow:0 10px 18px rgba(0,0,0,.4),0 0 0 2px var(--gold-bright),0 0 16px rgba(240,216,150,.5);animation-play-state:paused;}
 /* Own face-up cells that are NOT currently actionable (e.g. the graduated-out bottom row while
    waiting to place a drawn card) are dimmed, matching whist.html's .card.illegal treatment — a
    quiet visual cue for "not clickable right now" without a separate disabled-looking overlay. */
-.pcell.not-actionable{opacity:.55;}
+.pcell.not-actionable{opacity:.7;filter:saturate(.75);}
 .pcell.justswapped{box-shadow:0 0 0 3px var(--teal);}
+@media (prefers-reduced-motion: reduce){
+  .pcell.selectable{animation:none;}
+}
 .pcell.reorderable{cursor:grab;touch-action:none;}
 .pcell.reorderable:active{cursor:grabbing;}
 .pcell.drag-target{box-shadow:0 0 0 3px var(--teal);}
@@ -408,7 +472,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    sized generously (min(94vw), tall max-height with internal scroll for the rankings, and a
    dedicated non-scrolling zone for the per-player card carousel so the 6 cards always render
    at a legible, consistent size regardless of how many rounds are in the history table above). */
-.results-modal{max-width:640px;width:94vw;max-height:92vh;padding:20px 18px;}
+.results-modal{max-width:640px;width:94vw;max-height:92vh;padding:20px 18px;animation:modalPopIn .45s var(--spring);box-shadow:0 20px 60px rgba(0,0,0,.55), 0 0 40px rgba(240,216,150,.1);}
 .rp-close{position:absolute;top:10px;left:12px;background:rgba(255,255,255,.1);border:1px solid rgba(212,175,90,.4);
   color:var(--cream);border-radius:8px;width:28px;height:28px;font-size:14px;cursor:pointer;z-index:2;}
 .rp-standings{display:flex;flex-direction:column;gap:8px;margin:14px 0 18px;}
@@ -417,7 +481,12 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .rp-standing-row.first{background:linear-gradient(90deg, rgba(212,175,90,.22), rgba(212,175,90,.05));
   border-color:var(--gold-bright);box-shadow:0 0 18px rgba(240,216,150,.15);}
 .rp-standing-rank{font-family:'Rubik',sans-serif;font-weight:800;font-size:15px;color:var(--gold-bright);
-  width:28px;text-align:center;flex-shrink:0;}
+  width:28px;height:28px;line-height:28px;text-align:center;flex-shrink:0;
+  background:rgba(0,0,0,.25);border-radius:50%;border:1px solid rgba(212,175,90,.25);}
+.rp-standing-row.first .rp-standing-rank{
+  background:radial-gradient(circle at 35% 30%, #fff7d8, var(--gold-bright) 55%, var(--gold) 100%);
+  color:#241a05;box-shadow:0 0 10px rgba(240,216,150,.6);border-color:transparent;
+}
 .rp-standing-name{flex:1;font-size:14px;font-weight:700;color:var(--cream);}
 .rp-standing-score{font-family:'Rubik',sans-serif;font-variant-numeric:tabular-nums;font-weight:800;font-size:16px;color:var(--gold-bright);}
 .rp-rounds-wrap{max-height:20vh;overflow-y:auto;margin-bottom:16px;border-radius:10px;}
@@ -483,10 +552,18 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   padding:10px 18px;border-radius:20px;font-size:13.5px;z-index:900;opacity:0;transition:opacity .25s;pointer-events:none;}
 .toast.show{opacity:1;}
 
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:800;padding:20px;}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:800;padding:20px;}
 .modal-bg.show{display:flex;}
-.modal{background:#0d3327;border:1px solid rgba(212,175,90,.4);border-radius:16px;padding:24px;max-width:520px;width:100%;
+.modal{background:#0d3327;border:1px solid rgba(212,175,90,.4);border-radius:18px;padding:24px;max-width:520px;width:100%;
   max-height:85vh;overflow-y:auto;animation:modalIn .25s cubic-bezier(.2,.7,.3,1);}
+/* Celebration pop-in: overshoots past 100% then settles, for the results/scoreboard modal
+   specifically (see .results-modal below) — a bigger, more rewarding moment than a plain utility
+   modal (instructions, confirm boxes), which keep the calmer modalIn above. */
+@keyframes modalPopIn{
+  0%{opacity:0;transform:scale(.7) translateY(10px);}
+  60%{opacity:1;transform:scale(1.04) translateY(-2px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
 .modal h2{color:var(--gold-bright);margin-top:0;}
 .modal p{font-size:13.5px;line-height:1.7;color:rgba(250,244,230,.85);}
 .close-btn{margin-top:14px;}

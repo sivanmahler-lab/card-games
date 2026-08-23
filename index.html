@@ -27,14 +27,22 @@
   *{box-sizing:border-box;}
   @keyframes emblemGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 16px rgba(240,216,150,.65));}}
   @keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+  html{min-height:100%;}
   body{
-    margin:0;min-height:100vh;font-family:'Heebo',sans-serif;color:var(--cream);
+    margin:0;min-height:100vh;min-height:100dvh;font-family:'Heebo',sans-serif;color:var(--cream);
     position:relative;
     /* All layers in ONE background-image declaration — the dark overlay and photo on top, the
        original felt gradients kept underneath as a same-declaration fallback so a missing/slow-
        to-load JPG still shows the felt look instead of a plain gray box (a background-image
        given as several comma-separated layers paints each independently: an earlier layer whose
-       url() 404s just shows nothing for that layer, not the whole property). */
+       url() 404s just shows nothing for that layer, not the whole property).
+       Deliberately NO background-attachment:fixed anywhere (desktop included) — on mobile browsers
+       a fixed background combined with the address bar showing/hiding as the page scrolls (which
+       changes the viewport height live) is what was causing the background to visibly vanish or
+       glitch when navigating back to this page; background-attachment defaults to 'scroll', which
+       paints the background against the body's own box instead of the viewport and doesn't have
+       this failure mode. background-size:cover on a min-height:100dvh body covers the same visual
+       ground fixed used to, just without the mobile repaint bug. */
     background-image:
       linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
       url('lobby-pc.jpg'),
@@ -42,7 +50,7 @@
       radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
       radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
     background-size:cover, cover, auto, cover, cover;
-    background-position:center;background-attachment:fixed;background-repeat:no-repeat;
+    background-position:center;background-repeat:no-repeat;
     display:flex;flex-direction:column;align-items:center;padding:40px 16px;
   }
   @media (max-width:768px){
@@ -53,7 +61,6 @@
         repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 5px),
         radial-gradient(ellipse at 50% 20%, rgba(255,255,255,.06), transparent 55%),
         radial-gradient(circle at 50% 50%, var(--felt-3) 0%, var(--felt-2) 55%, var(--felt-1) 100%);
-      background-attachment:scroll; /* fixed backgrounds can be janky on mobile Safari */
     }
   }
   body::before{
@@ -78,23 +85,32 @@
 
   /* Game cards reuse .luxury-card from theme.css for the glass/hover treatment, and add only
      the layout/content styling specific to a lobby tile (padding, the shine sweep, spacing for
-     the icon/title/subtitle stack, and the 3D tilt-on-hover below). */
+     the icon/title/subtitle stack, and the 3D tilt-on-hover below). Border radius widened to 20px
+     and the hover/rest shadow given a soft layered stack (Travel-Town-style banner look) instead
+     of the previous single flat shadow. */
   .card{
     text-decoration:none;color:inherit;
     padding:28px 20px 22px;text-align:center;
     position:relative;overflow:hidden;
-    opacity:0;animation:cardIn .55s ease forwards;
+    opacity:0;animation:cardIn .55s var(--spring, cubic-bezier(.34,1.56,.64,1)) forwards;
     display:flex;flex-direction:column;align-items:center;
     transform-style:preserve-3d;
-    transition:transform .35s cubic-bezier(.2,.7,.3,1), box-shadow .35s cubic-bezier(.2,.7,.3,1), border-color .22s ease;
+    border-radius:20px !important;
+    box-shadow:0 4px 6px rgba(0,0,0,.16), 0 10px 22px rgba(0,0,0,.22);
+    transition:transform .3s var(--spring, cubic-bezier(.34,1.56,.64,1)), box-shadow .3s var(--spring, cubic-bezier(.34,1.56,.64,1)), border-color .22s ease;
   }
   .grid .card:nth-child(1){animation-delay:.05s;}
   .grid .card:nth-child(2){animation-delay:.18s;}
   /* 3D tilt: a small rotation on both axes plus a slight lift, driven by mousemove JS below
      (see tiltCard()) which sets --rx/--ry per pointer position. Falls back to a flat hover state
      with no JS (touch devices, prefers-reduced-motion) via the plain :hover rule beneath it. */
-  .card{--rx:0deg;--ry:0deg;transform:rotateX(var(--rx)) rotateY(var(--ry)) translateY(0);}
-  .card:hover{box-shadow:0 22px 46px rgba(0,0,0,.5), 0 0 30px rgba(240,216,150,.16);}
+  .card{--rx:0deg;--ry:0deg;transform:rotateX(var(--rx)) rotateY(var(--ry)) translateY(0) translateZ(0);}
+  /* Hover lift: a slightly bigger, softer shadow stack plus a small physical rise (translateY),
+     read together as the whole banner tile lifting up off the table toward the viewer. */
+  .card:hover{
+    transform:rotateX(var(--rx)) rotateY(var(--ry)) translateY(-6px) translateZ(0);
+    box-shadow:0 10px 18px rgba(0,0,0,.28), 0 26px 50px rgba(0,0,0,.4), 0 0 30px rgba(240,216,150,.18);
+  }
   /* Soft top-down gold sheen inside the glass, on top of theme.css's own frosted background —
      gives the panel a sense of depth/light-from-above instead of a flat tint. */
   .card::before{
@@ -115,15 +131,34 @@
   .card h3{margin:0 0 4px;font-size:19px;color:var(--cream);font-family:'Rubik',sans-serif;font-weight:700;}
   .card p.tagline{margin:0 0 18px;font-size:12.5px;color:var(--gold-dim);}
   .card-actions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:auto;}
+  /* Chunky 3D "gummy" play button: the border-bottom acts as a solid lower lip/ledge giving it
+     real physical thickness, topped with a subtle glossy sheen (::after). On press it sinks by
+     exactly the lip's own height and the lip visually compresses (border-bottom shrinks + the
+     ledge shadow tightens), so releasing/pressing reads as a tactile physical action rather than
+     a flat color change. */
   .play-btn{
-    display:block;width:100%;padding:11px 14px;border-radius:10px;border:none;cursor:pointer;
-    background:linear-gradient(135deg,var(--gold),#b8933f);color:#241a05;
+    display:block;width:100%;padding:12px 14px 9px;border-radius:14px;cursor:pointer;
+    background:linear-gradient(160deg,var(--gold-bright),var(--gold) 55%,#b8933f);color:#241a05;
     font-family:'Rubik',sans-serif;font-weight:800;font-size:14.5px;
-    text-decoration:none;text-align:center;
+    text-decoration:none;text-align:center;position:relative;overflow:hidden;
+    border:none;border-bottom:4px solid #8a6d28;
     box-shadow:0 6px 16px rgba(212,175,90,.3);
-    transition:transform .18s ease, box-shadow .18s ease;
+    transition:transform .14s cubic-bezier(.34,1.56,.64,1), box-shadow .14s cubic-bezier(.34,1.56,.64,1), border-bottom-width .1s ease;
+  }
+  .play-btn::after{
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0) 55%);
+    opacity:.55;
   }
   .play-btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(212,175,90,.4);}
+  .play-btn:active{
+    transform:translateY(3px);
+    border-bottom-width:0;
+    box-shadow:0 2px 6px rgba(212,175,90,.35);
+  }
+  @media (prefers-reduced-motion: reduce){
+    .play-btn{transition:none;}
+  }
   .rules-btn{
     display:block;width:100%;padding:8px 14px;border-radius:10px;
     border:1px solid var(--surface-border);background:transparent;color:var(--gold-dim);
@@ -135,8 +170,23 @@
   h1.brand-title{display:flex;align-items:center;gap:12px;justify-content:center;}
   h1.brand-title svg{height:40px;width:auto;animation:emblemGlow 3.2s ease-in-out infinite;}
 
+  /* Small glossy badge pinned to a card's top corner — "online-ready", "popular", etc. Round,
+     high-contrast, sits above the card's own ::before/::after light layers. */
+  .card-badge{
+    position:absolute;top:12px;inset-inline-end:12px;z-index:2;
+    display:flex;align-items:center;gap:4px;
+    background:linear-gradient(160deg, rgba(63,154,139,.9), rgba(35,110,98,.9));
+    border:1px solid rgba(255,255,255,.25);
+    color:var(--cream);font-family:'Heebo',sans-serif;font-weight:800;font-size:10.5px;
+    padding:4px 9px;border-radius:999px;
+    box-shadow:0 3px 8px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.25);
+    letter-spacing:.3px;
+  }
+
   @media (prefers-reduced-motion: reduce){
     .card{opacity:1;animation:none;transform:none !important;transition:box-shadow .2s ease;}
+    .card:hover{transform:none !important;}
+    .play-btn{transform:none !important;}
     h1.brand-title svg{animation:none;}
   }
 </style>
@@ -155,6 +205,7 @@
   <div class="sub">בחרו משחק</div>
   <div class="grid">
     <div class="card luxury-card" data-tilt>
+      <span class="card-badge">🌐 מקוון</span>
       <div class="ic">
         <!-- Whist: a fanned hand of 13 card-backs -->
         <svg viewBox="0 0 200 100" aria-hidden="true">
@@ -172,6 +223,7 @@
       </div>
     </div>
     <div class="card luxury-card" data-tilt>
+      <span class="card-badge">⭐ פופולרי</span>
       <div class="ic">
         <!-- Sheshiyot: six face-up cards with polished vector suit glyphs (paths, not emoji —
              emoji rendering varies wildly across OS/browser font sets, while these paths render
