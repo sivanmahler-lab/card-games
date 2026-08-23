@@ -156,6 +156,15 @@ button{font-family:'Heebo',sans-serif;}
 }
 .tb-btn:hover{background:rgba(212,175,90,0.25);}
 .tb-btn:active{transform:scale(.96);}
+/* The rematch button's label is long ("משחק חוזר באותו חדר") — fine next to "הוראות"/"לובי"
+   on a wide screen, but the three buttons together would overflow the fixed 52px top bar on a
+   narrow phone. Swap to a shorter label there instead of letting it wrap/overflow. */
+.rematch-tb-short{display:none;}
+@media(max-width:480px){
+  .rematch-tb-full{display:none;}
+  .rematch-tb-short{display:inline;}
+  .rematch-tb-btn{padding:7px 9px;}
+}
 
 .screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;}
 .screen.active{display:flex;}
@@ -195,6 +204,15 @@ button{font-family:'Heebo',sans-serif;}
   padding:10px 16px;font-size:13.5px;cursor:pointer;width:100%;margin-top:10px;
 }
 .btn-secondary:hover{border-color:var(--gold-bright);}
+/* Rematch is a distinct action from "another round" (which keeps score running) — it fully
+   resets the match while staying in the same room/seats. Styled as its own prominent, gold-
+   bordered pill (not the plain .btn-secondary look) so it doesn't read as an afterthought
+   next to "סבב נוסף", per the "בולט" (prominent) ask. */
+.rematch-btn{
+  background:rgba(212,175,90,.12);border:1.5px solid var(--gold-bright);color:var(--gold-bright);
+  font-weight:800;flex:1 1 auto;
+}
+.rematch-btn:hover{background:rgba(212,175,90,.22);box-shadow:0 0 14px rgba(240,216,150,.3);}
 .online-actions-row{display:flex;gap:10px;margin-top:8px;}
 .online-actions-row .btn-primary{margin-top:0;flex:1 1 0;width:auto;}
 @media(max-width:420px){.online-actions-row{flex-direction:column;}}
@@ -412,6 +430,11 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .action-bar button{padding:9px 16px;border-radius:10px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);
   color:var(--cream);font-size:13px;font-weight:700;cursor:pointer;}
 .action-bar button.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
+/* "הכרז סיום!" is a significant, hard-to-take-back declaration (starts the final round for
+   everyone) — styled with its own bold/alert accent so it visually stands apart from the
+   plain "העבר תור" advance button next to it, rather than the two reading as equally routine. */
+#btn-finish{background:linear-gradient(160deg,#e0554a,#a8342b);color:#fff;border:none;font-weight:800;}
+#btn-finish:not(:disabled):hover{box-shadow:0 0 14px rgba(224,85,74,.45);}
 .action-bar button:disabled{opacity:.4;cursor:default;}
 
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:var(--cream);
@@ -431,19 +454,33 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .score-table tr.winner td{color:var(--gold-bright);font-weight:800;}
 
 @media(max-width:480px){
+  /* The active/own player's own cards (pos-0, #pg-0) are NOT covered by this rule — see the
+     #pw-0 .pcell override just below, which sizes them independently and noticeably larger.
+     This base .pcell size now only really applies to the opponent grids, which additionally
+     get scaled down further by .pgrid.small right after. */
   .pcell{width:44px;height:62px;}
   .pile{width:46px;height:65px;}
   /* Side players' card grids were visually overlapping the center piles on narrow
      phones — .pgrid.small only scales the cards visually, the layout box itself stays
-     full width, so it needs to shrink AND sit further out for the piles to have room. */
-  .pgrid.small{transform:scale(.5);}
+     full width, so it needs to shrink AND sit further out for the piles to have room.
+     Scaled down a bit further than before (.5 -> .44) specifically to buy back the extra
+     room the player's own bigger cards below now need on the same short screen. */
+  .pgrid.small{transform:scale(.44);}
   .pgrid-wrap.pos-1{max-width:84px;}
   .pgrid-wrap.pos-3{max-width:84px;}
   .center-pot > div{gap:10px !important;}
+  /* Own cards, mobile only: ~53x74 vs the 44x62 base .pcell above is +42% surface area —
+     comfortably clears the "at least 20% more area" ask, since this is the hand the player
+     is actually reading and acting on every turn, while the three opponent grids (already
+     just face-down backs or, at round end, reference-only) can afford to shrink further to
+     make room. */
+  #pw-0 .pcell{width:53px;height:74px;}
+  #pw-0 .pcell .r{font-size:13px;}
 }
 @media(max-width:360px){
   .pgrid-wrap.pos-1{max-width:72px;}
   .pgrid-wrap.pos-3{max-width:72px;}
+  #pw-0 .pcell{width:48px;height:67px;}
 }
 /* Wide-but-short windows (e.g. a browser resized short rather than a narrow phone)
    don't match the max-width rules above, yet the felt still doesn't have enough
@@ -488,7 +525,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
         <rect x="18" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(8 28 17)"/>
       </svg> שישיות</div>
   <div class="tb-btns">
-    <button class="tb-btn" onclick="newGame()">משחק חדש</button>
+    <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חוזר באותו חדר</span><span class="rematch-tb-short">משחק חוזר</span></button>
     <button class="tb-btn" onclick="openInstructions()">הוראות</button>
     <button class="tb-btn" onclick="goHub()">לובי</button>
   </div>
@@ -672,8 +709,8 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     </div>
   </div>
   <div class="action-bar" id="action-bar" style="display:none;">
-    <button id="btn-finish" onclick="declareFinished()" title="לכל שאר השחקנים יהיה עוד תור אחד בלבד, ואז המשחק נגמר">סיימתי!</button>
-    <button id="btn-endturn" class="hot" onclick="endMyTurn()">המשך</button>
+    <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
+    <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
   </div>
 </div>
 
@@ -1256,6 +1293,11 @@ function declareFinished(){
   const myActual = seatFor(0);
   if(isOnline && !isHost){ submitRemoteAction('declareFinished', {}); return; }
   if(S.turn!==myActual || !S.turnActed || S.finishCaller!==-1) return;
+  // The button's title="..." attribute covers desktop mouse hover; mobile has no hover state
+  // at all, so a tap needs its own explanation too — a toast with the exact same text right
+  // as the action fires, so a player who taps this significant/hard-to-take-back button
+  // still sees what it means to have just done, not just what it would have meant beforehand.
+  showToast('הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!', 3200);
   doDeclareFinished(myActual);
   renderAll();
   setTimeout(advanceTurn, 400);
@@ -1264,6 +1306,7 @@ function endMyTurn(){
   const myActual = seatFor(0);
   if(isOnline && !isHost){ submitRemoteAction('advanceTurn', {}); return; }
   if(S.turn!==myActual || !S.turnActed) return;
+  showToast('התור שלך הסתיים, מעביר את התור לשחקן הבא', 1800);
   advanceTurn();
 }
 function doDeclareFinished(p){
@@ -1487,11 +1530,16 @@ function endRound(){
   // showRoundEndModal() below.
   S.matchHistory.push({raw, final, caller, names:S.names.slice(), hands:S.hands.map(h=>h.slice())});
   // Cards get revealed face-up for everyone right away (renderAll/renderPlayerGrid does
-  // this automatically once phase is 'ended'). The results panel itself stays closed —
-  // each player opens it in their own time via the "הצג תוצאות" button, so nobody's view
-  // of the open hands gets interrupted before they're ready.
+  // this automatically once phase is 'ended') as a quick glance at the raw table if someone
+  // wants it. But cramming all 4 players' full 6-card hands onto one small phone screen at
+  // once is unreadable, which is exactly the scoreboard modal (showRoundEndModal(), with its
+  // ranked standings + full-size per-player card carousel) was built to fix — so it's opened
+  // automatically right here instead of leaving it as an easy-to-miss opt-in "הצג תוצאות"
+  // button. The "הצג תוצאות" pill (see renderAll()) still exists too, in case someone closes
+  // the modal but wants to reopen it without waiting for the next round.
   document.getElementById('results-panel').classList.remove('show');
   renderAll();
+  showRoundEndModal();
 }
 // Which seat's cards the carousel is currently showing — reset every time the modal opens
 // (see showRoundEndModal()) so it always starts on the round's own lowest-score (leading)
@@ -1579,9 +1627,10 @@ function showRoundEndModal(){
     <div class="rp-carousel">
       <div id="rp-carousel-content"></div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:16px;">
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
       <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף</button>
-      <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">סיום המשחק</button>
+      <button class="btn-secondary rematch-btn" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">🔄 משחק חוזר באותו חדר</button>
+      <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); goHub();">סיום וחזרה ללובי</button>
     </div>
   `;
   rpCarouselSeat = ranked[0];
@@ -1734,12 +1783,13 @@ function renderAll(){
     peekGoBtn.classList.toggle('needs-peek', !hasPeekedAny);
   }
 
-  // Once the round ends, hands are revealed on the felt and each player opens the score
-  // panel at their own pace via the "תוצאות" pill in the status bar (up top, never over
-  // the felt — a floating button placed over the table used to sit right on top of the
-  // player's own cards on shorter screens, with nowhere nearby to move it that didn't
-  // also risk overlapping someone else's cards). It pulses to draw the eye the first
-  // time until the panel has been opened at least once this round.
+  // Once the round ends, hands are revealed on the felt AND the scoreboard modal now opens
+  // automatically (see endRound()) instead of waiting for the player to find an opt-in
+  // button. This "תוצאות" pill in the status bar (up top, never over the felt — a floating
+  // button placed over the table used to sit right on top of the player's own cards on
+  // shorter screens) is what's left to REOPEN the modal if the player closed it and wants
+  // another look before the next round starts. It pulses to draw the eye until the panel
+  // has been opened at least once this round.
   const revealOverlay = document.getElementById('reveal-results-overlay');
   revealOverlay.classList.remove('show');
   const reopenPill = document.getElementById('reopen-results-pill');
