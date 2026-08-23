@@ -833,7 +833,19 @@ function buildRoundState(names, isHuman, matchHistory, roundNum, starter, active
     discardPile:[],
     turn:starter,
     starter:starter,
-    finishCaller:null,
+    // -1, not null: Firebase Realtime Database treats writing `null` to a field as DELETING
+    // that key (see pushStateToFirebase()'s JSON.stringify+set()), so a `finishCaller:null`
+    // round-trips through Firebase as a MISSING key — remote.finishCaller comes back as
+    // `undefined`, not `null`, on every client (and the host too, after its own state syncs
+    // back down). Every `S.finishCaller!==null`/`===null` check in this file then silently
+    // breaks (undefined !== null is true), which is exactly what caused the false "X הכריז/ה
+    // סיימתי" banner with an undefined player name right at the start of round 1 — the very
+    // first pushStateToFirebase() after peek ends drops the key, and the next render treats
+    // that as "someone (seat undefined) declared finished". -1 is a plain number Firebase
+    // stores and returns intact, so it survives the round trip as the same "nobody declared"
+    // sentinel everywhere. See applyRemoteState() below for a defensive normalize on read too,
+    // so any already-affected in-flight room self-heals instead of staying stuck.
+    finishCaller:-1,
     finalTurnsRemaining:0,
     pendingDraw:null,
     turnActed:false,
@@ -1040,6 +1052,23 @@ function startFromPeek(){
 }
 function allPeeked(){ return S.peeked.every(Boolean); }
 
+// True only once a real seat has actually declared "finished" this round. Deliberately treats
+// -1 (the real "nobody declared" sentinel — see buildRoundState()'s finishCaller comment),
+// null, and undefined all as "nobody declared" — the last two are defensive: a state object
+// that predates this fix, or one that round-tripped through Firebase with the old null
+// sentinel (which Firebase silently drops from the payload, turning it into undefined on
+// every reader), should still behave correctly instead of showing a false declaration.
+function hasFinishCaller(){
+  const fc = S.finishCaller;
+  return fc!==-1 && fc!==null && fc!==undefined;
+}
+// Safe display name for whoever declared "finished" — never renders "undefined" even if
+// S.finishCaller is somehow a seat index with no matching name (e.g. an inactive seat).
+function finishCallerName(){
+  const fc = S.finishCaller;
+  return (hasFinishCaller() && S.names && S.names[fc]) ? S.names[fc] : 'שחקן';
+}
+
 /* ============================= FLY ANIMATION ============================= */
 // A short-lived cloned "ghost" card that visually flies from one element's position to
 // another's, then fades out and removes itself. Purely cosmetic — the real state change
@@ -1226,7 +1255,7 @@ function useDrawnOnSlot(slotIdx){
 function declareFinished(){
   const myActual = seatFor(0);
   if(isOnline && !isHost){ submitRemoteAction('declareFinished', {}); return; }
-  if(S.turn!==myActual || !S.turnActed || S.finishCaller!==null) return;
+  if(S.turn!==myActual || !S.turnActed || S.finishCaller!==-1) return;
   doDeclareFinished(myActual);
   renderAll();
   setTimeout(advanceTurn, 400);
@@ -1254,7 +1283,7 @@ function finishTurnAction(){
   }
 }
 function advanceTurn(){
-  if(S.finishCaller!==null && S.turn!==S.finishCaller){
+  if(S.finishCaller!==-1 && S.turn!==S.finishCaller){
     // Only count down when a player OTHER than the declarer just finished their turn —
     // the advance that moves play off the declarer's own turn doesn't consume one of the
     // "3 other players" final turns. Counting that one too (as a prior version did) ends
@@ -1393,7 +1422,7 @@ function botResolveTurn(p, ctx){
     }
 
     // finish heuristic
-    if(S.finishCaller===null){
+    if(S.finishCaller===-1){
       const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
       if(total<=4 && S.graduated[p]){
         doDeclareFinished(p);
@@ -1434,7 +1463,7 @@ function endRound(){
   const raw = S.hands.map(computeRawScore);
   const caller = S.finishCaller;
   const final = raw.slice();
-  if(caller!==null){
+  if(caller!==-1 && caller!==null && caller!==undefined){
     if(raw[caller]===0){
       // Caller legitimately finished (hand reduced to 0): they get a -10 bonus.
       // Everyone else is scored on their own raw hand only — no penalty for anyone.
@@ -1582,8 +1611,8 @@ function renderAll(){
     }
   } else if(S.phase==='playing'){
     const turnName = S.names[S.turn];
-    const finishNote = S.finishCaller!==null
-      ? `🔔 ${S.finishCaller===myActual ? 'הכרזת' : (S.names[S.finishCaller]||('שחקן '+S.finishCaller))+' הכריז/ה'} "סיימתי" — סבב אחרון — `
+    const finishNote = hasFinishCaller()
+      ? `🔔 ${S.finishCaller===myActual ? 'הכרזת' : finishCallerName()+' הכריז/ה'} "סיימתי" — סבב אחרון — `
       : '';
     pill.textContent = roundPrefix + finishNote + 'תור: ' + (S.turn===myActual?'שלך':turnName);
   } else if(S.phase==='ended'){
@@ -1594,8 +1623,8 @@ function renderAll(){
   // everyone this is the last round — state-driven off S.finishCaller so it's always
   // correct no matter when a player looks, unlike a transient toast that can be missed.
   const banner = document.getElementById('final-round-banner');
-  if(S.phase==='playing' && S.finishCaller!==null){
-    const callerName = S.names[S.finishCaller] || ('שחקן '+S.finishCaller);
+  if(S.phase==='playing' && hasFinishCaller()){
+    const callerName = finishCallerName();
     const callerIsMe = S.finishCaller===myActual;
     const turnIsMine = S.turn===myActual;
     let extra = '';
@@ -1726,7 +1755,7 @@ function renderAll(){
   const myTurnNow = S.phase==='playing' && S.turn===myActual && S.isHuman[myActual];
   bar.style.display = myTurnNow ? 'flex' : 'none';
   if(myTurnNow){
-    finBtn.disabled = !S.turnActed || S.finishCaller!==null || !!pendingDraw;
+    finBtn.disabled = !S.turnActed || hasFinishCaller() || !!pendingDraw;
     endBtn.disabled = !S.turnActed || !!pendingDraw;
   }
 
@@ -2340,6 +2369,13 @@ function startOnlineClientGame(remoteState, players){
 }
 function applyRemoteState(remote){
   S = remote;
+  // Self-heal: a room's stored gameState may still carry the OLD null sentinel from before
+  // this fix (or Firebase may have dropped the key entirely on some earlier write, leaving it
+  // simply absent) — either way it arrives here as undefined/null rather than -1. Normalize it
+  // right on read so a client that reconnects mid-game never renders the false "declared
+  // finished" banner off of stale/missing data. See buildRoundState()'s finishCaller comment
+  // for the full story.
+  if(S.finishCaller===undefined || S.finishCaller===null) S.finishCaller = -1;
   const myActual = seatFor(0);
   if(S.pendingDraw && S.pendingDraw.owner===myActual){
     pendingDraw = {source:S.pendingDraw.source, card:S.pendingDraw.card};
@@ -2456,7 +2492,7 @@ function applyHostAction(act){
     if(S.graduated[p]) return;
     S.graduated[p] = true;
   } else if(act.type==='declareFinished'){
-    if(!S.turnActed || S.finishCaller!==null) return;
+    if(!S.turnActed || hasFinishCaller()) return;
     doDeclareFinished(p);
     renderAll();
     setTimeout(advanceTurn, 400);
