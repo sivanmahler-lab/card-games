@@ -319,7 +319,11 @@ button{font-family:'Heebo',sans-serif;}
 button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:rgba(212,175,90,.16);}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;animation:codePulse 1.4s ease-in-out infinite;}
-#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;overflow-y:auto;}
+/* Bottom padding reserves room for the now-fixed-to-viewport pos-0 hand (and, when it's shown,
+   the fixed action bar above it) so the felt's own content — the draw/discard piles especially —
+   never sits underneath them. calc() from the same --hand-h custom property renderAll() keeps in
+   sync with the hand's real height, so this stays correct across breakpoints and graduation. */
+#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(var(--hand-h, 100px) + 24px);min-height:0;overflow-y:auto;}
 @media(min-width:700px){ #table-wrap{max-width:640px;} }
 @media(min-width:1000px){ #table-wrap{max-width:760px;} }
 #felt{position:relative;width:100%;flex:1;min-height:440px;
@@ -340,7 +344,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #peek-overlay button:disabled,#peek-overlay button.needs-peek{opacity:.45;cursor:not-allowed;filter:grayscale(.3);}
 
 .pgrid-wrap{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
-.pgrid-wrap.pos-0{bottom:6px;left:50%;transform:translateX(-50%);z-index:40;}
+/* pos-0 (the player's OWN hand) is deliberately position:fixed to the VIEWPORT, not position:
+   absolute relative to #felt like the other three seats. #felt lives inside #table-wrap, a
+   flex:1 child of the #screen-game flex column — every time a sibling flex item (.action-bar-wrap
+   or .round-end-bar) toggles display:none<->flex, #table-wrap's available height changes and
+   #felt resizes with it, which used to visibly shift/jump the player's own cards even though they
+   were "bottom:6px" of a moving target. Pinning pos-0 straight to the viewport's own bottom edge
+   makes it completely immune to any of that — it never moves no matter what shows or hides above
+   it. See .action-bar-wrap below, which is now also position:fixed and sits directly above this
+   for the same reason. */
+.pgrid-wrap.pos-0{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:400;}
 /* Side players (pos-1/pos-3): fixed-pixel corner pin, NOT percentage/translateY-centered.
    whist.html hit this exact bug earlier — a vertically-centered side badge+card stack still
    visually drifted toward the table center on narrow phones. Pinning to a true top corner
@@ -412,7 +425,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    round end — see the [data-magnify-hint] / toggleMagnifiedSeat() JS for the click wiring and the
    S.phase guard. */
 .pgrid-wrap.magnified-hand{
-  z-index:600;
+  z-index:800;
   transform:scale(1.35);
   transform-origin:center bottom;
   filter:drop-shadow(0 10px 26px rgba(0,0,0,.55)) drop-shadow(0 0 22px rgba(240,216,150,.45));
@@ -516,6 +529,12 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 @media (prefers-reduced-motion: reduce){
   .pcell.face{animation:none;}
 }
+/* Base safeguard: the rank digit/letter must always actually be visible on every face-up card,
+   everywhere cardHTML() is used (the board, the peek view, results/modals, magnified hands) — no
+   code path should ever leave it hidden or transparent. The more specific rules below (per
+   breakpoint, per context) only ever adjust font-size/position from here, never display/opacity/
+   color, so this base rule is the floor every one of them inherits from. */
+.r{display:block;opacity:1;}
 .pcell.face .r{position:absolute;top:2px;right:3px;font-size:11px;font-weight:800;line-height:1;}
 /* .sym now holds an inline vector <svg> (see symHTML()) instead of a plain unicode glyph — a
    real font-rendered ♣/♠/♥/♦ character varies wildly in visual weight/size across OS/browser
@@ -618,7 +637,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .rp-carousel-body{display:flex;flex-direction:column;align-items:center;gap:10px;}
 .rp-carousel-cards{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;}
 .rp-carousel-cards .pcell{position:static;width:44px;height:62px;}
-.rp-carousel-cards .pcell .r{font-size:10px;}
+.rp-carousel-cards .pcell .r{font-size:12px;}
 @media(min-width:400px){ .rp-carousel-cards{gap:8px;} .rp-carousel-cards .pcell{width:52px;height:74px;} .rp-carousel-cards .pcell .r{font-size:12px;} }
 .rp-carousel-score{font-family:'Rubik',sans-serif;font-size:14px;color:var(--gold-bright);font-weight:700;}
 .rp-carousel-nav{display:flex;align-items:center;gap:14px;}
@@ -654,6 +673,44 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 @media (prefers-reduced-motion: reduce){
   .pile.drawn{animation:none;}
 }
+
+/* ---- "Your turn" affordance ------------------------------------------------------------------
+   Two matching cues shown together the moment it's the human player's own turn, so the signal
+   reaches whichever part of the screen they're actually looking at: a bold banner right above
+   the draw/discard piles (center of the table) and a pulsing gold border around their own hand
+   at the bottom (.pgrid-wrap.pos-0.my-turn). Both are toggled from the same myTurnNow check in
+   renderAll() so they always appear/disappear in lockstep. */
+#my-turn-banner{
+  display:none;
+  background:linear-gradient(160deg,var(--gold-bright),var(--gold));
+  color:#241a05;font-weight:800;font-size:14px;
+  padding:7px 18px;border-radius:20px;margin-bottom:10px;
+  box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 16px rgba(240,216,150,.5);
+  white-space:nowrap;animation:myTurnPop .4s var(--spring), myTurnGlow 1.6s ease-in-out infinite .4s;
+}
+#my-turn-banner.show{display:block;}
+@keyframes myTurnPop{
+  0%{opacity:0;transform:scale(.7) translateY(8px);}
+  60%{opacity:1;transform:scale(1.06) translateY(-2px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
+@keyframes myTurnGlow{
+  0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 16px rgba(240,216,150,.5);}
+  50%{box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 26px rgba(240,216,150,.85);}
+}
+.pgrid-wrap.pos-0.my-turn .pgrid-inner{
+  border-radius:14px;
+  box-shadow:0 0 0 3px var(--gold-bright);
+  animation:myTurnBorderPulse 1.6s ease-in-out infinite;
+}
+@keyframes myTurnBorderPulse{
+  0%,100%{box-shadow:0 0 0 3px var(--gold-bright), 0 0 10px 2px rgba(240,216,150,.35);}
+  50%{box-shadow:0 0 0 3px var(--gold-bright), 0 0 22px 6px rgba(240,216,150,.7);}
+}
+@media (prefers-reduced-motion: reduce){
+  #my-turn-banner{animation:none;}
+  .pgrid-wrap.pos-0.my-turn .pgrid-inner{animation:none;box-shadow:0 0 0 3px var(--gold-bright);}
+}
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
 .pile.closed.drawn.disabled{opacity:1;}
 @keyframes pileTurnPulse{0%,100%{box-shadow:0 0 0 0 rgba(240,216,150,.55);}50%{box-shadow:0 0 0 8px rgba(240,216,150,0);}}
@@ -667,8 +724,17 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 
 /* .action-bar-wrap is the element renderAll() actually shows/hides (display:flex/none) —
    .action-bar itself is just the button row now, so its own display stays a plain flex
-   and doesn't need touching from JS. */
-.action-bar-wrap{width:100%;max-width:520px;flex-direction:column;align-items:center;gap:0;margin-top:8px;z-index:200;flex-shrink:0;}
+   and doesn't need touching from JS.
+   Deliberately position:fixed (not in the normal #table-wrap flex flow) so toggling it on/off
+   can NEVER resize #felt or shift the player's own cards below it — see the long comment on
+   .pgrid-wrap.pos-0 above for the full story of the bug this fixes. Sits directly above the
+   fixed hand: bottom is pos-0's own fixed offset (12px) plus roughly the hand's rendered height,
+   pinned as a fixed pixel gap rather than computed from flow, which is exactly the point. */
+.action-bar-wrap{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(12px + var(--hand-h, 100px));
+  width:calc(100% - 24px);max-width:520px;flex-direction:column;align-items:center;gap:0;z-index:390;
+}
 @media(min-width:700px){ .action-bar-wrap{max-width:640px;} }
 @media(min-width:1000px){ .action-bar-wrap{max-width:760px;} }
 .action-bar{width:100%;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
@@ -771,14 +837,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    size (not just visually scaling it) and the pile size reclaims real vertical space. */
 @media(max-height:640px){
   .pgrid.small .pcell{width:34px;height:48px;font-size:15px;}
-  .pgrid.small .pcell .r{font-size:9px;}
+  .pgrid.small .pcell .r{font-size:12px;}
   /* .sym is sized as a % of .pcell (see the base rule) so it auto-scales with the card here —
      no font-size override needed now that it's an SVG rather than a text glyph. */
   .pile{width:46px;height:64px;}
 }
 @media(max-height:520px){
   .pgrid.small .pcell{width:27px;height:38px;font-size:12px;}
-  .pgrid.small .pcell .r{font-size:8px;}
+  .pgrid.small .pcell .r{font-size:12px;}
   .pile{width:40px;height:56px;}
 }
 /* Round-end legibility fix, continued (see the #felt.round-ended rules further up): these two
@@ -815,7 +881,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
         <rect x="18" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(8 28 17)"/>
       </svg> שישיות</div>
   <div class="tb-btns">
-    <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חוזר באותו חדר</span><span class="rematch-tb-short">משחק חוזר</span></button>
+    <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="לשעת חירום בלבד: מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">איפוס משחק</span><span class="rematch-tb-short">איפוס</span></button>
     <button class="tb-btn" onclick="openInstructions()">הוראות</button>
     <button class="tb-btn" onclick="goHub()">לובי</button>
   </div>
@@ -995,6 +1061,12 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
       <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-2"></div></div></div>
       <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-3"></div></div></div>
       <div class="center-pot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
+        <!-- "It's your turn" affordance: a bold gold banner right above the piles, shown only
+             while it's actually this human player's turn — see renderAll()'s myTurnNow block.
+             Complements (doesn't replace) the pulsing gold border on the player's own hand
+             (.pgrid-wrap.pos-0.my-turn below) so the cue is visible whether you're looking at
+             the center of the table or already down at your own cards. -->
+        <div id="my-turn-banner">🎯 תורך לשחק!</div>
         <div style="display:flex;gap:18px;align-items:flex-start;">
           <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
           <div class="pile open" id="pile-open" onclick="onTakeOpen()"></div>
@@ -1028,7 +1100,6 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <div class="reb-line" id="round-end-summary"></div>
     <div class="reb-actions">
       <button class="btn-primary reb-next" onclick="onClickNextRound()">סבב נוסף ◀</button>
-      <button class="btn-secondary rematch-btn reb-rematch" onclick="newGame()">🔄 משחק חוזר באותו חדר</button>
       <button class="tb-btn reb-full-table" onclick="showRoundEndModal()">📊 טבלת ניקוד מלאה</button>
     </div>
   </div>
@@ -2032,8 +2103,7 @@ function showRoundEndModal(){
       <div id="rp-carousel-content"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-      <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף</button>
-      <button class="btn-secondary rematch-btn" onclick="document.getElementById('results-panel').classList.remove('show'); newGame();">🔄 משחק חוזר באותו חדר</button>
+      <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף ◀</button>
       <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); goHub();">סיום וחזרה ללובי</button>
     </div>
   `;
@@ -2239,6 +2309,17 @@ function renderAll(){
     reb.style.display = 'none';
   }
 
+  // Keep --hand-h (used by .action-bar-wrap's "sit just above the fixed hand" bottom offset)
+  // in sync with the hand's ACTUAL rendered height, which varies by breakpoint and by whether
+  // the player has graduated to the shorter top-row-only hand. Measuring the real box beats a
+  // single hardcoded constant — a hardcoded value would either leave a gap or make the button
+  // bar overlap the cards at some screen size/graduation state.
+  const pw0 = document.getElementById('pw-0');
+  if(pw0){
+    const h = pw0.getBoundingClientRect().height;
+    if(h>0) document.documentElement.style.setProperty('--hand-h', (h+10)+'px');
+  }
+
   // action bar
   const barWrap = document.getElementById('action-bar-wrap');
   const finBtn = document.getElementById('btn-finish');
@@ -2246,6 +2327,8 @@ function renderAll(){
   const hintEl = document.getElementById('action-bar-hint');
   const myTurnNow = S.phase==='playing' && S.turn===myActual && S.isHuman[myActual];
   barWrap.style.display = myTurnNow ? 'flex' : 'none';
+  document.getElementById('my-turn-banner')?.classList.toggle('show', myTurnNow);
+  document.getElementById('pw-0')?.classList.toggle('my-turn', myTurnNow);
   if(myTurnNow){
     const finDisabled = !S.turnActed || hasFinishCaller() || !!pendingDraw;
     const endDisabled = !S.turnActed || !!pendingDraw;
