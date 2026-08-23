@@ -92,7 +92,16 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 .mode-card:hover::after,.game-card:hover::after,.tb-btn:hover::after,.opt-btn:hover::after,.btn-secondary:hover::after{transform:translateX(130%);}
 
-#app{position:relative;width:100%;height:100%;}
+/* #app is the positioned ancestor every .screen{position:absolute;inset:0} sizes itself against.
+   height:100% here only resolves against a percentage if body itself has an explicit height —
+   but body/html were switched to min-height:100% (see the background-photo comment above), which
+   left #app (and therefore every .screen, including the lobby) collapsed to 0px tall, with all
+   their content centered around that 0px box and rendered almost entirely off-screen above the
+   viewport. Giving #app its own explicit viewport-based height (100dvh, with 100vh as the
+   fallback for browsers that don't support dvh yet) fixes the collapse without having to put a
+   fixed height back on body/html, which the background-photo sizing above depends on staying
+   min-height. */
+#app{position:relative;width:100%;height:100vh;height:100dvh;}
 
 /* ---------- SPLASH / LOADING SCREEN ---------- */
 @keyframes splashEmblemGlow{0%,100%{filter:drop-shadow(0 0 8px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 20px rgba(240,216,150,.7));}}
