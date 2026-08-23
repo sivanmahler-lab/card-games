@@ -319,11 +319,7 @@ button{font-family:'Heebo',sans-serif;}
 button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:rgba(212,175,90,.16);}
 .pill.status{background:rgba(0,0,0,.55);color:var(--gold-bright);}
 button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;animation:codePulse 1.4s ease-in-out infinite;}
-/* Bottom padding reserves room for the now-fixed-to-viewport pos-0 hand (and, when it's shown,
-   the fixed action bar above it) so the felt's own content — the draw/discard piles especially —
-   never sits underneath them. calc() from the same --hand-h custom property renderAll() keeps in
-   sync with the hand's real height, so this stays correct across breakpoints and graduation. */
-#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(var(--hand-h, 100px) + 24px);min-height:0;overflow-y:auto;}
+#table-wrap{width:100%;max-width:520px;flex:1;position:relative;display:flex;flex-direction:column;align-items:center;padding-bottom:10px;min-height:0;overflow-y:auto;}
 @media(min-width:700px){ #table-wrap{max-width:640px;} }
 @media(min-width:1000px){ #table-wrap{max-width:760px;} }
 #felt{position:relative;width:100%;flex:1;min-height:440px;
@@ -344,16 +340,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #peek-overlay button:disabled,#peek-overlay button.needs-peek{opacity:.45;cursor:not-allowed;filter:grayscale(.3);}
 
 .pgrid-wrap{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
-/* pos-0 (the player's OWN hand) is deliberately position:fixed to the VIEWPORT, not position:
-   absolute relative to #felt like the other three seats. #felt lives inside #table-wrap, a
-   flex:1 child of the #screen-game flex column — every time a sibling flex item (.action-bar-wrap
-   or .round-end-bar) toggles display:none<->flex, #table-wrap's available height changes and
-   #felt resizes with it, which used to visibly shift/jump the player's own cards even though they
-   were "bottom:6px" of a moving target. Pinning pos-0 straight to the viewport's own bottom edge
-   makes it completely immune to any of that — it never moves no matter what shows or hides above
-   it. See .action-bar-wrap below, which is now also position:fixed and sits directly above this
-   for the same reason. */
-.pgrid-wrap.pos-0{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:400;}
+/* pos-0 (the player's OWN hand) is position:absolute WITHIN #felt (like every other seat) —
+   NOT position:fixed to the viewport. An earlier fix made it position:fixed to stop it jumping
+   when .action-bar-wrap showed/hid, but position:fixed anchors to the viewport rather than to
+   the green felt itself, so the hand could end up rendering below/outside the table's own visual
+   bounds instead of looking like part of it. The actual fix for the original jump bug is having
+   .action-bar-wrap ALSO be position:absolute inside #felt (see its own rule below) rather than a
+   flex sibling of #table-wrap — an absolutely-positioned element is taken out of flow entirely,
+   so toggling its display can never resize #felt or move anything else absolutely positioned
+   inside it, pos-0 included. */
+.pgrid-wrap.pos-0{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:20;}
 /* Side players (pos-1/pos-3): fixed-pixel corner pin, NOT percentage/translateY-centered.
    whist.html hit this exact bug earlier — a vertically-centered side badge+card stack still
    visually drifted toward the table center on narrow phones. Pinning to a true top corner
@@ -741,15 +737,16 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 /* .action-bar-wrap is the element renderAll() actually shows/hides (display:flex/none) —
    .action-bar itself is just the button row now, so its own display stays a plain flex
    and doesn't need touching from JS.
-   Deliberately position:fixed (not in the normal #table-wrap flex flow) so toggling it on/off
-   can NEVER resize #felt or shift the player's own cards below it — see the long comment on
-   .pgrid-wrap.pos-0 above for the full story of the bug this fixes. Sits directly above the
-   fixed hand: bottom is pos-0's own fixed offset (12px) plus roughly the hand's rendered height,
-   pinned as a fixed pixel gap rather than computed from flow, which is exactly the point. */
+   position:absolute WITHIN #felt (it now lives inside #felt in the HTML, not as a flex sibling
+   of #table-wrap) and pinned just above the player's own hand at a fixed pixel offset. Being
+   absolutely positioned takes it out of #felt's normal flow entirely, so toggling its display
+   between none/flex can never resize #felt or shift #pw-0 (or anything else) — this is the actual
+   fix for the "cards jump when the button bar appears" bug, in place of the earlier position:fixed-
+   to-viewport approach (which stopped the jump but could visually detach the hand from the green
+   felt itself). */
 .action-bar-wrap{
-  position:fixed;left:50%;transform:translateX(-50%);
-  bottom:calc(12px + var(--hand-h, 100px));
-  width:calc(100% - 24px);max-width:520px;flex-direction:column;align-items:center;gap:0;z-index:390;
+  position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
+  width:calc(100% - 24px);max-width:520px;flex-direction:column;align-items:center;gap:0;z-index:30;
 }
 @media(min-width:700px){ .action-bar-wrap{max-width:640px;} }
 @media(min-width:1000px){ .action-bar-wrap{max-width:760px;} }
@@ -1103,19 +1100,25 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
           <div class="magnify-card-grid" id="magnify-card-grid"></div>
         </div>
       </div>
+      <!-- Deliberately INSIDE #felt now (not a sibling of #table-wrap) and position:absolute
+           relative to it, pinned just above the player's own hand (#pw-0, also absolute within
+           #felt — see both elements' CSS). Being absolutely positioned inside #felt means
+           toggling this bar's display can never change #felt's own box size or push/shift
+           anything else in normal document flow — #felt's size is driven only by its min-height
+           and #table-wrap's flex sizing, neither of which this bar participates in at all. -->
+      <div class="action-bar-wrap" id="action-bar-wrap" style="display:none;">
+        <div class="action-bar" id="action-bar">
+          <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
+          <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
+        </div>
+        <!-- Persistent micro-copy under the two buttons above — mobile has no hover state, so the
+             title="" tooltips on the buttons themselves are invisible there. This explanatory line
+             is always on screen (not hover- or tap-dependent) and swaps text based on which button
+             is actually enabled right now, so a player who's never touched this game before still
+             knows what pressing either one does. See renderAll() for the swap logic. -->
+        <div class="action-bar-hint" id="action-bar-hint"></div>
+      </div>
     </div>
-  </div>
-  <div class="action-bar-wrap" id="action-bar-wrap" style="display:none;">
-    <div class="action-bar" id="action-bar">
-      <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
-      <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
-    </div>
-    <!-- Persistent micro-copy under the two buttons above — mobile has no hover state, so the
-         title="" tooltips on the buttons themselves are invisible there. This explanatory line
-         is always on screen (not hover- or tap-dependent) and swaps text based on which button
-         is actually enabled right now, so a player who's never touched this game before still
-         knows what pressing either one does. See renderAll() for the swap logic. -->
-    <div class="action-bar-hint" id="action-bar-hint"></div>
   </div>
   <!-- ROUND-END SUMMARY BAR — replaces the old auto-opening full-screen results modal. Cards are
        revealed directly on the felt (renderPlayerGrid's revealAll, unchanged) so players see the
@@ -1541,11 +1544,25 @@ function finishCallerName(){
 // A short-lived cloned "ghost" card that visually flies from one element's position to
 // another's, then fades out and removes itself. Purely cosmetic — the real state change
 // already happened (or is about to), this just makes the transition feel intentional.
+// Travel-Town-style card flight: the ghost doesn't just slide in a straight line from A to B —
+// it lifts along a gentle arc (a midpoint keyframe raised above the straight-line path) and
+// overshoots slightly past its landing size (scale 1.08) before settling, using the same
+// --spring bounce curve as every other "juicy" motion in this file. Built as a real CSS
+// @keyframes animation (not a single transition) specifically so the arc's midpoint can exist at
+// all — a plain start->end transition can only ever interpolate a straight line between two
+// transforms, it has no way to pass through a third point along the way.
+let __ghostFlightSeq = 0;
 function flyGhostCard(card, fromRect, toRect){
   if(!fromRect || !toRect) return;
+  // The keyframes below are generated per-call and applied via an inline style.animation, which
+  // a CSS prefers-reduced-motion media query can't override without !important fighting inline
+  // styles — simplest correct fix is just not building the arc animation at all when the user
+  // has asked for reduced motion, and instead placing the ghost at its final resting
+  // position/size immediately (still a real, if instant, visual cue that the swap happened).
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const info = SUITS_INFO[card.suit];
   const ghost = document.createElement('div');
-  ghost.className = 'pcell face ' + info.color;
+  ghost.className = 'pcell face ' + info.color + ' ghost-flight';
   ghost.style.position = 'fixed';
   ghost.style.left = fromRect.left+'px';
   ghost.style.top = fromRect.top+'px';
@@ -1560,12 +1577,40 @@ function flyGhostCard(card, fromRect, toRect){
   const dy = toRect.top - fromRect.top;
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
-  void ghost.offsetHeight; // force a reflow so the transition actually animates
-  ghost.style.transition = 'transform .45s cubic-bezier(.35,0,.25,1), opacity .45s ease';
+  // The arc's peak is a third of the way along, lifted above the straight-line midpoint by a
+  // fraction of the vertical travel distance (floored/ceilinged so a near-horizontal flight
+  // still gets a visible little hop, and a very tall flight doesn't arc unreasonably high).
+  const liftPx = Math.max(18, Math.min(60, Math.abs(dy) * 0.35 || 26));
   ghost.style.transformOrigin = 'top right';
-  ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
-  setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
-  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
+  let styleTag = null;
+  const cleanup = ()=>{
+    if(ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    if(styleTag && styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
+  };
+  if(reduceMotion){
+    // No arc, no bounce — jump straight to the final resting transform so the swap is still
+    // visually communicated, just without any motion to reduce.
+    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+    setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 200);
+    setTimeout(cleanup, 320);
+    return;
+  }
+  // Per-call @keyframes name: multiple ghosts can be in flight at the same time (a swap fires
+  // both an incoming and an outgoing flyGhostCard back to back), and CSS keyframes are global —
+  // reusing one shared name would let a second flight's keyframes silently redefine the first
+  // ghost's still-running animation out from under it.
+  const kfName = 'ghostFlight'+(__ghostFlightSeq++);
+  styleTag = document.createElement('style');
+  styleTag.textContent = `@keyframes ${kfName}{
+    0%{ transform:translate(0,0) scale(1,1); opacity:1; }
+    55%{ transform:translate(${dx*0.62}px, ${dy*0.5 - liftPx}px) scale(${1+(sw-1)*0.55},${1+(sh-1)*0.55}); opacity:1; }
+    80%{ transform:translate(${dx}px, ${dy}px) scale(${sw*1.08},${sh*1.08}); opacity:1; }
+    100%{ transform:translate(${dx}px, ${dy}px) scale(${sw},${sh}); opacity:1; }
+  }`;
+  document.head.appendChild(styleTag);
+  ghost.style.animation = `${kfName} .35s var(--spring) forwards`;
+  setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 350);
+  setTimeout(cleanup, 470);
 }
 // Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
 // draw, still face-down. Reuses the plain card-back look.
@@ -2354,17 +2399,6 @@ function renderAll(){
     summaryEl.textContent = `🏆 סבב ${S.roundNum||1} הסתיים — ${S.names[leader]} מוביל/ה עם ${totals[leader]} נק'`;
   } else {
     reb.style.display = 'none';
-  }
-
-  // Keep --hand-h (used by .action-bar-wrap's "sit just above the fixed hand" bottom offset)
-  // in sync with the hand's ACTUAL rendered height, which varies by breakpoint and by whether
-  // the player has graduated to the shorter top-row-only hand. Measuring the real box beats a
-  // single hardcoded constant — a hardcoded value would either leave a gap or make the button
-  // bar overlap the cards at some screen size/graduation state.
-  const pw0 = document.getElementById('pw-0');
-  if(pw0){
-    const h = pw0.getBoundingClientRect().height;
-    if(h>0) document.documentElement.style.setProperty('--hand-h', (h+10)+'px');
   }
 
   // action bar

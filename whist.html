@@ -462,6 +462,22 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .ds-rows{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:var(--cream);font-size:13px;}
 @keyframes dsPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.85);}10%{opacity:1;transform:translate(-50%,-50%) scale(1);}88%{opacity:1;}100%{opacity:0;}}
 
+/* GPU-compositing hardening against sub-pixel jitter: on some devices/browsers, a card (or its
+   containing fan/trick-area) that's being transformed can flicker or "shimmer" at its edges
+   between frames because the browser occasionally falls back to software rasterization for the
+   transformed layer instead of keeping it on its own composited GPU layer throughout. Forcing
+   backface-visibility:hidden and transform-style:preserve-3d (with the -webkit- prefixes older
+   Safari/iOS still needs) pins the element onto its own GPU layer for the CARD'S ENTIRE
+   lifetime, not just while a transform is actively changing — antialiased text smoothing is the
+   same idea applied to font rendering specifically. Applied to every element that either moves
+   itself or contains cards that do (.card and .played-card themselves, plus their two
+   containers: .fan for the hand and #trick-area for the played cards) so the whole chain from
+   container to card stays composited consistently. */
+.card, .played-card, .fan, #trick-area{
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  transform-style:preserve-3d;-webkit-transform-style:preserve-3d;
+  -webkit-font-smoothing:antialiased;
+}
 .fan{position:relative;height:clamp(92px,15vmin,112px);width:clamp(280px,78vmin,560px);}
 .fan.side{height:clamp(140px,28vmin,200px);width:clamp(52px,9vmin,58px);}
 .card{
@@ -497,21 +513,25 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   box-shadow:inset 0 0 0 3px rgba(240,216,150,.18), 0 3px 8px rgba(0,0,0,.4);
 }
 .card.back .center-sym{display:none;}
-/* Legal (playable) cards get a soft breathing glow — the "you can play this" affordance called
-   for in the visual-affordance pass — layered on top of the lift/shadow already used to mark
-   them as raised off the fan. Illegal cards dim further (opacity .55 -> .7 territory handled via
-   saturate+opacity together) so at a glance the legal ones are unambiguously the "lit" ones. */
+/* Legal (playable) cards get a STATIC gold border + shadow — the "you can play this" affordance —
+   layered on top of the lift already used to mark them as raised off the fan. Deliberately NO
+   keyframe animation of any kind here (no pulseGlow, no breathing, nothing infinite): an animated
+   glow running continuously on every legal card at once is exactly what caused the "trembling/
+   dancing cards" complaint — cards that are just sitting still, legal and waiting to be tapped,
+   should look completely calm. The gold border and shadow alone are enough to read as "lit" next
+   to the dimmed .illegal cards beside them; a fixed .transform (translateY(-8px), no scale/rotate
+   jitter) means the ONLY things that ever move are transitions explicitly triggered by an actual
+   state change (hover, select, play) — never an ambient idle animation. Illegal cards dim further
+   (opacity .55 -> .7 territory handled via saturate+opacity together) so at a glance the legal
+   ones are unambiguously the "lit" ones. */
 .card.legal{
   cursor:pointer;filter:brightness(1);opacity:1;transform:translateY(-8px);
+  border:1px solid var(--gold-bright);
   box-shadow:0 6px 14px rgba(0,0,0,.35),0 0 10px rgba(240,216,150,.25);
-  animation:pulseGlow 2.2s ease-in-out infinite;
 }
-.card.legal:hover{transform:translateY(-16px) scale(1.05);box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:30;animation-play-state:paused;}
+.card.legal:hover{transform:translateY(-16px) scale(1.05);box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:30;}
 .card.illegal{filter:saturate(.65) brightness(.92);opacity:.7;}
-.card.selected{transform:translateY(-20px) scale(1.08);box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);animation:none;}
-@media (prefers-reduced-motion: reduce){
-  .card.legal{animation:none;}
-}
+.card.selected{transform:translateY(-20px) scale(1.08);box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);}
 
 .card-confirm-hint{
   position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
@@ -527,9 +547,17 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
      so a played card (especially the top player's, at the box's own 30% mark) visually landed
      underneath the top card stack instead of in a clean central zone. This box is sized to sit
      well inside all four seats' badges/fans at every viewport width covered by the layout's
-     media queries, with room to spare. */
+     media queries, with room to spare.
+     Fixed PIXEL width/height (not the earlier 52%/40% of #felt) so the box's own dimensions never
+     change as #felt itself resizes across breakpoints/orientation changes — a percentage size
+     recalculates (and can reflow the box, and therefore every already-placed card positioned as
+     a percentage of it) any time the felt's own size changes for any reason, which is exactly the
+     kind of layout-driven instability the "dancing cards" fix is trying to eliminate everywhere.
+     240x180px comfortably fits the diamond of up to four 58x82px .played-card entries with the
+     same margin from the seats' badges/fans that the old percentage box had at typical viewport
+     sizes. */
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:52%;height:40%;z-index:25;
+  width:240px;height:180px;z-index:25;
   pointer-events:none;
 }
 /* Cards land on the trick area with a small bouncy pop instead of just appearing — a brief lift
@@ -1879,6 +1907,17 @@ function renderTrickArea(){
     wrap.className='played-card';
     wrap.style.left = pos.left; wrap.style.top=pos.top; wrap.style.transform='translate(-50%,-50%)';
     wrap.innerHTML = cardHTML(pc.card,'');
+    // Belt-and-suspenders on top of the CSS-level fixes above (the no-"transition:all" base rule
+    // and this function's own dedupe-by-signature guard): the instant the one-shot cardLand
+    // animation actually finishes playing, force this specific element fully static via inline
+    // !important — nothing (a future stylesheet change, a class toggle elsewhere, anything) can
+    // ever put motion back on an already-landed card without a NEW cardLand animation being
+    // explicitly started fresh on a freshly-created element, which is the only way this function
+    // ever adds a card to the table in the first place.
+    wrap.addEventListener('animationend', ()=>{
+      wrap.style.setProperty('transition', 'none', 'important');
+      wrap.style.setProperty('animation', 'none', 'important');
+    }, {once:true});
     area.appendChild(wrap);
   });
 }
