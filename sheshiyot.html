@@ -2108,14 +2108,19 @@ async function createRoom(){
   const ref = fbDB.ref('sheshiyot_rooms/'+roomCode);
   await ref.set({
     meta:{status:'waiting', host:myName, created:true, createdAt:Date.now(), lastActive:Date.now()},
-    players:{ 0:{name:myName, joined:true} }
+    players:{ 0:{name:myName, joined:true, present:true} }
   });
-  // Presence & auto-cleanup: if the host disconnects before the game starts (closes the tab,
-  // loses connection, etc.) the whole room is removed so it never lingers as a ghost room other
-  // players could stumble into. Left in place after the game starts too — a host dropping
-  // mid-game still means the room should go away.
-  ref.onDisconnect().remove();
-  ref.child('players/0').onDisconnect().remove();
+  // Presence, NOT instant deletion: a mobile socket drops routinely and briefly for reasons that
+  // have nothing to do with the host actually leaving — most commonly, backgrounding the tab to
+  // hand off to WhatsApp's native share sheet (see shareRoomWhatsapp()). An
+  // onDisconnect().remove() on the whole room used to fire the moment that happened, wiping the
+  // room out from under everyone still in it ("חדר לא נמצא" for every other player) even though
+  // the host comes right back a few seconds later. Instead: mark this seat's presence flag false
+  // on disconnect (cheap, instant, harmless) and let the 30-minute ROOM_STALE_MS ghost-room sweep
+  // (see isRoomStale()) be the only thing that actually deletes an abandoned room — a real
+  // 30+ minute absence is treated as gone, a 5-second WhatsApp hop is not.
+  ref.child('players/0/present').onDisconnect().set(false);
+  ref.child('meta/lastActive').onDisconnect().set(Date.now());
   roomRef = ref;
   showWaitingScreen(myName);
 
@@ -2140,10 +2145,13 @@ async function joinRoom(){
   let seat = -1;
   for(let s=1;s<4;s++){ if(!players[s]){ seat=s; break; } }
   if(seat===-1){ showToast('החדר מלא'); return; }
-  await ref.child('players/'+seat).set({name:myName, joined:true});
+  await ref.child('players/'+seat).set({name:myName, joined:true, present:true});
   await ref.child('meta/lastActive').set(Date.now());
-  // This player's own seat is cleaned up if they disconnect (closes tab, loses connection).
-  ref.child('players/'+seat).onDisconnect().remove();
+  // Presence flag only, not removal — a client's socket dropping briefly (e.g. backgrounding
+  // the tab to share the room link via WhatsApp, or any routine mobile network hiccup) should
+  // not delete this player's seat and knock them out of the game. See the matching comment on
+  // the host's onDisconnect in createRoom() above for the full rationale.
+  ref.child('players/'+seat+'/present').onDisconnect().set(false);
   roomCode = code;
   isOnline = true; isHost = false; myOnlineSeat = seat;
   roomRef = ref;
@@ -2162,40 +2170,47 @@ function copyRoomCode(){
 // bottom of this file, applyRoomDeepLink()) — a friend who taps it lands straight on the
 // online-join screen with the code already filled in and the join row already open, instead of
 // having to copy the code out of the message text and paste it in by hand.
+// Copies a link/message to the clipboard and shows a toast confirming it — the fallback path
+// for any browser/context where navigator.share isn't available (desktop Safari without a share
+// target, older browsers, etc). Never touches window.location or a whatsapp:// scheme: both of
+// those navigate the current tab away, which is exactly what caused the iOS Safari white-screen
+// (the tab ends up on about:blank when there's no app to catch the deep link, or the WhatsApp
+// app itself doesn't return focus to the right tab).
+function copyToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).catch(()=>{});
+  } else {
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch(e){ /* nothing more we can do */ }
+  }
+}
+
+// Shares the invite link. Deliberately Web-Share-API-only with a copy-to-clipboard fallback —
+// NOT a whatsapp://send deep link or a raw window.open(), both of which were found to crash
+// iOS Safari to a blank about:blank tab when the OS has no handler ready for the scheme, or when
+// WhatsApp itself doesn't hand focus back to the calling tab afterward. navigator.share() hands
+// off to the OS's own native share sheet in the same tab/context — nothing for Safari to strand.
 async function shareRoomWhatsapp(){
   if(!roomCode) return;
   const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomCode);
-  const msg = `בוא/י לשחק איתי שישיות! לחצו להצטרפות ישירה לשולחן: ${link}`;
-  // Prefer the native Web Share sheet on mobile — it hands off to the OS's own share UI (which
-  // can send straight into WhatsApp among other apps) rather than forcing WhatsApp specifically,
-  // and critically it's a same-tab handoff rather than window.open()'s new-tab/new-webview jump,
-  // which is exactly the kind of navigation mobile browsers sometimes reclaim memory from and
-  // reload from scratch when the player switches back — see the visibilitychange handler further
-  // down for the matching fix on the return trip either way.
   if(navigator.share){
     try{
-      await navigator.share({ text: msg });
-      return;
+      await navigator.share({ title:'בוא נשחק!', text:'הצטרף למשחק שישיות שלי:', url:link });
     } catch(e){
-      // AbortError just means the player canceled the share sheet — not a failure worth
-      // falling back from. Any other error (unsupported data, etc) falls through below.
-      if(e && e.name==='AbortError') return;
+      if(e && e.name!=='AbortError'){
+        copyToClipboard(link);
+        showToast('הקישור הועתק! הדבק אותו בוואטסאפ');
+      }
     }
+    return;
   }
-  // Fallback chain: try the native WhatsApp app deep link first (works on a phone that has
-  // WhatsApp installed, without going through a browser tab at all), then the web fallback.
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if(isMobile){
-    const appLink = 'whatsapp://send?text=' + encodeURIComponent(msg);
-    const webLink = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(msg);
-    // If the app deep link doesn't have a handler, most mobile browsers simply do nothing
-    // (no error thrown) rather than navigating away — so opening the web fallback in parallel,
-    // in a new tab, is the safe way to guarantee the player always lands somewhere usable.
-    window.location.href = appLink;
-    setTimeout(()=>{ window.open(webLink, '_blank'); }, 700);
-  } else {
-    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-  }
+  copyToClipboard(link);
+  showToast('הקישור הועתק! הדבק אותו בוואטסאפ');
 }
 function showWaitingScreen(myName){
   showScreen('screen-waiting');
