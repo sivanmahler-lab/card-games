@@ -1846,6 +1846,19 @@ function renderBackFan(fan, disp, n){
 }
 function renderTrickArea(){
   const area = document.getElementById('trick-area');
+  // renderTable() (and therefore renderTrickArea()) fires on essentially every render pass —
+  // a Firebase gameState 'value' event, the visibility-resume repaint, the heartbeat watchdog,
+  // even ticks where S.currentTrick itself hasn't changed at all. The old code unconditionally
+  // did area.innerHTML='' and rebuilt every .played-card from scratch on every single call,
+  // which restarted the one-shot cardLand entrance animation on cards that were already sitting
+  // still on the table — the "dancing/trembling cards" bug. A played card should land ONCE and
+  // then stay perfectly static until the trick actually changes (a card added or the trick
+  // cleared/resolved). Guard on a cheap signature of "who played what" so a same-content render
+  // is a total no-op for this area — the DOM nodes (and their finished animation state) are left
+  // completely untouched.
+  const sig = S.currentTrick.map(pc=>pc.player+':'+pc.card.suit+pc.card.rank).join('|');
+  if(area.dataset.trickSig === sig) return;
+  area.dataset.trickSig = sig;
   area.innerHTML='';
   // Percentages are relative to #trick-area's own box (now a small, safely-centered 52%x40%
   // slice of the felt — see its CSS comment), not the whole felt, so these four positions form
