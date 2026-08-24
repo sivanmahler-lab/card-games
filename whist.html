@@ -397,16 +397,23 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .pill.online{background:rgba(63,154,139,.25);color:var(--teal);border-color:rgba(63,154,139,.5);}
 
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
-/* .seat.bottom no longer needs an elevated z-index of its own. A child's z-index can never
-   escape its own ancestor's stacking level, so #trick-area/.played-card (pinned to z-index:50
-   !important below, specifically so a played card can never render BEHIND any player's name
-   badge — the reported mobile bug) would still lose to .seat.bottom's name badge if this stayed
-   above 50. Spatially the bottom seat (bottom:6px) and the trick area (vertically centered) don't
-   actually overlap in normal layout, so dropping this back to the same z-index as every other
-   .seat costs nothing for the player's own hand while letting the trick area correctly win
-   against every name badge (bottom seat's own, and the two .side-badge ones) wherever they do
-   overlap on a short/narrow viewport. */
+/* .seat.bottom's own wrapper stays at the same z-index:20 as every other .seat — its NAME BADGE
+   doesn't need to out-rank the trick area (see the trick-area z-index comment below for why that
+   stays 50 !important against every badge). The player's own card FAN is a different story: the
+   fan itself is deliberately pulled above both the trick area and every badge (rule just below),
+   so on a short/narrow mobile viewport where the bottom seat's fan can visually overlap the
+   center trick area, the player's own hand always wins and is never partially hidden underneath
+   an already-played card. */
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:20;}
+/* The player's own hand must be the single highest-stacked element on the whole table — higher
+   even than #trick-area/.played-card (z-index:50 !important) — so it can never render partially
+   underneath a card already lying in the center, on any viewport where the two visually overlap.
+   position:relative is required here: z-index has no effect at all on a statically-positioned
+   element, and .fan's own base rule (further below) doesn't set a position, so without this the
+   !important z-index would be silently ignored. !important for the same belt-and-suspenders
+   reason as #trick-area's own: nothing else in this file should be able to out-rank the player's
+   hand without deliberately editing this exact rule. */
+.seat.bottom .fan{position:relative;z-index:70 !important;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
    side edge (left:2px / right:2px) and near the very top (top:4px) — directly above their own
