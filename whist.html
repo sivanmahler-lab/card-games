@@ -397,7 +397,16 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .pill.online{background:rgba(63,154,139,.25);color:var(--teal);border-color:rgba(63,154,139,.5);}
 
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:20;}
-.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:60;}
+/* .seat.bottom no longer needs an elevated z-index of its own. A child's z-index can never
+   escape its own ancestor's stacking level, so #trick-area/.played-card (pinned to z-index:50
+   !important below, specifically so a played card can never render BEHIND any player's name
+   badge — the reported mobile bug) would still lose to .seat.bottom's name badge if this stayed
+   above 50. Spatially the bottom seat (bottom:6px) and the trick area (vertically centered) don't
+   actually overlap in normal layout, so dropping this back to the same z-index as every other
+   .seat costs nothing for the player's own hand while letting the trick area correctly win
+   against every name badge (bottom seat's own, and the two .side-badge ones) wherever they do
+   overlap on a short/narrow viewport. */
+.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:20;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
    side edge (left:2px / right:2px) and near the very top (top:4px) — directly above their own
@@ -557,7 +566,14 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
      same margin from the seats' badges/fans that the old percentage box had at typical viewport
      sizes. */
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:240px;height:180px;z-index:25;
+  width:240px;height:180px;
+  /* !important: a played card must ALWAYS render above every player name badge (.name-badge/
+     .side-badge) and seat frame (.seat.pos-*) — see .seat.bottom's own z-index note above for why
+     that ancestor was brought back down to a modest value instead of fighting this from below.
+     !important here is the explicit belt: even if some future rule adds a z-index to a badge or
+     seat wrapper without noticing this comment, the trick area still wins outright rather than
+     depending on every other z-index in the file staying under 50 by convention. */
+  z-index:50 !important;
   pointer-events:none;
 }
 /* Cards land on the trick area with a small bouncy pop instead of just appearing — a brief lift
@@ -572,7 +588,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    the JS) both fix from two different angles. animateTrickToWinner() below still sets its OWN
    temporary inline transition for the deliberate "cards fly to the winner" moment when a trick
    resolves — that's an intentional, explicit one-shot motion, not this bug. */
-.played-card{position:absolute;width:58px;height:82px;animation:cardLand .38s var(--spring) both;transition:none;}
+.played-card{position:absolute;width:58px;height:82px;animation:cardLand .38s var(--spring) both;transition:none;z-index:50 !important;}
 @keyframes cardLand{
   0%{opacity:0;transform:scale(1.08) translateY(-14px);}
   70%{opacity:1;transform:scale(1.03) translateY(-3px);}
@@ -1915,8 +1931,18 @@ function renderTrickArea(){
     // explicitly started fresh on a freshly-created element, which is the only way this function
     // ever adds a card to the table in the first place.
     wrap.addEventListener('animationend', ()=>{
+      // All four locked down with !important the instant the one-shot landing animation
+      // finishes: transform pinned to its own final resting value (not "none" — the card still
+      // needs its translate(-50%,-50%) centering to stay exactly where it landed, just frozen
+      // rather than left animatable), transition/animation fully killed so nothing can ever
+      // re-trigger motion on this element again, and will-change reset to auto so the browser
+      // stops reserving a composited layer for a transform that will now never change — keeping
+      // will-change:transform on an element that's done animating is itself a common source of
+      // subtle rendering/repaint quirks on some GPUs.
+      wrap.style.setProperty('transform', 'translate(-50%,-50%)', 'important');
       wrap.style.setProperty('transition', 'none', 'important');
       wrap.style.setProperty('animation', 'none', 'important');
+      wrap.style.setProperty('will-change', 'auto', 'important');
     }, {once:true});
     area.appendChild(wrap);
   });
