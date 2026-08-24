@@ -405,15 +405,26 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    center trick area, the player's own hand always wins and is never partially hidden underneath
    an already-played card. */
 .seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:20;}
+/* Explicit, maximally-defensive lockdown on top of the rules above: the bottom seat's own
+   wrapper AND its fan AND every card inside it must out-rank the side/top opponent seats so
+   the player's hand can never render partially hidden underneath a side fan on any viewport
+   where the two visually overlap (the exact bug narrow-mobile screenshots showed). */
+.seat.bottom{position:relative !important;z-index:100 !important;}
+.seat.bottom .fan, .seat.bottom .fan .card{z-index:100 !important;}
+/* Left/right opponents in this file's markup are .side-badge (name badge) + a separate sibling
+   .fan.side.left-fan/.right-fan element — there is no literal .seat.left/.seat.right node — and
+   the top opponent is .seat.top. All three are pulled down to the same low tier so none of them
+   can ever out-rank the bottom seat above. */
+.seat.top, .side-badge, .fan.side{z-index:10 !important;}
 /* The player's own hand must be the single highest-stacked element on the whole table — higher
    even than #trick-area/.played-card (z-index:50 !important) — so it can never render partially
    underneath a card already lying in the center, on any viewport where the two visually overlap.
    position:relative is required here: z-index has no effect at all on a statically-positioned
    element, and .fan's own base rule (further below) doesn't set a position, so without this the
-   !important z-index would be silently ignored. !important for the same belt-and-suspenders
-   reason as #trick-area's own: nothing else in this file should be able to out-rank the player's
-   hand without deliberately editing this exact rule. */
-.seat.bottom .fan{position:relative;z-index:70 !important;}
+   !important z-index would be silently ignored. The actual z-index value (100) is set by the
+   .seat.bottom .fan rule further above (right after .seat.bottom itself); this rule only still
+   needs to exist for the position:relative part. */
+.seat.bottom .fan{position:relative;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
    side edge (left:2px / right:2px) and near the very top (top:4px) — directly above their own
@@ -424,14 +435,19 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    narrow phones where the badge itself is also shrunk (see below), so the two never touch.
    max-width additionally hard-caps the badge at a small, fixed corner footprint so its content
    (name + bid/tricks pills) can never grow wide enough to reach the center trick area either. */
-.side-badge{position:absolute;z-index:35;max-width:104px;}
+/* max-width raised from a flat 104/84/72px cap to a comfortable min-width instead: a hard low
+   max-width squeezed the name span down (via its own overflow:hidden+ellipsis) the moment the
+   badge-stats pills (bid/tricks numbers) had real content next to it, truncating names like
+   "צ'רצ'יל" to "צ." on narrow phones. min-width lets the badge grow to fit its actual content
+   (name + pills) instead of clipping the name to force a fixed width. */
+.side-badge{position:absolute;z-index:35;min-width:64px;max-width:130px;}
 .side-badge.left-badge{left:2px;top:4px;}
 .side-badge.right-badge{right:2px;top:4px;}
 .fan.side{position:absolute;z-index:30;}
 .fan.left-fan{left:6px;top:66px;}
 .fan.right-fan{right:6px;top:66px;}
 @media(max-width:430px){
-  .side-badge{max-width:84px;}
+  .side-badge{max-width:112px;}
   /* .name-badge shrinks a notch on narrow phones (see below), so the fan can start slightly
      closer underneath it there instead of leaving oversized empty space. */
   .fan.left-fan{top:56px;}
@@ -442,7 +458,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   .side-badge .badge-stats{flex-direction:row;gap:3px;}
 }
 @media(max-width:360px){
-  .side-badge{max-width:72px;}
+  .side-badge{max-width:100px;}
   .fan.left-fan{top:52px;}
   .fan.right-fan{top:52px;}
 }
@@ -450,9 +466,13 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .name-badge{
   background:rgba(0,0,0,.55);border:1px solid rgba(212,175,90,.4);border-radius:10px;
   padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--cream);display:flex;align-items:center;gap:6px;white-space:nowrap;
-  max-width:100%;box-sizing:border-box;overflow:hidden;
+  max-width:100%;box-sizing:border-box;overflow:visible;
 }
-.side-badge .name-badge .nm{overflow:hidden;text-overflow:ellipsis;}
+/* The name itself is never allowed to ellipsis-truncate on the side badges — the badge (and its
+   .side-badge ancestor above) grows to fit instead. flex-shrink:0 stops the name span from being
+   squeezed by its sibling .badge-stats pills when the row's natural width exceeds a narrow
+   viewport; nowrap keeps a multi-word name (e.g. "צ'רצ'יל") on one line rather than wrapping. */
+.side-badge .name-badge .nm{overflow:visible;text-overflow:clip;white-space:nowrap;flex-shrink:0;}
 .name-badge .turn-dot{width:7px;height:7px;border-radius:50%;background:transparent;}
 .name-badge.active .turn-dot{background:#5be27a;box-shadow:0 0 8px #5be27a;}
 .name-badge.trick-winner{box-shadow:0 0 16px 4px var(--gold-bright);border-color:var(--gold-bright);animation:codePulse 1s ease-in-out infinite;}
@@ -511,6 +531,10 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    through that overshoot — the thrown card's own flight to the trick area is a completely separate
    element/animation (.played-card's cardLand keyframe) and is untouched by this rule. */
 .seat.bottom .fan .card{transition:none !important;}
+/* Belt-and-suspenders on top of the rule above: blocks transition/animation on the fan container
+   itself and every descendant (not just .card), so no future element added inside the own-hand
+   fan (a badge, an overlay, a hit-target) can ever reintroduce a jump/animate-in effect there. */
+.seat.bottom .fan, .seat.bottom .fan *{transition:none !important;animation:none !important;}
 .card{
   /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
      purpose — this stays a per-viewer visual size that responds to each screen, but a wide
