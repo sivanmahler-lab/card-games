@@ -745,8 +745,17 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    still completely clear from above. All three pieces are position:absolute directly in #felt
    (not flex siblings of #table-wrap), so toggling any of them can never resize #felt or shift
    #pw-0 or each other. */
+/* left is computed relative to the hand's own actual center-offset (calc(50% - halfHandWidth -
+   gap - buttonWidth)), not a flat viewport-edge inset — a flat 8px/4px inset left a wide, dead
+   gap between the button column and #pw-0 on any viewport wider than the very narrowest phone,
+   since the hand itself is only ~150-170px wide and sits centered, while the buttons hugged the
+   screen edge instead of the hand. #pw-0's own actual width per breakpoint: 3 cells + 2×4px
+   gap = 3×50+8=158px (default, >480px), 3×53+8=167px (<=480px), 3×48+8=152px (<=360px) — see
+   #pw-0 .pcell's own width rules. Each tier's `left` below is calc(50% - halfHandWidth - 6px gap
+   - buttonWidth), i.e. right at the hand's left edge with a tight, deliberate 6px breathing
+   room, instead of trailing off toward the felt's edge. */
 #action-side-left{
-  position:absolute;left:8px;bottom:10px;z-index:30;
+  position:absolute;left:calc(50% - 79px - 6px - 60px);bottom:10px;z-index:30;
   display:flex;flex-direction:column;gap:8px;
 }
 #btn-endturn, #btn-finish{
@@ -766,8 +775,13 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #btn-finish{background:linear-gradient(160deg,#e0554a,#a8342b);color:#fff;border:none;font-weight:800;}
 #btn-finish:not(:disabled):hover{box-shadow:0 0 14px rgba(224,85,74,.45);}
 #btn-endturn:disabled, #btn-finish:disabled{opacity:.4;cursor:default;}
-@media(min-width:480px){ #action-side-left{left:calc(50% - 190px);} }
-@media(min-width:700px){ #action-side-left{left:calc(50% - 250px);} }
+/* At >=480px viewports #pw-0 .pcell is back to the base 50px (the 53px bump only applies
+   <=480px — see its own rule), so half-hand-width here is 79px, same as the un-media-queried
+   base rule above; this query only exists so #table-wrap's own max-width growth at wider
+   breakpoints (see #table-wrap's CSS) doesn't leave the buttons under-adjusted — the formula
+   itself doesn't actually change shape at this tier, just confirms it. */
+@media(min-width:480px){ #action-side-left{left:calc(50% - 79px - 6px - 60px);} }
+@media(min-width:700px){ #action-side-left{left:calc(50% - 79px - 8px - 60px);} }
 /* Right-side hint block — the visual counterweight to the button column on the left, at the
    exact same height band as the hand/buttons (bottom:10px), never above anything.
    box-sizing:border-box so `width` includes the border/padding — otherwise the visual footprint
@@ -778,7 +792,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    inset) — a width any wider than that would overlap the hand exactly like the old
    above-the-hand bar did, just sideways instead of vertically. */
 .action-bar-hint{
-  position:absolute;right:8px;bottom:10px;z-index:28;
+  position:absolute;right:calc(50% - 79px - 6px - 88px);bottom:10px;z-index:28;
   box-sizing:border-box;
   width:88px;min-height:60px;
   display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -788,15 +802,18 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   box-shadow:0 4px 14px rgba(0,0,0,.35);
 }
 .action-bar-hint.show{display:flex;}
-@media(min-width:480px){ .action-bar-hint{right:calc(50% - 190px);width:112px;font-size:10.5px;} }
-@media(min-width:700px){ .action-bar-hint{right:calc(50% - 250px);width:130px;} }
+@media(min-width:480px){ .action-bar-hint{right:calc(50% - 79px - 6px - 112px);width:112px;font-size:10.5px;} }
+@media(min-width:700px){ .action-bar-hint{right:calc(50% - 79px - 8px - 130px);width:130px;} }
 /* Matches the #pw-0 .pcell shrink breakpoint (max-width:360px, see its own CSS) exactly — the
    hand itself gets visibly narrower at this width, so the hint/buttons need to shrink and pull
    in at the SAME boundary, not one pixel later, or there's a gap width where the hand is still
    full-size-adjacent-elements-already-shrunk (or the reverse) and the numbers stop lining up. */
 @media(max-width:360px){
-  #action-side-left{left:4px;gap:6px;}
-  .action-bar-hint{right:4px;width:72px;font-size:8.5px;padding:5px 6px;}
+  /* Hand is 152px wide here (3×48px cell + 2×4px gap — see #pw-0 .pcell's own <=360px rule),
+     half-width 76px. left/right below are the same calc(50% - halfHand - gap - elementWidth)
+     formula as every other tier, just with this tier's own numbers. */
+  #action-side-left{left:calc(50% - 76px - 4px - 52px);gap:6px;}
+  .action-bar-hint{right:calc(50% - 76px - 4px - 72px);width:72px;font-size:8.5px;padding:5px 6px;}
   #btn-endturn, #btn-finish{width:52px;height:52px;font-size:9px;}
 }
 
@@ -1835,7 +1852,15 @@ let botRevealedDraw = null; // {source:'closed'|'open', card}
 // Phase 2 (botResolveTurn) applies the actual swap/discard decision after the pause and
 // animates the card flying to its real destination.
 function botTakeTurn(p){
-  if(S===null || S.turn!==p) return;
+  // S.phase!=='playing' is the missing guard that let an in-flight bot turn keep running after
+  // the round already ended: maybeBotTurn() only stops SCHEDULING new bot turns once phase
+  // leaves 'playing' (see its own S.phase!=='playing' check), but a setTimeout already queued
+  // before the round ended isn't cancelled by that — it still fires here regardless. Without
+  // this check, that stray fire would go on to mutate S.hands[p] and call renderAll() ~0.7-1.6s
+  // after the round-end reveal, overwriting the very card values the results screen had just
+  // shown with whatever the (now-irrelevant) bot decision produced — the "card values disappear/
+  // change after about a second" symptom.
+  if(S===null || S.turn!==p || S.phase!=='playing') return;
   try{
     const activeRow = S.graduated[p] ? [0,1,2] : [3,4,5];
     const hand = S.hands[p];
@@ -1889,12 +1914,16 @@ function botTakeTurn(p){
   }
 }
 function botResolveTurn(p, ctx){
-  if(S===null || S.turn!==p){ botRevealedDraw = null; return; }
+  // Same S.phase!=='playing' guard as botTakeTurn() above, for the SAME reason: this is the
+  // chained setTimeout(...,1600) fired from phase 1 (see botTakeTurn), and if the round ended
+  // during that 1.6s pause, this call must be a no-op too — otherwise it still applies the
+  // swap/discard mutation and renderAll()'s below, overwriting the round-end reveal.
+  if(S===null || S.turn!==p || S.phase!=='playing'){ botRevealedDraw = null; return; }
   // Anim plan is filled in during the try block and consumed just after renderAll(), so the
   // ghost flies over the already-updated table (same pattern as the human player's own moves).
   let animPlan = null;
   try{
-    const { drawn, worst: w, rankCounts } = ctx;
+    const { drawn, worst: w0, rankCounts } = ctx;
     const hand = S.hands[p];
     const top = botRevealedDraw ? botRevealedDraw.source : null;
     const useOpen = top==='open';
@@ -1907,7 +1936,32 @@ function botResolveTurn(p, ctx){
     const gridEl = document.getElementById('pg-'+disp);
     const sourceRect = (useOpen ? openEl : closedEl) ? (useOpen ? openEl : closedEl).getBoundingClientRect() : null;
     const matched = rankCounts[drawn.rank]>=1;
-    const improves = w.idx>=0 && (matched || cardValue(drawn.rank) < w.val);
+
+    // A real, deliberate "should I graduate?" decision — mirroring the human player's own free
+    // choice to voluntarily swap a drawn card into an unseen top-row slot (see the instructions:
+    // "ברגע שמחליפים קלף בשורה העליונה (שלא ראיתם מעולם), עוברים לשחק איתה"). botTakeTurn()'s own
+    // worstSlot() never even looks at slots 0-2 pre-graduation (activeRow is [3,4,5] there), so
+    // without this the bot could NEVER graduate at all — worse than the bug being fixed, since
+    // graduating is how a bot ever gets down to a strong 3-card hand (see the finish-heuristic's
+    // own `total<=4 && S.graduated[p]` gate further below, which implicitly assumes graduating is
+    // achievable). The bot only considers this when the drawn card is genuinely excellent enough
+    // to justify the risk of blindly locking in an unseen slot forever: an Ace (value 1, the best
+    // possible single card) or a card that completes a matched set (rankCounts[drawn.rank]>=1,
+    // value 0) — never a merely "better than my worst bottom card" swap, which stays a normal
+    // bottom-row replacement via w0 below. Slot choice among the three top slots is random (the
+    // bot has never seen any of them, exactly like the human hasn't) rather than picking a
+    // specific index, since there is no information to prefer one over another.
+    let w = w0;
+    let graduating = false;
+    if(!S.graduated[p] && (cardValue(drawn.rank)<=1 || matched)){
+      const topIdx = [0,1,2][Math.floor(Math.random()*3)];
+      w = {idx: topIdx, val: cardValue(hand[topIdx].rank)};
+      graduating = true;
+    }
+    // Once a top-row slot has been deliberately chosen above, the swap always happens (that
+    // choice already established the drawn card is worth locking in for good) — otherwise fall
+    // back to the ordinary "does this beat my worst bottom-row card" comparison against w0.
+    const improves = graduating || (w.idx>=0 && (matched || cardValue(drawn.rank) < w.val));
     const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
     const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
     if(improves){
@@ -1929,14 +1983,17 @@ function botResolveTurn(p, ctx){
     }
     S.turnActed = true;
 
-    // graduation heuristic
-    if(!S.graduated[p]){
-      const bottomVals = [3,4,5].map(i=>{
-        const c = hand[i];
-        return rankCounts[c.rank]>=2 ? 0 : cardValue(c.rank);
-      });
-      const avg = bottomVals.reduce((a,b)=>a+b,0)/3;
-      if(avg<=4 || S.discardPile.length>10){ S.graduated[p]=true; }
+    // Graduation is a SWAP-LOCATION rule, not a hand-quality heuristic: per the game's own rule
+    // (see useDrawnOnSlot()'s identical isTopSlot && !S.graduated[myActual] gate for the human
+    // player), a player only ever locks into the top row by actually placing a drawn card into
+    // one of ITS three slots (index<=2) — never by discarding a drawn card straight to the pile
+    // without swapping, and never by swapping into a BOTTOM-row slot instead. The bot's ONLY path
+    // to a top-row index here is the deliberate "graduating" choice made above (an excellent
+    // drawn card + not yet graduated), so this condition is really just confirming that choice
+    // actually went through — a pure discard or an ordinary bottom-row swap can never
+    // accidentally satisfy w.idx<=2.
+    if(improves && w.idx<=2 && !S.graduated[p]){
+      S.graduated[p] = true;
     }
 
     // finish heuristic
