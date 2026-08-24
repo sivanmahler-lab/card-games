@@ -1778,9 +1778,38 @@ function renderOwnFan(fan, actual){
   if(n===0){
     const hint = document.getElementById('card-confirm-hint');
     if(hint) hint.classList.remove('show');
+    fan.dataset.ownFanSig = '';
     return;
   }
   const legal = getLegalCardsForHuman();
+
+  // Strict memoization guard: renderTable() (and therefore this function) fires on essentially
+  // every state change in the whole game — a bot playing a card, a trick resolving, a Firebase
+  // sync tick, the visibility-resume repaint — the overwhelming majority of which have NOTHING
+  // to do with the human player's own hand. Without this guard, every one of those unrelated
+  // renders still re-touched every card element's className/transform/zIndex/boxShadow in this
+  // fan, which is itself a no-visible-change write in the common case, but it's still real DOM
+  // churn on every single one of those calls — and any tiny floating-point rounding difference
+  // between two "identical" computations of the same transform string, or the accumulated cost
+  // of re-running getBoundingClientRect()/offsetWidth probes every time, is exactly the kind of
+  // thing that reads as "jitter" even when no property actually visibly moved. The signature
+  // below covers every input that can change this function's OUTPUT: the hand's own cards (order
+  // matters — a reordered-but-same-cards hand still needs new positions/angles), which cards are
+  // currently legal to play, whether it's even this player's turn to act at all, and which card
+  // (if any) is currently tap-selected. If none of those changed since the LAST time this exact
+  // function ran for this exact fan, the entire body below — every DOM read/write, every
+  // transform recompute — is skipped outright; the existing DOM is left completely untouched,
+  // not just "re-set to the same values".
+  // isPlayable is computed here (not further below, where it used to live) precisely so the
+  // signature and the actual render logic can share this ONE computation rather than risk the
+  // two silently diverging if either copy is ever edited alone in the future.
+  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===actual && S.isHuman[actual] && (!isOnline || isHost || actual===myOnlineSeat));
+  const legalSig = legal===null ? 'null' : legal.map(c=>c.suit+'-'+c.rank).join(',');
+  const selSig = selectedCard ? (selectedCard.suit+'-'+selectedCard.rank) : '';
+  const handSig = hand.map(c=>c.suit+'-'+c.rank).join('|');
+  const sig = handSig+'::'+legalSig+'::'+isPlayable+'::'+selSig;
+  if(fan.dataset.ownFanSig === sig) return;
+  fan.dataset.ownFanSig = sig;
 
   const containerW = fan.clientWidth || 300;
   const containerH = fan.clientHeight || 100;
@@ -1798,9 +1827,8 @@ function renderOwnFan(fan, actual){
   const maxAngle = Math.min(26, 220/n);
   const arcLift = Math.min(16, containerH*0.18);
 
-  // Determine if this is a playable position for the current player
-  const myActual = seatFor(0); // actual seat at display pos 0
-  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===myActual && S.isHuman[myActual] && (!isOnline || isHost || myActual===myOnlineSeat));
+  // isPlayable was already computed above (shared with the memoization signature) — nothing
+  // further needed here.
   // Structural lock, not just "don't build a hit-overlay": the whole fan is pointer-events:none
   // whenever it isn't actually this player's turn to play, so there is no click target of any
   // kind sitting over the cards during a bot's turn / trick resolution — closes the same gap
