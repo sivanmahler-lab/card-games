@@ -426,8 +426,10 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 }
 /* Left/right opponents in this file's markup are .side-badge (name badge) + a separate sibling
    .fan.side.left-fan/.right-fan element — there is no literal .seat.left/.seat.right node — and
-   the top opponent is .seat.top. All three are pulled down to the same low tier so none of them
-   can ever out-rank the bottom seat above. */
+   the top opponent is .seat.top. All three start at this same low tier so none of them can ever
+   out-rank the bottom seat above — .side-badge is then raised to 40 by its own later rule (see
+   its own comment) so it also always wins specifically against .fan.side/.fan.left-fan/
+   .fan.right-fan (still 10), which otherwise visually overlaps it on short viewports. */
 .seat.top, .side-badge, .fan.side{z-index:10 !important;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
@@ -444,7 +446,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    badge-stats pills (bid/tricks numbers) had real content next to it, truncating names like
    "צ'רצ'יל" to "צ." on narrow phones. min-width lets the badge grow to fit its actual content
    (name + pills) instead of clipping the name to force a fixed width. */
-.side-badge{position:absolute;z-index:35;min-width:90px;max-width:140px;}
+/* z-index:40 !important — always above .fan.side (z-index:10, see the .seat.top/.side-badge/
+   .fan.side rule elsewhere in this file) so even if positionSideBadges()' own gap math were ever
+   defeated by something else (a font-size change, an unusually long name wrapping to a 3rd line,
+   etc.), the badge still visually wins over the fan rather than getting hidden underneath it. */
+.side-badge{position:absolute;z-index:40 !important;min-width:90px;max-width:140px;}
 .side-badge.left-badge{left:2px;top:4px;}
 .side-badge.right-badge{right:2px;top:4px;}
 .fan.side{position:absolute;z-index:30;}
@@ -1781,13 +1787,18 @@ function positionSideBadges(){
       const fanEl = document.getElementById(fanId);
       const badgeWrap = document.getElementById(badgeId);
       if(!fanEl || !badgeWrap) return;
+      // No overlap, ever: the fan must start strictly BELOW the badge's own bottom edge, with a
+      // real gap — the previous version deliberately subtracted an "overlap" amount so the fan
+      // started partway UP the badge, which is exactly what let the fan visually cover the
+      // badge's bottom row (the "לקח/ה: N" tricks-won line) on any viewport short enough for the
+      // two to compete for vertical space. badgeH + 8 is a fixed, guaranteed 8px gap — never a
+      // negative one.
       const fanH = fanEl.offsetHeight || 220;
       const badgeH = badgeWrap.offsetHeight || 30;
-      const overlap = Math.min(16, badgeH*0.5);
-      const totalH = fanH + badgeH - overlap;
+      const totalH = fanH + badgeH + 8;
       const startTop = Math.max(4, (feltH - totalH) / 2);
       badgeWrap.style.top = startTop + 'px';
-      fanEl.style.top = (startTop + badgeH - overlap) + 'px';
+      fanEl.style.top = (startTop + badgeH + 8) + 'px';
     });
   } catch(e){}
 }
@@ -1823,6 +1834,12 @@ function renderOwnFan(fan, actual){
     if(hint) hint.classList.remove('show');
     fan.dataset.ownFanSig = '';
     fan.dataset.ownFanHandSig = '';
+    // Reset the static slot map too — the next hand dealt (a new round) must start every card
+    // fresh at slot 0..n-1, not continue counting up from wherever the previous round's hand
+    // left off.
+    if(fan.__slotByKey) fan.__slotByKey.clear();
+    fan.__slotMax = 0;
+    fan.__slotRoundNum = undefined;
     return;
   }
   const legal = getLegalCardsForHuman();
@@ -1879,12 +1896,57 @@ function renderOwnFan(fan, actual){
   const cardW = probe.offsetWidth || 60;
   fan.removeChild(probe);
 
+  // Static, index-based slots: every card keeps the EXACT physical slot (x/y/angle) it was
+  // originally dealt into for the whole round, even as other cards are thrown and the hand
+  // shrinks — a card's slot is never reassigned just because n got smaller. Without this, x/y/
+  // angle were recomputed from the CURRENT hand length n on every layout pass, so throwing any
+  // card re-flowed and visibly moved every OTHER remaining card into a newly-tightened spread —
+  // exactly the "jump" being fixed here. fan.__slotByKey (a real Map kept on the element, not
+  // dataset — a dataset string can't hold structured per-key data cheaply) persists across
+  // renders; a card thrown only ever REMOVES that one key's slot, never renumbers the rest.
+  //
+  // Fresh-deal detection is keyed off S.roundNum, NOT off guessing from card-key overlap — an
+  // overlap-based heuristic ("every current key is new") is a real correctness bug: a fresh
+  // 13-card deal can easily happen to contain a card with the exact same suit+rank as one from
+  // the PREVIOUS round's hand (there's nothing preventing that), which made the old heuristic
+  // treat it as "not a fresh deal", carry over the old slotByKey map, and hand out slot numbers
+  // far past the fan's actual card count for the genuinely-new cards — silently corrupting the
+  // whole hand's spread/positions (and with it, the legal-card hit-boxes computed from those
+  // positions) until the round actually ended and reset. S.roundNum only ever changes exactly
+  // once per dealt round (see startRound()), so it's an unambiguous, always-correct signal.
+  if(!fan.__slotByKey) fan.__slotByKey = new Map();
+  if(!fan.__slotMax) fan.__slotMax = 0;
+  const slotByKey = fan.__slotByKey;
+  const keysNow = hand.map(c=>c.suit+'-'+c.rank);
+  const keysNowSet = new Set(keysNow);
+  const isFreshDeal = fan.__slotRoundNum !== S.roundNum;
+  fan.__slotRoundNum = S.roundNum;
+  if(isFreshDeal){
+    slotByKey.clear();
+    keysNow.forEach((k,i)=>slotByKey.set(k,i));
+    fan.__slotMax = n;
+  } else {
+    // Drop slots for cards no longer in hand; every remaining card keeps its existing slot.
+    Array.from(slotByKey.keys()).forEach(k=>{ if(!keysNowSet.has(k)) slotByKey.delete(k); });
+    // Any card present now but with no assigned slot yet (shouldn't normally happen outside a
+    // fresh deal, but guards a hand mutated via some path other than draw-then-discard) gets the
+    // next free slot past the current maximum rather than colliding with an existing one.
+    keysNow.forEach(k=>{
+      if(!slotByKey.has(k)){ slotByKey.set(k, fan.__slotMax); fan.__slotMax++; }
+    });
+  }
+  const slotCount = Math.max(fan.__slotMax, keysNow.length);
+
   const maxSpread = cardW*0.86;
-  const spread = n>1 ? Math.min(maxSpread, (containerW-cardW)/(n-1)) : 0;
-  const totalWidth = cardW + spread*(n-1);
+  // Geometry is computed once from slotCount (the highest slot index ever occupied THIS deal),
+  // never from the current (possibly-shrunk) n — this is what keeps a remaining card's own x/y/
+  // angle permanently fixed to the slot it was dealt into, instead of the whole fan re-tightening
+  // its spread every time a card leaves.
+  const spread = slotCount>1 ? Math.min(maxSpread, (containerW-cardW)/(slotCount-1)) : 0;
+  const totalWidth = cardW + spread*(slotCount-1);
   const startX = Math.max(0, (containerW-totalWidth)/2);
-  const mid = (n-1)/2;
-  const maxAngle = Math.min(26, 220/n);
+  const mid = (slotCount-1)/2;
+  const maxAngle = Math.min(26, 220/slotCount);
   const arcLift = Math.min(16, containerH*0.18);
 
   // isPlayable was already computed above (shared with the memoization signature) — nothing
@@ -1894,12 +1956,6 @@ function renderOwnFan(fan, actual){
   // kind sitting over the cards during a bot's turn / trick resolution — closes the same gap
   // the playCard() guard closes, but one layer earlier (nothing to even mis-click on).
   fan.style.pointerEvents = isPlayable ? 'auto' : 'none';
-
-  const boundaries = [0];
-  for(let k=1;k<n;k++){
-    boundaries.push(startX + (k-1)*spread + (cardW+spread)/2);
-  }
-  boundaries.push(containerW);
 
   // A previously selected card only stays selected if it's still in hand and still legal
   // to play (e.g. the led suit can change what's legal between renders).
@@ -1954,36 +2010,45 @@ function renderOwnFan(fan, actual){
       fan.appendChild(el);
     }
 
-    const offsetFromMid = mid ? (i-mid)/mid : 0;
+    // slot (not the loop index i) drives every geometric value — this is the actual fixed,
+    // per-card physical position for the whole round; i only still matters for reconciliation
+    // bookkeeping, never for where a card sits.
+    const slot = slotByKey.get(key);
+    const offsetFromMid = mid ? (slot-mid)/mid : 0;
     const angle = offsetFromMid * maxAngle;
     const lift = arcLift*(1-offsetFromMid*offsetFromMid);
-    const x = startX + i*spread;
+    const x = startX + slot*spread;
     const y = 10 - lift;
     el.style.transformOrigin = '50% 120%';
     // Positioning lives ENTIRELY in transform (translate+rotate[+scale]) now — never in left/top.
     // left/top are plain layout properties with no transition covering them (only transform/
     // box-shadow/filter/opacity are in .card's transition list — see its own CSS), so setting
     // them to a new pixel value on every render made the fan SNAP instantly to its tightened
-    // spread the moment a card left the hand, even though the reconciliation fix (reusing the
-    // same DOM node) gave the transition something to interpolate FROM. Moving x/y into
-    // translate() puts 100% of a card's on-screen position under the transform transition, so a
-    // remaining card now visibly glides to its new slot instead of jumping there — the actual
-    // "root cause" fix requested, not just a band-aid on top of the reconciliation.
+    // spread the moment a card left the hand. Combined with the static per-slot geometry above
+    // (x/angle keyed by the card's OWN fixed slot, never by n), a remaining card's transform is
+    // now byte-identical across a throw that doesn't involve it — nothing to even transition,
+    // let alone jump.
     el.style.transform = isSelected
       ? `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg) translateY(-16px) scale(1.06)`
       : `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`;
-    el.style.zIndex = isSelected ? 250 : i;
+    el.style.zIndex = isSelected ? 250 : slot;
     el.style.pointerEvents = 'none';
     el.style.boxShadow = isSelected ? '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)' : '';
 
     if(cls==='legal'){
+      // Hit-box centered directly on this card's own slot (half a spread-width to either side),
+      // not a boundaries-array computed from adjacent LOOP positions — with static slots, the
+      // card to either side of this one in the array is no longer necessarily adjacent in space
+      // (a thrown card leaves a gap), so a shared-boundary approach would either leave dead
+      // zones or make hit-boxes overlap. A fixed half-spread box per card is correct regardless
+      // of which slots are currently occupied.
       const hit = document.createElement('div');
       hit.style.position='absolute';
-      hit.style.left = boundaries[i]+'px';
+      hit.style.left = Math.max(0, x - spread/2)+'px';
       hit.style.top = '0px';
-      hit.style.width = (boundaries[i+1]-boundaries[i])+'px';
+      hit.style.width = (spread>0 ? spread : cardW)+'px';
       hit.style.height = containerH+'px';
-      hit.style.zIndex = 300+i;
+      hit.style.zIndex = 300+slot;
       hit.style.cursor='pointer';
       hit.style.background='transparent';
       hit.onclick = ()=>{
@@ -2013,7 +2078,7 @@ function renderOwnFan(fan, actual){
       // would snap the card to the fan's top-left corner on hover instead of just lifting it
       // in place.
       hit.addEventListener('mouseenter', ()=>{ if(!isSelected){ el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; } });
-      hit.addEventListener('mouseleave', ()=>{ if(!isSelected){ el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; } });
+      hit.addEventListener('mouseleave', ()=>{ if(!isSelected){ el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = slot; } });
       fan.appendChild(hit);
     }
   });
@@ -2048,23 +2113,22 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
 
   const containerW = fan.clientWidth || 300;
   const containerH = fan.clientHeight || 100;
-  const n = hand.length;
   const probe = document.createElement('div');
   probe.className='card'; probe.style.visibility='hidden'; probe.style.position='absolute';
   fan.appendChild(probe);
   const cardW = probe.offsetWidth || 60;
   fan.removeChild(probe);
   const maxSpread = cardW*0.86;
-  const spread = n>1 ? Math.min(maxSpread, (containerW-cardW)/(n-1)) : 0;
-  const totalWidth = cardW + spread*(n-1);
+  // Same static per-slot geometry as the full-layout path (see its own comment on fan.__slotByKey)
+  // — handSig matched to get here, so the hand/slots are guaranteed unchanged from the last full
+  // layout pass; reusing fan.__slotByKey/__slotMax (rather than n) keeps a hit-box correctly
+  // centered on a card whose slot may not be contiguous with its neighbors' (a gap left by an
+  // earlier-thrown card).
+  const slotByKey = fan.__slotByKey || new Map();
+  const slotCount = Math.max(fan.__slotMax || hand.length, hand.length);
+  const spread = slotCount>1 ? Math.min(maxSpread, (containerW-cardW)/(slotCount-1)) : 0;
+  const totalWidth = cardW + spread*(slotCount-1);
   const startX = Math.max(0, (containerW-totalWidth)/2);
-  // Only needed to rebuild the legal-card hit overlays' boundaries — no angle/x/y is computed
-  // for the cards themselves here, since this whole function never moves a card (see above).
-  const boundaries = [0];
-  for(let k=1;k<n;k++){
-    boundaries.push(startX + (k-1)*spread + (cardW+spread)/2);
-  }
-  boundaries.push(containerW);
 
   let selectionStillValid = false;
   hand.forEach((c,i)=>{
@@ -2084,13 +2148,15 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
     // el.style.left/top/transform are NEVER written here — only className changes.
 
     if(cls==='legal'){
+      const slot = slotByKey.has(key) ? slotByKey.get(key) : i;
+      const x = startX + slot*spread;
       const hit = document.createElement('div');
       hit.style.position='absolute';
-      hit.style.left = boundaries[i]+'px';
+      hit.style.left = Math.max(0, x - spread/2)+'px';
       hit.style.top = '0px';
-      hit.style.width = (boundaries[i+1]-boundaries[i])+'px';
+      hit.style.width = (spread>0 ? spread : cardW)+'px';
       hit.style.height = containerH+'px';
-      hit.style.zIndex = 300+i;
+      hit.style.zIndex = 300+slot;
       hit.style.cursor='pointer';
       hit.style.background='transparent';
       hit.onclick = ()=>{
