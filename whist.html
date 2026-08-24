@@ -494,8 +494,20 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   transform-style:preserve-3d;-webkit-transform-style:preserve-3d;
   -webkit-font-smoothing:antialiased;
 }
+/* Fixed dimensions driven only by the viewport (clamp/vmin), never by hand size — .fan's own
+   width/height never change when a card is thrown and n (hand.length) shrinks, so there is no
+   reflow "pulse" on the container itself when a card leaves the hand; only the cards inside it
+   re-lay-out (smoothly — see .card's own transform-transition note below). */
 .fan{position:relative;height:clamp(92px,15vmin,112px);width:clamp(280px,78vmin,560px);}
 .fan.side{height:clamp(140px,28vmin,200px);width:clamp(52px,9vmin,58px);}
+/* The player's own hand cards are positioned ENTIRELY via transform (translate+rotate[+scale] —
+   see renderOwnFan()'s JS) — left/top are set once to 0,0 at creation and never touched again.
+   This rule locks that down at the CSS level too: left/top/width/height can never be transitioned
+   (nothing should ever animate them, since nothing should ever SET them past creation) while
+   transform stays free to transition smoothly on .card's own base rule below. This is the belt to
+   that JS's suspenders — even a future code path that mistakenly writes el.style.left again would
+   at least not compound the mistake with a broken transition on top of it. */
+.seat.bottom .fan .card{transition-property:transform, box-shadow, filter, opacity;}
 .card{
   /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
      purpose — this stays a per-viewer visual size that responds to each screen, but a wide
@@ -1845,20 +1857,33 @@ function renderOwnFan(fan, actual){
       div.innerHTML = cardHTML(c, cls);
       el = div.firstElementChild;
       el.dataset.cardKey = key;
+      // left/top are set ONCE here, at element creation, and never touched again on any later
+      // render — see the transform-only positioning note just below for why. 0,0 is an arbitrary
+      // fixed origin; the real per-render x/y lives entirely in the translate() component of
+      // .transform from here on.
+      el.style.left = '0px';
+      el.style.top = '0px';
       fan.appendChild(el);
     }
 
     const offsetFromMid = mid ? (i-mid)/mid : 0;
     const angle = offsetFromMid * maxAngle;
     const lift = arcLift*(1-offsetFromMid*offsetFromMid);
-    el.style.left = (startX + i*spread)+'px';
-    el.style.top = (10 - lift)+'px';
+    const x = startX + i*spread;
+    const y = 10 - lift;
     el.style.transformOrigin = '50% 120%';
-    // Inline transform takes priority over the .selected CSS class (inline always wins),
-    // so the lift for a selected card has to be folded into this same string.
+    // Positioning lives ENTIRELY in transform (translate+rotate[+scale]) now — never in left/top.
+    // left/top are plain layout properties with no transition covering them (only transform/
+    // box-shadow/filter/opacity are in .card's transition list — see its own CSS), so setting
+    // them to a new pixel value on every render made the fan SNAP instantly to its tightened
+    // spread the moment a card left the hand, even though the reconciliation fix (reusing the
+    // same DOM node) gave the transition something to interpolate FROM. Moving x/y into
+    // translate() puts 100% of a card's on-screen position under the transform transition, so a
+    // remaining card now visibly glides to its new slot instead of jumping there — the actual
+    // "root cause" fix requested, not just a band-aid on top of the reconciliation.
     el.style.transform = isSelected
-      ? `rotate(${angle.toFixed(1)}deg) translateY(-16px) scale(1.06)`
-      : `rotate(${angle.toFixed(1)}deg)`;
+      ? `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg) translateY(-16px) scale(1.06)`
+      : `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`;
     el.style.zIndex = isSelected ? 250 : i;
     el.style.pointerEvents = 'none';
     el.style.boxShadow = isSelected ? '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)' : '';
@@ -1895,8 +1920,12 @@ function renderOwnFan(fan, actual){
           renderTable();
         }
       };
-      hit.addEventListener('mouseenter', ()=>{ if(!isSelected){ el.style.transform = `rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; } });
-      hit.addEventListener('mouseleave', ()=>{ if(!isSelected){ el.style.transform = `rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; } });
+      // Both handlers must keep the SAME translate(x,y) prefix used above — el's left/top are
+      // fixed at 0,0 now (see the creation comment above), so dropping the translate() here
+      // would snap the card to the fan's top-left corner on hover instead of just lifting it
+      // in place.
+      hit.addEventListener('mouseenter', ()=>{ if(!isSelected){ el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg) translateY(-12px) scale(1.05)`; el.style.zIndex = 200; } });
+      hit.addEventListener('mouseleave', ()=>{ if(!isSelected){ el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`; el.style.zIndex = i; } });
       fan.appendChild(hit);
     }
   });
