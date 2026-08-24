@@ -185,7 +185,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   backdrop-filter:blur(4px);
   overflow:hidden;
 }
-/* The "משחק חוזר" (rematch/new-game) button must stay clickable in EVERY phase of the game —
+/* The "משחק חדש באותו חדר" (rematch/new-game) button must stay clickable in EVERY phase of the game —
    z-index:500 above puts #topbar BELOW .modal-bg (z-index:800), so any open modal (instructions,
    the reset-vote dialog itself, a confirm box) silently swallows clicks on it despite it
    rendering "in front" visually within its own stacking context — a child's z-index can never
@@ -732,7 +732,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 <g transform="rotate(45.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#6e1720" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g>
 <g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span><span class="tb-room" id="tb-room" style="display:none;" onclick="copyRoomCode()" title="לחץ להעתקת קוד החדר"></span></div>
     <div class="tb-btns">
-      <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חוזר באותו חדר</span><span class="rematch-tb-short">משחק חוזר</span></button>
+      <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חדש באותו חדר</span><span class="rematch-tb-short">משחק חדש</span></button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
       <button class="tb-btn" onclick="goHub()">לובי</button>
     </div>
@@ -1682,10 +1682,18 @@ function renderTable(){
     }
     document.getElementById('tricks-'+disp).textContent = (S.phase==='playing') ? ('לקח/ה: '+S.tricksWon[actual]) : '';
     const fan = document.getElementById('fan-'+disp);
-    fan.innerHTML='';
     if(disp===0){
+      // Own hand: NEVER wipe+rebuild wholesale (fan.innerHTML=''). A full wipe destroys every
+      // card's DOM node on every render (even ones still legitimately in hand), so the .card
+      // transition:transform rule in the CSS has nothing to animate FROM — the browser just
+      // paints brand-new elements straight at their final spread position, which reads as the
+      // whole hand "jumping"/re-fanning aggressively the instant a card is thrown. renderOwnFan
+      // now reconciles in place (matches existing card elements by suit+rank) so a card that's
+      // still in hand keeps its own DOM node across the render and the transition can actually
+      // interpolate it sliding quietly to its new angle/position.
       renderOwnFan(fan, actual);
     } else {
+      fan.innerHTML='';
       const count = (S.hands[actual]||[]).length;
       renderBackFan(fan, disp, count);
     }
@@ -1790,14 +1798,49 @@ function renderOwnFan(fan, actual){
   // to play (e.g. the led suit can change what's legal between renders).
   let selectionStillValid = false;
 
+  // Reconciliation, not wipe+rebuild: a full fan.innerHTML='' + fresh appendChild for every
+  // card on every render meant every remaining card got a brand-new DOM node the instant ANY
+  // card in the hand changed (e.g. one thrown to the table) — a new node has no prior inline
+  // transform for the CSS transition to animate FROM, so the whole hand just snapped straight
+  // to its new spread/angle instead of sliding there. Keyed by suit+rank (a hand never holds
+  // duplicate cards), existing elements are reused across renders so the transition:transform
+  // rule on .card actually has continuity to interpolate — remaining cards glide quietly into
+  // their tightened spread instead of "jumping". Only elements for cards no longer in hand
+  // (i.e. the one just played) are removed; a stray duplicate key (should not happen, but
+  // guards against a rare stale-DOM edge case) falls back to being torn down too.
+  const existingByKey = new Map();
+  Array.from(fan.children).forEach(el=>{
+    if(!el.dataset || !el.dataset.cardKey) { fan.removeChild(el); return; }
+    if(existingByKey.has(el.dataset.cardKey)) { fan.removeChild(el); return; }
+    existingByKey.set(el.dataset.cardKey, el);
+  });
+  const keysThisRender = new Set();
+
   hand.forEach((c,i)=>{
-    const div=document.createElement('div');
+    // String-joined, not c.suit+c.rank (plain numeric addition — 2+10 and 1+11 both equal 12,
+    // and worse, it silently coerces to a number while el.dataset.cardKey reads back a STRING
+    // from the DOM, so the two never matched at all and every card was rebuilt from scratch
+    // every render, defeating the whole point of this reconciliation).
+    const key = c.suit+'-'+c.rank;
+    keysThisRender.add(key);
     const isLegal = legal===null ? true : legal.some(lc=>lc.suit===c.suit && lc.rank===c.rank);
     const cls = isPlayable ? (isLegal?'legal':'illegal') : '';
     const isSelected = cls==='legal' && selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank;
     if(isSelected) selectionStillValid = true;
-    div.innerHTML = cardHTML(c, cls);
-    const el = div.firstElementChild;
+
+    let el = existingByKey.get(key);
+    if(el){
+      // Reused element — only touch the class list (isLegal/isSelected can change between
+      // renders even for a card that stays in hand) rather than rebuilding its innerHTML.
+      el.className = `card ${suitClass(c.suit)} ${cls}`;
+    } else {
+      const div=document.createElement('div');
+      div.innerHTML = cardHTML(c, cls);
+      el = div.firstElementChild;
+      el.dataset.cardKey = key;
+      fan.appendChild(el);
+    }
+
     const offsetFromMid = mid ? (i-mid)/mid : 0;
     const angle = offsetFromMid * maxAngle;
     const lift = arcLift*(1-offsetFromMid*offsetFromMid);
@@ -1811,8 +1854,7 @@ function renderOwnFan(fan, actual){
       : `rotate(${angle.toFixed(1)}deg)`;
     el.style.zIndex = isSelected ? 250 : i;
     el.style.pointerEvents = 'none';
-    if(isSelected) el.style.boxShadow = '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)';
-    fan.appendChild(el);
+    el.style.boxShadow = isSelected ? '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)' : '';
 
     if(cls==='legal'){
       const hit = document.createElement('div');
@@ -1851,6 +1893,12 @@ function renderOwnFan(fan, actual){
       fan.appendChild(hit);
     }
   });
+
+  // Remove elements for cards that are no longer in hand (i.e. the one just played) — this
+  // is the ONLY case where a card's DOM node is actually destroyed, and it's exactly the node
+  // that should disappear (it's not on the table via this fan anymore; renderTrickArea() is
+  // what draws it there with its own fresh landing animation).
+  existingByKey.forEach((el,key)=>{ if(!keysThisRender.has(key)) fan.removeChild(el); });
 
   // Clear a stale selection (card no longer in hand, or no longer legal — e.g. the led
   // suit changed) so we don't leave the hint pill stuck on with nothing actually selected.
