@@ -349,7 +349,11 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    flex sibling of #table-wrap — an absolutely-positioned element is taken out of flow entirely,
    so toggling its display can never resize #felt or move anything else absolutely positioned
    inside it, pos-0 included. */
-.pgrid-wrap.pos-0{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:20;}
+/* pos-0 is now a plain flex child of #bottom-bar (see its own rule below), not absolutely
+   positioned itself — #bottom-bar is the one absolutely-positioned/centered element, anchored at
+   the exact spot pos-0 used to occupy alone (bottom:10px, centered). Keeping z-index here since
+   siblings inside #felt (opponent grids, center pot) still rely on it. */
+.pgrid-wrap.pos-0{position:static;z-index:20;}
 /* Side players (pos-1/pos-3): fixed-pixel corner pin, NOT percentage/translateY-centered.
    whist.html hit this exact bug earlier — a vertically-centered side badge+card stack still
    visually drifted toward the table center on narrow phones. Pinning to a true top corner
@@ -734,28 +738,29 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   .pile.turn-hint{animation:none;box-shadow:0 0 0 3px rgba(240,216,150,.55);}
 }
 
-/* Symmetric layout around the player's own hand (#pw-0), all pieces at the SAME vertical band
-   as the hand itself (anchored off bottom:10px) so NOTHING ever sits above the six cards
-   blocking them from view — that was the bug with both the original above-the-hand bar AND the
-   later .action-bar-hint (which sat at bottom:116px, directly over the cards on narrow phones).
-   Left side: the two action buttons stacked in a vertical column (endturn on top, finish below).
-   Right side: the instructional hint, as a compact styled block at the same height — this
-   balances the layout visually against the button column on the left instead of floating
-   disconnected above everything. #pw-0 itself is untouched — still centered, still bottom:10px,
-   still completely clear from above. All three pieces are position:absolute directly in #felt
-   (not flex siblings of #table-wrap), so toggling any of them can never resize #felt or shift
-   #pw-0 or each other. */
-/* left is computed relative to the hand's own actual center-offset (calc(50% - halfHandWidth -
-   gap - buttonWidth)), not a flat viewport-edge inset — a flat 8px/4px inset left a wide, dead
-   gap between the button column and #pw-0 on any viewport wider than the very narrowest phone,
-   since the hand itself is only ~150-170px wide and sits centered, while the buttons hugged the
-   screen edge instead of the hand. #pw-0's own actual width per breakpoint: 3 cells + 2×4px
-   gap = 3×50+8=158px (default, >480px), 3×53+8=167px (<=480px), 3×48+8=152px (<=360px) — see
-   #pw-0 .pcell's own width rules. Each tier's `left` below is calc(50% - halfHandWidth - 6px gap
-   - buttonWidth), i.e. right at the hand's left edge with a tight, deliberate 6px breathing
-   room, instead of trailing off toward the felt's edge. */
+/* Symmetric bottom bar around the player's own hand (#pw-0): a single centered flexbox ROW —
+   [button column] — [#pw-0] — [hint block] — instead of three independently absolutely-positioned
+   pieces kept in sync only by matching calc() arithmetic at every breakpoint. #bottom-bar is the
+   one absolutely-positioned/centered element (anchored at the exact spot #pw-0 used to occupy
+   alone: bottom:10px, centered), and #pw-0/#action-side-left/.action-bar-hint are now its plain
+   flex children with a flat 12px gap between them — real flexbox centering guarantees they stay
+   tight and symmetric on every viewport by construction, not by three formulas that have to be
+   kept in lockstep by hand. Being absolutely-positioned as a WHOLE (not each piece separately)
+   still means toggling any child's visibility can never resize #felt or shift the opponent seats/
+   center pot, which are unrelated absolute siblings inside #felt. Nothing here ever sits above
+   the six cards — the row is a single horizontal band, #pw-0 always front and center in it. */
+#bottom-bar{
+  position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  /* Page is dir="rtl" (see <html>), where a plain flex row lays out children starting from the
+     PHYSICAL right — so DOM order [buttons, hand, hint] would render as [hint][hand][buttons]
+     left-to-right, i.e. buttons on the physical right and the hint on the physical left, the
+     mirror of what's wanted (buttons LEFT, hint RIGHT). row-reverse flips just the visual order
+     back to [buttons][hand][hint] while keeping DOM/reading order (buttons markup first, matching
+     "top-to-bottom = first-mentioned" in the spec) unchanged. */
+  flex-direction:row-reverse;
+}
 #action-side-left{
-  position:absolute;left:calc(50% - 79px - 6px - 60px);bottom:10px;z-index:30;
   display:flex;flex-direction:column;gap:8px;
 }
 #btn-endturn, #btn-finish{
@@ -775,24 +780,10 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 #btn-finish{background:linear-gradient(160deg,#e0554a,#a8342b);color:#fff;border:none;font-weight:800;}
 #btn-finish:not(:disabled):hover{box-shadow:0 0 14px rgba(224,85,74,.45);}
 #btn-endturn:disabled, #btn-finish:disabled{opacity:.4;cursor:default;}
-/* At >=480px viewports #pw-0 .pcell is back to the base 50px (the 53px bump only applies
-   <=480px — see its own rule), so half-hand-width here is 79px, same as the un-media-queried
-   base rule above; this query only exists so #table-wrap's own max-width growth at wider
-   breakpoints (see #table-wrap's CSS) doesn't leave the buttons under-adjusted — the formula
-   itself doesn't actually change shape at this tier, just confirms it. */
-@media(min-width:480px){ #action-side-left{left:calc(50% - 79px - 6px - 60px);} }
-@media(min-width:700px){ #action-side-left{left:calc(50% - 79px - 8px - 60px);} }
-/* Right-side hint block — the visual counterweight to the button column on the left, at the
-   exact same height band as the hand/buttons (bottom:10px), never above anything.
-   box-sizing:border-box so `width` includes the border/padding — otherwise the visual footprint
-   silently grows past the declared width and can creep back into overlapping the hand on narrow
-   viewports, the same class of bug this whole layout is fixing. Sized to actually fit the gap
-   between the felt's edge and #pw-0's own edge at the narrowest supported viewport (~360-390px,
-   where #pw-0 is ~167px wide and centered, leaving roughly 90-100px per side after the 8px
-   inset) — a width any wider than that would overlap the hand exactly like the old
-   above-the-hand bar did, just sideways instead of vertically. */
+/* Right-side hint block — the visual counterweight to the button column on the left, a plain
+   flex child at the same height as the hand/buttons, never above anything. box-sizing:border-box
+   so `width` includes the border/padding. */
 .action-bar-hint{
-  position:absolute;right:calc(50% - 79px - 6px - 88px);bottom:10px;z-index:28;
   box-sizing:border-box;
   width:88px;min-height:60px;
   display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -802,18 +793,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   box-shadow:0 4px 14px rgba(0,0,0,.35);
 }
 .action-bar-hint.show{display:flex;}
-@media(min-width:480px){ .action-bar-hint{right:calc(50% - 79px - 6px - 112px);width:112px;font-size:10.5px;} }
-@media(min-width:700px){ .action-bar-hint{right:calc(50% - 79px - 8px - 130px);width:130px;} }
+@media(min-width:480px){ .action-bar-hint{width:112px;font-size:10.5px;} }
+@media(min-width:700px){ .action-bar-hint{width:130px;} }
 /* Matches the #pw-0 .pcell shrink breakpoint (max-width:360px, see its own CSS) exactly — the
-   hand itself gets visibly narrower at this width, so the hint/buttons need to shrink and pull
-   in at the SAME boundary, not one pixel later, or there's a gap width where the hand is still
-   full-size-adjacent-elements-already-shrunk (or the reverse) and the numbers stop lining up. */
+   hand itself gets visibly narrower at this width, so the hint/buttons shrink at the SAME
+   boundary. The flex row's own 12px gap needs no adjustment here — it stays constant across every
+   tier, tight against #pw-0's actual (breakpoint-dependent) rendered width automatically. */
 @media(max-width:360px){
-  /* Hand is 152px wide here (3×48px cell + 2×4px gap — see #pw-0 .pcell's own <=360px rule),
-     half-width 76px. left/right below are the same calc(50% - halfHand - gap - elementWidth)
-     formula as every other tier, just with this tier's own numbers. */
-  #action-side-left{left:calc(50% - 76px - 4px - 52px);gap:6px;}
-  .action-bar-hint{right:calc(50% - 76px - 4px - 72px);width:72px;font-size:8.5px;padding:5px 6px;}
+  .action-bar-hint{width:72px;font-size:8.5px;padding:5px 6px;}
   #btn-endturn, #btn-finish{width:52px;height:52px;font-size:9px;}
 }
 
@@ -1122,7 +1109,6 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   </div>
   <div id="table-wrap">
     <div id="felt">
-      <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="pgrid" id="pg-0"></div></div></div>
       <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-1"></div></div></div>
       <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-2"></div></div></div>
       <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-3"></div></div></div>
@@ -1153,25 +1139,29 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
           <div class="magnify-card-grid" id="magnify-card-grid"></div>
         </div>
       </div>
-      <!-- Deliberately INSIDE #felt (not a sibling of #table-wrap) and position:absolute relative
-           to it, anchored at the SAME vertical band as the player's own hand (#pw-0, also
-           absolute within #felt) — a vertical button column on the left, the hint block on the
-           right — rather than sitting in a bar above the hand or the piles. Being absolutely
-           positioned inside #felt means toggling these can never change #felt's own box size or
-           push/shift anything else in normal document flow — #felt's size is driven only by its
-           min-height and #table-wrap's flex sizing, neither of which these participate in. -->
-      <div id="action-side-left">
-        <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר<br>תור<br>◀</button>
-        <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז<br>סיום!<br>🔔</button>
+      <!-- Single centered flex row: [button column] — [#pw-0, the player's own hand] — [hint
+           block]. Deliberately INSIDE #felt (not a sibling of #table-wrap) and itself
+           position:absolute relative to it, at the exact spot #pw-0 used to occupy alone
+           (bottom:10px, centered) — being absolutely positioned as a WHOLE means toggling any
+           child's visibility can never change #felt's own box size or push/shift the opponent
+           seats/center pot, which are unrelated absolute siblings inside #felt. See #bottom-bar's
+           own CSS for why this replaced three independently-positioned pieces kept in sync only
+           by matching calc() formulas. -->
+      <div id="bottom-bar">
+        <div id="action-side-left">
+          <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר<br>תור<br>◀</button>
+          <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז<br>סיום!<br>🔔</button>
+        </div>
+        <div class="pgrid-wrap pos-0" id="pw-0"><div class="p-name" id="pn-0"></div><div class="pgrid-inner"><div class="pgrid" id="pg-0"></div></div></div>
+        <!-- Persistent micro-copy — mobile has no hover state, so the title="" tooltips on the
+             buttons themselves are invisible there. This explanatory line is always on screen (not
+             hover- or tap-dependent) and swaps text based on which button is actually enabled right
+             now, so a player who's never touched this game before still knows what pressing either
+             one does. Sits at the same height as the hand/buttons, on the RIGHT — the visual
+             counterweight to the button column — never above anything. See renderAll() for the
+             swap logic. -->
+        <div class="action-bar-hint" id="action-bar-hint"></div>
       </div>
-      <!-- Persistent micro-copy — mobile has no hover state, so the title="" tooltips on the
-           buttons themselves are invisible there. This explanatory line is always on screen (not
-           hover- or tap-dependent) and swaps text based on which button is actually enabled right
-           now, so a player who's never touched this game before still knows what pressing either
-           one does. Sits at the same height as the hand/buttons, on the RIGHT — the visual
-           counterweight to the button column — never above anything. See renderAll() for the
-           swap logic. -->
-      <div class="action-bar-hint" id="action-bar-hint"></div>
     </div>
   </div>
   <!-- ROUND-END SUMMARY BAR — replaces the old auto-opening full-screen results modal. Cards are
