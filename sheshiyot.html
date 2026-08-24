@@ -2607,7 +2607,14 @@ function otherHumansPresent(){
 }
 function newGame(){
   if(!otherHumansPresent()){
-    showConfirmBox('להתחיל משחק חדש?', 'הסבב הנוכחי יתאפס.', ()=>{ goLobby(); });
+    // "משחק חדש באותו חדר/שולחן" — this must reset the MATCH IN PLACE (fresh deal, cleared
+    // scores/round/turn, right back on #felt) and never touch the room/mode itself. The
+    // previous version of this confirm callback called goLobby(), which tears down isOnline/
+    // roomRef and jumps to screen-lobby (the mode-picker splash) — for a solo vs-computer game
+    // that's not "a new game in this room", it's leaving the room/mode entirely and making the
+    // player pick "מול המחשב"/"אונליין עם חברים" all over again. resetMatchInPlace() below is
+    // the actual fix: same mode, same room (if online), same names/seats, just a fresh deal.
+    showConfirmBox('להתחיל משחק חדש?', 'הסבב הנוכחי יתאפס.', ()=>{ resetMatchInPlace(); });
     return;
   }
   showConfirmBox(
@@ -2615,6 +2622,27 @@ function newGame(){
     'שאר השחקנים יצטרכו לאשר. אם מישהו יסרב, המשחק הנוכחי ימשיך כרגיל.',
     ()=>{ proposeNewGame(); }
   );
+}
+// Resets the CURRENT match (fresh 6-card deal to every seat, cleared score history, round back
+// to 1, turn back to the starting seat) without leaving the room or mode — the player (or, for
+// an online host with no other humans present, the whole room) stays directly on #felt the
+// entire time. Reuses the EXISTING S.names/S.isHuman/S.active rather than a hardcoded fresh
+// roster, so a player's own typed name and the current active-seat count survive the reset —
+// only the cards/scores/turn are new, nothing about who's sitting at the table changes.
+function resetMatchInPlace(){
+  if(!S) return;
+  const namesNow = S.names.slice();
+  const isHumanNow = S.isHuman.slice();
+  const activeNow = S.active ? S.active.slice() : [true,true,true,true];
+  buildRoundState(namesNow, isHumanNow, [], 1, 0, activeNow);
+  document.getElementById('results-panel').classList.remove('show');
+  showScreen('screen-game');
+  renderAll();
+  if(isOnline && isHost) pushStateToFirebase();
+  // Vs-computer only: kick off the first bot turn if the starting seat isn't the human (same
+  // pattern startNextRound()/startLocalGame() already use) — online games have no local bot
+  // turns to drive (maybeBotTurn() itself is a no-op whenever isOnline && !isHost).
+  maybeBotTurn();
 }
 // Broadcast a "start new game?" proposal to every other real player in the room and wait for
 // all of them to approve before actually resetting — the existing pendingAction pipeline is a
