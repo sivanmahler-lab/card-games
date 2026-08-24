@@ -652,9 +652,27 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .rp-carousel-tab.active{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border-color:transparent;}
 .rp-carousel-body{display:flex;flex-direction:column;align-items:center;gap:10px;}
 .rp-carousel-cards{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;}
-.rp-carousel-cards .pcell{position:static;width:44px;height:62px;}
-.rp-carousel-cards .pcell .r{font-size:12px;}
-@media(min-width:400px){ .rp-carousel-cards{gap:8px;} .rp-carousel-cards .pcell{width:52px;height:74px;} .rp-carousel-cards .pcell .r{font-size:12px;} }
+/* Root cause of the vanishing rank digit: position:static here overrode .pcell's own base
+   position:relative, breaking the containing block .pcell.face .r's position:absolute relies on
+   to anchor "top:2px;right:3px" INSIDE the card. Without a positioned ancestor, that absolute .r
+   escapes to the nearest ancestor that DOES have position set (the modal, or higher) and renders
+   there instead — nowhere near the card, reading as "the rank disappeared". position:relative
+   !important (plus locking out animation/transform, so nothing here can ever re-trigger a flip
+   that briefly re-lays things out) keeps every rank digit anchored inside its own card, always.
+   #magnify-overlay's own .magnify-card-grid .pcell never set position:static in the first place
+   (so it was never actually affected by this bug) — it keeps its own larger 62x86 sizing; only
+   the position/animation/transform lockdown is shared defensively with it here. */
+.rp-carousel-cards .pcell, #magnify-overlay .pcell{
+  position:relative !important;animation:none !important;transform:none !important;
+}
+.rp-carousel-cards .pcell{width:48px !important;height:68px !important;}
+.rp-carousel-cards .pcell .r, #magnify-overlay .pcell .r{
+  position:absolute !important;top:2px !important;right:3px !important;
+  display:block !important;opacity:1 !important;visibility:visible !important;
+  font-weight:800 !important;z-index:10 !important;
+}
+.rp-carousel-cards .pcell .r{font-size:13px !important;}
+@media(min-width:400px){ .rp-carousel-cards{gap:8px;} }
 .rp-carousel-score{font-family:'Rubik',sans-serif;font-size:14px;color:var(--gold-bright);font-weight:700;}
 .rp-carousel-nav{display:flex;align-items:center;gap:14px;}
 .rp-carousel-nav button{background:rgba(255,255,255,.08);border:1px solid rgba(212,175,90,.4);color:var(--cream);
@@ -1500,7 +1518,6 @@ function finishCallerName(){
 // @keyframes animation (not a single transition) specifically so the arc's midpoint can exist at
 // all — a plain start->end transition can only ever interpolate a straight line between two
 // transforms, it has no way to pass through a third point along the way.
-let __ghostFlightSeq = 0;
 function flyGhostCard(card, fromRect, toRect){
   if(!fromRect || !toRect) return;
   // The keyframes below are generated per-call and applied via an inline style.animation, which
@@ -1526,52 +1543,29 @@ function flyGhostCard(card, fromRect, toRect){
   const dy = toRect.top - fromRect.top;
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
-  // The arc's peak sits at the midpoint of the flight, lifted above the straight-line path by a
-  // fraction of the vertical travel distance (floored/ceilinged so a near-horizontal flight
-  // still gets a visible little hop, and a very tall flight doesn't arc unreasonably high).
-  const liftPx = Math.max(18, Math.min(60, Math.abs(dy) * 0.35 || 26));
   ghost.style.transformOrigin = 'top right';
-  let styleTag = null;
-  const cleanup = ()=>{
-    if(ghost.parentNode) ghost.parentNode.removeChild(ghost);
-    if(styleTag && styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
-  };
+  const cleanup = ()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); };
   if(reduceMotion){
-    // No arc, no bounce — jump straight to the final resting transform so the swap is still
-    // visually communicated, just without any motion to reduce.
+    // Jump straight to the final resting transform so the swap is still visually communicated,
+    // just without any motion to reduce.
     ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
     setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 200);
     setTimeout(cleanup, 320);
     return;
   }
-  // Per-call @keyframes name: multiple ghosts can be in flight at the same time (a swap fires
-  // both an incoming and an outgoing flyGhostCard back to back), and CSS keyframes are global —
-  // reusing one shared name would let a second flight's keyframes silently redefine the first
-  // ghost's still-running animation out from under it.
-  //
-  // Smooth/fluid flight, not a bouncy spring: the previous version used var(--spring) (an
-  // overshoot cubic-bezier) PLUS its own extra scale-overshoot step at 80% (scaling past the
-  // final size and snapping back at 100%) — those two overshoots compounded into a visible
-  // "jerk"/snap right at landing. This version uses a single smooth ease-out-ish curve
-  // (cubic-bezier(0.25,1,0.5,1) — fast start, long gentle settle, no bounce-back anywhere)
-  // over the whole flight, and the keyframes themselves only ever move monotonically toward
-  // the final position/scale (one arc apex at 50%, nothing overshoots past the 100% values at
-  // any earlier keyframe), so there is nothing left to read as a "hop" or "snap" at landing —
-  // just one continuous, gently arcing glide from start to end.
-  const kfName = 'ghostFlight'+(__ghostFlightSeq++);
-  styleTag = document.createElement('style');
-  styleTag.textContent = `@keyframes ${kfName}{
-    0%{ transform:translate(0,0) scale(1,1); opacity:1; }
-    50%{ transform:translate(${dx*0.5}px, ${dy*0.5 - liftPx}px) scale(${1+(sw-1)*0.5},${1+(sh-1)*0.5}); opacity:1; }
-    100%{ transform:translate(${dx}px, ${dy}px) scale(${sw},${sh}); opacity:1; }
-  }`;
-  document.head.appendChild(styleTag);
-  ghost.style.animation = `${kfName} .38s cubic-bezier(0.25,1,0.5,1) forwards`;
-  // Fade starts only once the flight itself has fully settled (matches the .38s animation
-  // above, instead of firing 30ms early) so the ghost never visibly fades WHILE still moving —
-  // that partial-opacity-mid-flight look was part of what made the old landing feel abrupt.
-  setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 380);
-  setTimeout(cleanup, 500);
+  // Plain, single-property transition — no per-call @keyframes, no arc/lift, no scale-overshoot
+  // step. A dynamically-generated keyframe with its own mid-flight lift and scale-overshoot (peak
+  // at 50%, "settle" at 100%) is exactly what read as jerky/rotating — a straight, monotonic
+  // transition from the identity transform to the final translate+scale is a single continuous
+  // glide with nothing to overshoot or snap back from, and no layout shift (the ghost is
+  // position:fixed and only ever has its own transform/opacity touched, never left/top/width/
+  // height again after creation).
+  requestAnimationFrame(()=>{
+    ghost.style.transition = 'transform 0.28s ease-out, opacity 0.28s ease';
+    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+  });
+  setTimeout(()=>{ ghost.style.opacity='0'; }, 280);
+  setTimeout(cleanup, 400);
 }
 // Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
 // draw, still face-down. Reuses the plain card-back look.
@@ -2280,8 +2274,14 @@ function renderAll(){
     const slot = layoutSlotFor(disp);
     const nameEl = document.getElementById('pn-'+slot);
     const declared = S.finishCaller===actual;
-    let label = (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
-    if(lastRoundScores) label += ` · ${lastRoundScores[actual]} נק'`;
+    // Once the round has ended, EVERY player (including whoever declared "סיימתי") gets the
+    // exact same standard label — name plus this round's score, full stop. The "📣 ... סיימתי!"
+    // announcement text is only meaningful while the final round is still being played out; once
+    // scores are actually revealed, showing that same text on a name badge (in place of a score)
+    // was a leftover from `declared` being reused for both jobs — this is where it splits.
+    let label = roundEnded
+      ? S.names[actual] + (lastRoundScores ? ` • ${lastRoundScores[actual]} נק'` : '')
+      : (declared ? '📣 ' : '') + S.names[actual] + (declared ? ' — סיימתי!' : '');
     if(roundEnded){
       // Tap-to-magnify (round end only): the name badge itself is the tap target, plus a small
       // 🔍 hint so it's obvious at a glance — without hover, mobile has no other way to discover

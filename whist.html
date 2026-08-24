@@ -404,27 +404,31 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    so on a short/narrow mobile viewport where the bottom seat's fan can visually overlap the
    center trick area, the player's own hand always wins and is never partially hidden underneath
    an already-played card. */
-.seat.bottom{bottom:6px;left:50%;transform:translateX(-50%);z-index:20;}
-/* Explicit, maximally-defensive lockdown on top of the rules above: the bottom seat's own
-   wrapper AND its fan AND every card inside it must out-rank the side/top opponent seats so
-   the player's hand can never render partially hidden underneath a side fan on any viewport
-   where the two visually overlap (the exact bug narrow-mobile screenshots showed). */
-.seat.bottom{position:relative !important;z-index:100 !important;}
-.seat.bottom .fan, .seat.bottom .fan .card{z-index:100 !important;}
+/* Consolidated, exact lockdown block: the bottom seat's own wrapper AND its fan AND every
+   descendant inside it must out-rank the side/top opponent seats (so the player's hand can never
+   render partially hidden underneath a side fan on any viewport where the two visually overlap),
+   and the fan and everything in it must never transition/animate (kills the hand-jitter bug —
+   see renderOwnFan()'s own memoization guard in the JS for the render-side half of that fix). */
+.seat.bottom{
+  position:absolute !important;
+  bottom:6px !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+  z-index:100 !important;
+}
+.seat.bottom .fan{
+  position:relative !important;
+  z-index:100 !important;
+}
+.seat.bottom .fan, .seat.bottom .fan *{
+  transition:none !important;
+  animation:none !important;
+}
 /* Left/right opponents in this file's markup are .side-badge (name badge) + a separate sibling
    .fan.side.left-fan/.right-fan element — there is no literal .seat.left/.seat.right node — and
    the top opponent is .seat.top. All three are pulled down to the same low tier so none of them
    can ever out-rank the bottom seat above. */
 .seat.top, .side-badge, .fan.side{z-index:10 !important;}
-/* The player's own hand must be the single highest-stacked element on the whole table — higher
-   even than #trick-area/.played-card (z-index:50 !important) — so it can never render partially
-   underneath a card already lying in the center, on any viewport where the two visually overlap.
-   position:relative is required here: z-index has no effect at all on a statically-positioned
-   element, and .fan's own base rule (further below) doesn't set a position, so without this the
-   !important z-index would be silently ignored. The actual z-index value (100) is set by the
-   .seat.bottom .fan rule further above (right after .seat.bottom itself); this rule only still
-   needs to exist for the position:relative part. */
-.seat.bottom .fan{position:relative;}
 .seat.top{top:12px;left:50%;transform:translateX(-50%);}
 /* Side badges (left/right seats) are pinned to the TOP CORNERS of the felt, flush against the
    side edge (left:2px / right:2px) and near the very top (top:4px) — directly above their own
@@ -440,7 +444,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    badge-stats pills (bid/tricks numbers) had real content next to it, truncating names like
    "צ'רצ'יל" to "צ." on narrow phones. min-width lets the badge grow to fit its actual content
    (name + pills) instead of clipping the name to force a fixed width. */
-.side-badge{position:absolute;z-index:35;min-width:64px;max-width:130px;}
+.side-badge{position:absolute;z-index:35;min-width:90px;max-width:140px;}
 .side-badge.left-badge{left:2px;top:4px;}
 .side-badge.right-badge{right:2px;top:4px;}
 .fan.side{position:absolute;z-index:30;}
@@ -522,19 +526,10 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .fan.side{height:clamp(140px,28vmin,200px);width:clamp(52px,9vmin,58px);}
 /* The player's own hand cards are positioned ENTIRELY via transform (translate+rotate[+scale] —
    see renderOwnFan()'s JS) — left/top are set once to 0,0 at creation and never touched again.
-   Hand-card transform is explicitly NOT transitioned: .card's base rule below uses the bouncy
-   --spring easing (a deliberate overshoot-then-settle), which reads fine for an occasional single
-   selected/played card but produces a visible "jump"/kartaa ripple across the WHOLE remaining fan
-   every time it re-tightens its spread after a card leaves (fewer cards -> bigger spread per card
-   -> every other card's translate/rotate changes at once). Disabling the transition here makes the
-   remaining cards settle into their new spread instantly and statically instead of animating
-   through that overshoot — the thrown card's own flight to the trick area is a completely separate
-   element/animation (.played-card's cardLand keyframe) and is untouched by this rule. */
-.seat.bottom .fan .card{transition:none !important;}
-/* Belt-and-suspenders on top of the rule above: blocks transition/animation on the fan container
-   itself and every descendant (not just .card), so no future element added inside the own-hand
-   fan (a badge, an overlay, a hit-target) can ever reintroduce a jump/animate-in effect there. */
-.seat.bottom .fan, .seat.bottom .fan *{transition:none !important;animation:none !important;}
+   Hand-card transform/transition/animation are all fully locked down by the consolidated
+   .seat.bottom .fan, .seat.bottom .fan * rule further above (right after .seat.bottom itself) —
+   nothing further needed here. The thrown card's own flight to the trick area is a completely
+   separate element/animation (.played-card's cardLand keyframe), untouched by that lockdown. */
 .card{
   /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
      purpose — this stays a per-viewer visual size that responds to each screen, but a wide
@@ -587,6 +582,12 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .card.legal:hover{transform:translateY(-16px) scale(1.05);box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:30;}
 .card.illegal{filter:saturate(.65) brightness(.92);opacity:.7;}
 .card.selected{transform:translateY(-20px) scale(1.08);box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);}
+/* Position-neutral selected cue used ONLY by renderOwnFanStatusOnly() (see its own JS comment) —
+   box-shadow/z-index only, deliberately no transform, since that path must never move a card
+   that's already correctly positioned from its last full layout pass. */
+.card.status-selected{box-shadow:0 0 0 3px var(--gold-bright),0 0 18px rgba(240,216,150,.5);z-index:250 !important;}
+/* Position-neutral hover cue, same reasoning as .status-selected above — no transform. */
+.card.status-hover{box-shadow:0 10px 20px rgba(0,0,0,.5),0 0 16px rgba(240,216,150,.45);z-index:200 !important;}
 
 .card-confirm-hint{
   position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
@@ -1821,6 +1822,7 @@ function renderOwnFan(fan, actual){
     const hint = document.getElementById('card-confirm-hint');
     if(hint) hint.classList.remove('show');
     fan.dataset.ownFanSig = '';
+    fan.dataset.ownFanHandSig = '';
     return;
   }
   const legal = getLegalCardsForHuman();
@@ -1851,7 +1853,23 @@ function renderOwnFan(fan, actual){
   const handSig = hand.map(c=>c.suit+'-'+c.rank).join('|');
   const sig = handSig+'::'+legalSig+'::'+isPlayable+'::'+selSig;
   if(fan.dataset.ownFanSig === sig) return;
+
+  // Two-tier memoization: the hand's own cards/order (handSig) is what LAYOUT (x/y/angle/
+  // transform) depends on — legality, turn state, and selection can all change on their own
+  // (e.g. the led suit changes what's legal without a card actually leaving the hand) without
+  // ever needing a single card to move. Only when handSig itself changed since the last full
+  // layout pass do we recompute positions/transform at all; otherwise this render is a "status
+  // only" pass — classList (.legal/.illegal/.selected) and the hit overlays are rebuilt, but
+  // no card's x/y/angle/transform is ever touched, so a legality change mid-trick can never by
+  // itself cause the fan to visibly move.
+  const layoutUnchanged = fan.dataset.ownFanHandSig === handSig;
   fan.dataset.ownFanSig = sig;
+  fan.dataset.ownFanHandSig = handSig;
+
+  if(layoutUnchanged){
+    renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable);
+    return;
+  }
 
   const containerW = fan.clientWidth || 300;
   const containerH = fan.clientHeight || 100;
@@ -2008,6 +2026,96 @@ function renderOwnFan(fan, actual){
 
   // Clear a stale selection (card no longer in hand, or no longer legal — e.g. the led
   // suit changed) so we don't leave the hint pill stuck on with nothing actually selected.
+  if(selectedCard && !selectionStillValid) selectedCard = null;
+  const hint = document.getElementById('card-confirm-hint');
+  if(hint) hint.classList.toggle('show', selectionStillValid);
+}
+// "Status only" pass: the hand's own cards/order haven't changed since the last full layout
+// (see renderOwnFan()'s layoutUnchanged check), so every card's existing DOM node, x/y/angle and
+// transform are left completely untouched here — only className (.legal/.illegal/.selected) is
+// updated in place, and the legal-card hit overlays are rebuilt fresh (their onclick closures
+// capture isPlayable/legal by value, so they'd otherwise go stale the moment either changes).
+// This is what actually stops a legality/turn/selection change (e.g. the led suit changing what's
+// playable) from ever moving a single card in the fan.
+function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
+  fan.style.pointerEvents = isPlayable ? 'auto' : 'none';
+
+  // Drop only the old hit overlays (elements with no cardKey) — every card element itself
+  // (keyed by cardKey) is left in place untouched.
+  Array.from(fan.children).forEach(el=>{
+    if(!el.dataset || !el.dataset.cardKey) fan.removeChild(el);
+  });
+
+  const containerW = fan.clientWidth || 300;
+  const containerH = fan.clientHeight || 100;
+  const n = hand.length;
+  const probe = document.createElement('div');
+  probe.className='card'; probe.style.visibility='hidden'; probe.style.position='absolute';
+  fan.appendChild(probe);
+  const cardW = probe.offsetWidth || 60;
+  fan.removeChild(probe);
+  const maxSpread = cardW*0.86;
+  const spread = n>1 ? Math.min(maxSpread, (containerW-cardW)/(n-1)) : 0;
+  const totalWidth = cardW + spread*(n-1);
+  const startX = Math.max(0, (containerW-totalWidth)/2);
+  // Only needed to rebuild the legal-card hit overlays' boundaries — no angle/x/y is computed
+  // for the cards themselves here, since this whole function never moves a card (see above).
+  const boundaries = [0];
+  for(let k=1;k<n;k++){
+    boundaries.push(startX + (k-1)*spread + (cardW+spread)/2);
+  }
+  boundaries.push(containerW);
+
+  let selectionStillValid = false;
+  hand.forEach((c,i)=>{
+    const key = c.suit+'-'+c.rank;
+    const el = fan.querySelector(`[data-card-key="${key}"]`);
+    if(!el) return; // shouldn't happen — handSig matched, so every key must already exist
+    const isLegal = legal===null ? true : legal.some(lc=>lc.suit===c.suit && lc.rank===c.rank);
+    const cls = isPlayable ? (isLegal?'legal':'illegal') : '';
+    const isSelected = cls==='legal' && selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank;
+    if(isSelected) selectionStillValid = true;
+    // status-selected (not the shared .card.selected class, which carries its own transform:
+    // translateY/scale — applying that here would fight the inline transform this card already
+    // has from its last full layout pass, since inline styles always win over a CSS class, and
+    // this status-only path must never touch el.style.transform for ANY card, selected included)
+    // — box-shadow/z-index-only visual cue, entirely independent of position.
+    el.className = `card ${suitClass(c.suit)} ${cls}${isSelected ? ' status-selected' : ''}`;
+    // el.style.left/top/transform are NEVER written here — only className changes.
+
+    if(cls==='legal'){
+      const hit = document.createElement('div');
+      hit.style.position='absolute';
+      hit.style.left = boundaries[i]+'px';
+      hit.style.top = '0px';
+      hit.style.width = (boundaries[i+1]-boundaries[i])+'px';
+      hit.style.height = containerH+'px';
+      hit.style.zIndex = 300+i;
+      hit.style.cursor='pointer';
+      hit.style.background='transparent';
+      hit.onclick = ()=>{
+        const myActualNow = seatFor(0);
+        if(S.phase!=='playing' || currentTrickPlayer()!==myActualNow || !S.isHuman[myActualNow]){
+          selectedCard = null;
+          return;
+        }
+        if(selectedCard && selectedCard.suit===c.suit && selectedCard.rank===c.rank){
+          selectedCard = null;
+          playHumanCard(c);
+        } else {
+          selectedCard = {suit:c.suit, rank:c.rank};
+          renderTable();
+        }
+      };
+      // Hover feedback here is box-shadow/z-index only via a class (.status-hover) — never
+      // transform — for the same reason selection uses .status-selected instead of the shared
+      // .card.selected class: this path must never move a card off its last full-layout position.
+      hit.addEventListener('mouseenter', ()=>{ if(!isSelected) el.classList.add('status-hover'); });
+      hit.addEventListener('mouseleave', ()=>{ if(!isSelected) el.classList.remove('status-hover'); });
+      fan.appendChild(hit);
+    }
+  });
+
   if(selectedCard && !selectionStillValid) selectedCard = null;
   const hint = document.getElementById('card-confirm-hint');
   if(hint) hint.classList.toggle('show', selectionStillValid);
