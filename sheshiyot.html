@@ -89,13 +89,13 @@ button{font-family:'Heebo',sans-serif;}
    gradient button containing Hebrew text caused the button's own label to render
    garbled/doubled (a known WebKit text-compositing glitch), so those buttons keep
    the plain gradient look instead. */
-.mode-card,.tb-btn,.btn-secondary,.action-bar button{position:relative;overflow:hidden;}
-.mode-card::after,.tb-btn::after,.btn-secondary::after,.action-bar button::after{
+.mode-card,.tb-btn,.btn-secondary,#btn-finish,#btn-endturn{position:relative;overflow:hidden;}
+.mode-card::after,.tb-btn::after,.btn-secondary::after,#btn-finish::after,#btn-endturn::after{
   content:'';position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.16) 50%,transparent 60%);
   transform:translateX(-130%);transition:transform .55s ease;
 }
-.mode-card:hover::after,.tb-btn:hover::after,.btn-secondary:hover::after,.action-bar button:not(:disabled):hover::after{transform:translateX(130%);}
+.mode-card:hover::after,.tb-btn:hover::after,.btn-secondary:hover::after,#btn-finish:not(:disabled):hover::after,#btn-endturn:not(:disabled):hover::after{transform:translateX(130%);}
 
 /* ---------- SPLASH / LOADING SCREEN ---------- */
 @keyframes splashEmblemGlow{0%,100%{filter:drop-shadow(0 0 8px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 20px rgba(240,216,150,.7));}}
@@ -734,35 +734,60 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   .pile.turn-hint{animation:none;box-shadow:0 0 0 3px rgba(240,216,150,.55);}
 }
 
-/* .action-bar-wrap is the element renderAll() actually shows/hides (display:flex/none) —
-   .action-bar itself is just the button row now, so its own display stays a plain flex
-   and doesn't need touching from JS.
-   position:absolute WITHIN #felt (it now lives inside #felt in the HTML, not as a flex sibling
-   of #table-wrap) and pinned just above the player's own hand at a fixed pixel offset. Being
-   absolutely positioned takes it out of #felt's normal flow entirely, so toggling its display
-   between none/flex can never resize #felt or shift #pw-0 (or anything else) — this is the actual
-   fix for the "cards jump when the button bar appears" bug, in place of the earlier position:fixed-
-   to-viewport approach (which stopped the jump but could visually detach the hand from the green
-   felt itself). */
-.action-bar-wrap{
-  position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
-  width:calc(100% - 24px);max-width:520px;flex-direction:column;align-items:center;gap:0;z-index:30;
+/* Action buttons flank the player's own hand (#pw-0) at the SAME vertical level, one on each
+   side, instead of sitting in a bar above it. #pw-0 is horizontally centered in #felt at a fixed
+   width, so each button is pinned to the felt's own left/right edge and vertically centered on
+   the hand's own bottom:10px position — leaving the center of the felt (where #pile-open/
+   #pile-closed live) completely untouched on every viewport width, including narrow phones where
+   the old above-the-hand bar used to sit right over the piles. Both are position:absolute
+   directly in #felt (not a flex sibling of #table-wrap, same reasoning as #pw-0's own comment),
+   so toggling them can never resize #felt or shift anything else. */
+#btn-endturn, #btn-finish{
+  position:absolute;bottom:14px;z-index:30;
+  display:none; /* toggled to inline-flex by renderAll() exactly like the old .action-bar-wrap was */
+  flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  width:64px;height:64px;border-radius:50%;
+  border:1px solid rgba(212,175,90,.4);background:rgba(0,0,0,.55);
+  color:var(--cream);font-size:10.5px;font-weight:700;line-height:1.15;cursor:pointer;
+  padding:4px;text-align:center;
+  box-shadow:0 4px 14px rgba(0,0,0,.4);
 }
-@media(min-width:700px){ .action-bar-wrap{max-width:640px;} }
-@media(min-width:1000px){ .action-bar-wrap{max-width:760px;} }
-.action-bar{width:100%;background:rgba(0,0,0,.35);border:1px solid rgba(212,175,90,.25);border-radius:12px;
-  padding:10px 14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
-.action-bar-hint{width:100%;text-align:center;font-size:11.5px;line-height:1.5;color:rgba(250,244,230,.75);
-  padding:6px 10px 0;}
-.action-bar button{padding:9px 16px;border-radius:10px;border:1px solid rgba(212,175,90,.4);background:rgba(255,255,255,.06);
-  color:var(--cream);font-size:13px;font-weight:700;cursor:pointer;}
-.action-bar button.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
+#btn-endturn.show, #btn-finish.show{display:flex;}
+/* "העבר תור" sits to the RIGHT of the hand (this file is RTL throughout, but the two buttons'
+   left/right placement is a fixed, non-mirrored visual layout — the requesting spec calls for
+   "endturn on the right, finish on the left" as literal screen sides, not logical start/end). */
+#btn-endturn{right:8px;}
+#btn-finish{left:8px;}
+@media(min-width:480px){
+  #btn-endturn{right:calc(50% - 190px);}
+  #btn-finish{left:calc(50% - 190px);}
+}
+@media(min-width:700px){
+  #btn-endturn{right:calc(50% - 250px);}
+  #btn-finish{left:calc(50% - 250px);}
+}
+#btn-endturn.hot{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border:none;}
 /* "הכרז סיום!" is a significant, hard-to-take-back declaration (starts the final round for
    everyone) — styled with its own bold/alert accent so it visually stands apart from the
-   plain "העבר תור" advance button next to it, rather than the two reading as equally routine. */
+   plain "העבר תור" button, rather than the two reading as equally routine. */
 #btn-finish{background:linear-gradient(160deg,#e0554a,#a8342b);color:#fff;border:none;font-weight:800;}
 #btn-finish:not(:disabled):hover{box-shadow:0 0 14px rgba(224,85,74,.45);}
-.action-bar button:disabled{opacity:.4;cursor:default;}
+#btn-endturn:disabled, #btn-finish:disabled{opacity:.4;cursor:default;}
+/* Persistent micro-copy strip: sits in the clean gap between the pile (above) and the hand
+   (below) — NOT overlapping either — so it never climbs over the name badges the way an
+   above-the-hand bar used to on short viewports. Positioned as a fixed offset from the hand's
+   own bottom:10px + its rendered height, same idea as the buttons' own placement. */
+.action-bar-hint{
+  position:absolute;left:50%;bottom:116px;transform:translateX(-50%);z-index:28;
+  width:calc(100% - 148px);max-width:360px;
+  text-align:center;font-size:11px;line-height:1.4;color:rgba(250,244,230,.8);
+  background:rgba(0,0,0,.4);border-radius:10px;padding:5px 10px;
+  display:none;
+}
+.action-bar-hint.show{display:block;}
+@media(max-width:420px){
+  .action-bar-hint{bottom:100px;font-size:10.5px;width:calc(100% - 100px);}
+}
 
 /* ---- Round-end summary bar ------------------------------------------------------------------
    Non-blocking replacement for the old auto-opening full-screen results modal: the felt stays
@@ -1101,23 +1126,23 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
         </div>
       </div>
       <!-- Deliberately INSIDE #felt now (not a sibling of #table-wrap) and position:absolute
-           relative to it, pinned just above the player's own hand (#pw-0, also absolute within
-           #felt — see both elements' CSS). Being absolutely positioned inside #felt means
-           toggling this bar's display can never change #felt's own box size or push/shift
-           anything else in normal document flow — #felt's size is driven only by its min-height
-           and #table-wrap's flex sizing, neither of which this bar participates in at all. -->
-      <div class="action-bar-wrap" id="action-bar-wrap" style="display:none;">
-        <div class="action-bar" id="action-bar">
-          <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז סיום! 🔔</button>
-          <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר תור ◀</button>
-        </div>
-        <!-- Persistent micro-copy under the two buttons above — mobile has no hover state, so the
-             title="" tooltips on the buttons themselves are invisible there. This explanatory line
-             is always on screen (not hover- or tap-dependent) and swaps text based on which button
-             is actually enabled right now, so a player who's never touched this game before still
-             knows what pressing either one does. See renderAll() for the swap logic. -->
-        <div class="action-bar-hint" id="action-bar-hint"></div>
-      </div>
+           relative to it, flanking the player's own hand (#pw-0, also absolute within #felt) one
+           on each side rather than sitting in a bar above it — that bar used to sit right on top
+           of the center piles (#pile-open/#pile-closed) on short mobile viewports. Being
+           absolutely positioned inside #felt means toggling these can never change #felt's own
+           box size or push/shift anything else in normal document flow — #felt's size is driven
+           only by its min-height and #table-wrap's flex sizing, neither of which these buttons
+           participate in at all. -->
+      <button id="btn-finish" onclick="declareFinished()" title="הכרזה שסיימת לחשוף/להשלים את היד. לכל שאר השחקנים יישאר תור אחד אחרון והמשחק יסתיים!">הכרז<br>סיום!<br>🔔</button>
+      <button id="btn-endturn" class="hot" onclick="endMyTurn()" title="התור שלך הסתיים, מעביר את התור לשחקן הבא">העבר<br>תור<br>◀</button>
+      <!-- Persistent micro-copy — mobile has no hover state, so the title="" tooltips on the
+           buttons themselves are invisible there. This explanatory line is always on screen (not
+           hover- or tap-dependent) and swaps text based on which button is actually enabled right
+           now, so a player who's never touched this game before still knows what pressing either
+           one does. Sits in the clean gap between the pile and the hand — see its own CSS — so it
+           never climbs over the name badges the way the old above-the-hand bar could on short
+           viewports. See renderAll() for the swap logic. -->
+      <div class="action-bar-hint" id="action-bar-hint"></div>
     </div>
   </div>
   <!-- ROUND-END SUMMARY BAR — replaces the old auto-opening full-screen results modal. Cards are
@@ -2401,13 +2426,15 @@ function renderAll(){
     reb.style.display = 'none';
   }
 
-  // action bar
-  const barWrap = document.getElementById('action-bar-wrap');
+  // action buttons (now two independent circular buttons flanking the hand, not a shared bar —
+  // see their CSS for why) plus the hint strip between the pile and the hand.
   const finBtn = document.getElementById('btn-finish');
   const endBtn = document.getElementById('btn-endturn');
   const hintEl = document.getElementById('action-bar-hint');
   const myTurnNow = S.phase==='playing' && S.turn===myActual && S.isHuman[myActual];
-  barWrap.style.display = myTurnNow ? 'flex' : 'none';
+  finBtn.classList.toggle('show', myTurnNow);
+  endBtn.classList.toggle('show', myTurnNow);
+  hintEl.classList.toggle('show', myTurnNow);
   document.getElementById('my-turn-banner')?.classList.toggle('show', myTurnNow);
   document.getElementById('pw-0')?.classList.toggle('my-turn', myTurnNow);
   if(myTurnNow){
