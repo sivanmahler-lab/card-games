@@ -502,12 +502,15 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .fan.side{height:clamp(140px,28vmin,200px);width:clamp(52px,9vmin,58px);}
 /* The player's own hand cards are positioned ENTIRELY via transform (translate+rotate[+scale] —
    see renderOwnFan()'s JS) — left/top are set once to 0,0 at creation and never touched again.
-   This rule locks that down at the CSS level too: left/top/width/height can never be transitioned
-   (nothing should ever animate them, since nothing should ever SET them past creation) while
-   transform stays free to transition smoothly on .card's own base rule below. This is the belt to
-   that JS's suspenders — even a future code path that mistakenly writes el.style.left again would
-   at least not compound the mistake with a broken transition on top of it. */
-.seat.bottom .fan .card{transition-property:transform, box-shadow, filter, opacity;}
+   Hand-card transform is explicitly NOT transitioned: .card's base rule below uses the bouncy
+   --spring easing (a deliberate overshoot-then-settle), which reads fine for an occasional single
+   selected/played card but produces a visible "jump"/kartaa ripple across the WHOLE remaining fan
+   every time it re-tightens its spread after a card leaves (fewer cards -> bigger spread per card
+   -> every other card's translate/rotate changes at once). Disabling the transition here makes the
+   remaining cards settle into their new spread instantly and statically instead of animating
+   through that overshoot — the thrown card's own flight to the trick area is a completely separate
+   element/animation (.played-card's cardLand keyframe) and is untouched by this rule. */
+.seat.bottom .fan .card{transition:none !important;}
 .card{
   /* Ceilings (the clamp's max) are kept fairly tight and the vmin factor modest, on
      purpose — this stays a per-viewer visual size that responds to each screen, but a wide
@@ -1334,7 +1337,7 @@ function otherHumansPresent(){
 }
 function newGame(){
   if(!otherHumansPresent()){
-    showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ goLobby(); });
+    showConfirmBox('להתחיל משחק חדש?', 'הסיבוב הנוכחי והניקוד יתאפסו.', ()=>{ resetMatchInPlace(); });
     return;
   }
   showConfirmBox(
@@ -1348,6 +1351,21 @@ function newGame(){
 // a genuine broadcast-and-collect-votes exchange (the existing pendingAction pipeline is a
 // one-shot client->host action, not a multi-party ack) — modeled as its own small node so it
 // doesn't have to be squeezed into that unrelated mechanism.
+// Reset the match on the CURRENT board (same room / same bots) instead of returning to the
+// splash/lobby screen. Reuses beginMatch()'s own reset-and-redeal shape (the exact path a fresh
+// solo start, and the multi-human "everyone agreed" vote in handleResetVoteUpdate(), already use)
+// so scores/bids/tricks/trump all reset the same way and a fresh 13-card hand is dealt to every
+// seat — just carrying over the current names/seats as-is, since nobody's seat assignment changed.
+function resetMatchInPlace(){
+  if(!S) return;
+  const names = S.names.slice(), isHuman = S.isHuman.slice();
+  const mode = S.mode;
+  S = freshState();
+  S.mode = mode;
+  S.names = names;
+  S.isHuman = isHuman;
+  beginMatch();
+}
 function proposeNewGame(){
   if(!roomRef) return;
   const votes = {};
