@@ -1164,6 +1164,13 @@ function freshState(){
     hands:[[],[],[],[]],
     totals:[0,0,0,0],
     roundNum:1,
+    // Separate from roundNum on purpose: roundNum is the SCORED round count shown in the UI
+    // pill, which only advances once a round actually finishes (see finishRound()'s roundNum++).
+    // dealNum advances on every physical deal of new cards — including a redeal after everyone
+    // passes trump bidding, which is still the SAME roundNum but a completely fresh 13-card hand
+    // per player. renderOwnFan()'s fresh-deal detection needs to fire on every deal, not just
+    // every scored round — see startRound() and renderOwnFan() for the bug this fixes.
+    dealNum:0,
     starter:0,
     phase:'idle',
     trumpBid:null,
@@ -1708,6 +1715,12 @@ function beginMatch(){
 
 /* ============================= ROUND SETUP ============================= */
 function startRound(){
+  // Bump on every physical deal — including a same-round redeal after all four players pass
+  // trump bidding. This is the signal renderOwnFan() uses to detect "the hand was actually
+  // redealt" (see its own comment); roundNum alone doesn't change on a same-round redeal, which
+  // used to leave the previous deal's per-card slot assignments in place and made the freshly
+  // dealt hand render as a jumbled, badly-spread pile instead of a clean fan.
+  S.dealNum = (S.dealNum||0) + 1;
   let deck = shuffle(makeDeck());
   S.hands = [ sortHand(deck.slice(0,13)), sortHand(deck.slice(13,26)), sortHand(deck.slice(26,39)), sortHand(deck.slice(39,52)) ];
   S.trumpBid=null;
@@ -1907,22 +1920,30 @@ function renderOwnFan(fan, actual){
   // dataset — a dataset string can't hold structured per-key data cheaply) persists across
   // renders; a card thrown only ever REMOVES that one key's slot, never renumbers the rest.
   //
-  // Fresh-deal detection is keyed off S.roundNum, NOT off guessing from card-key overlap — an
+  // Fresh-deal detection is keyed off S.dealNum, NOT off guessing from card-key overlap — an
   // overlap-based heuristic ("every current key is new") is a real correctness bug: a fresh
   // 13-card deal can easily happen to contain a card with the exact same suit+rank as one from
-  // the PREVIOUS round's hand (there's nothing preventing that), which made the old heuristic
+  // the PREVIOUS deal's hand (there's nothing preventing that), which made the old heuristic
   // treat it as "not a fresh deal", carry over the old slotByKey map, and hand out slot numbers
   // far past the fan's actual card count for the genuinely-new cards — silently corrupting the
   // whole hand's spread/positions (and with it, the legal-card hit-boxes computed from those
-  // positions) until the round actually ended and reset. S.roundNum only ever changes exactly
-  // once per dealt round (see startRound()), so it's an unambiguous, always-correct signal.
+  // positions).
+  // NOTE: this used to key off S.roundNum instead, on the assumption that it "only ever changes
+  // exactly once per dealt round". That assumption was wrong: a redeal after all four players
+  // pass trump bidding calls startRound() again — a genuinely fresh 13-card deal — WITHOUT
+  // roundNum changing (roundNum only advances once a round is actually scored). That mismatch is
+  // exactly what caused the "cards land in a jumbled heap" bug after an all-pass redeal: the old
+  // slotByKey map (and its already-maxed-out __slotMax) carried straight over into the new hand,
+  // so freshly dealt cards kept getting handed slot numbers past the fan's actual size instead of
+  // 0..12. dealNum (see its own comment in freshState()/startRound()) advances on every physical
+  // deal, redeal included, so it's the correct, unambiguous signal here.
   if(!fan.__slotByKey) fan.__slotByKey = new Map();
   if(!fan.__slotMax) fan.__slotMax = 0;
   const slotByKey = fan.__slotByKey;
   const keysNow = hand.map(c=>c.suit+'-'+c.rank);
   const keysNowSet = new Set(keysNow);
-  const isFreshDeal = fan.__slotRoundNum !== S.roundNum;
-  fan.__slotRoundNum = S.roundNum;
+  const isFreshDeal = fan.__slotDealNum !== S.dealNum;
+  fan.__slotDealNum = S.dealNum;
   if(isFreshDeal){
     slotByKey.clear();
     keysNow.forEach((k,i)=>slotByKey.set(k,i));
@@ -2202,27 +2223,29 @@ function renderBackFan(fan, disp, n){
   //
   // Fix mirrors renderOwnFan()'s static-slot approach, just simplified for backs (which are all
   // visually identical, so there's no need to key by card identity — only the SLOT COUNT needs
-  // to stay fixed for the whole round). fan.__backSlotCount is locked in once per round (detected
-  // via S.roundNum, same signal renderOwnFan() uses for its own fresh-deal check) and geometry
-  // is always computed from that locked count, never from the current, possibly-shrunk `n` — so
-  // a card thrown removes exactly one element from the end and leaves every remaining card-back
+  // to stay fixed for the whole deal). fan.__backSlotCount is locked in once per deal (detected
+  // via S.dealNum — see its own comment in freshState()/startRound() for why this is dealNum and
+  // not roundNum: a same-round redeal after all-pass bidding changes dealNum but not roundNum,
+  // and this needs to reset on THAT too, not just on a fully scored new round) and geometry is
+  // always computed from that locked count, never from the current, possibly-shrunk `n` — so a
+  // card thrown removes exactly one element from the end and leaves every remaining card-back
   // element completely untouched at its already-correct position.
-  const isFreshDeal = fan.__backRoundNum !== S.roundNum;
+  const isFreshDeal = fan.__backDealNum !== S.dealNum;
   if(isFreshDeal){
-    fan.__backRoundNum = S.roundNum;
+    fan.__backDealNum = S.dealNum;
     fan.__backSlotCount = n;
     fan.innerHTML = '';
     fan.__backCount = 0;
   } else if(n > (fan.__backSlotCount||0)){
-    // Defensive only — a hand should never grow mid-round, but if it somehow does, don't let
+    // Defensive only — a hand should never grow mid-deal, but if it somehow does, don't let
     // slotCount fall behind the actual count.
     fan.__backSlotCount = n;
   }
   const slotCount = fan.__backSlotCount||0;
   if(slotCount===0) return;
   if(n===0){
-    // Round/hand emptied out — clear everything and reset for the next fresh deal.
-    fan.innerHTML=''; fan.__backCount=0; fan.__backSlotCount=0; fan.__backRoundNum=undefined;
+    // Hand emptied out — clear everything and reset for the next fresh deal.
+    fan.innerHTML=''; fan.__backCount=0; fan.__backSlotCount=0; fan.__backDealNum=undefined;
     return;
   }
 
@@ -3745,6 +3768,7 @@ function applyRemoteState(remote){
   S.currentTrick = remote.currentTrick || [];
   S.turnInTrick = remote.turnInTrick !== undefined ? remote.turnInTrick : 0;
   S.roundNum = remote.roundNum || 1;
+  S.dealNum = remote.dealNum !== undefined ? remote.dealNum : S.dealNum;
   S.totals = remote.totals || [0,0,0,0];
   S.starter = remote.starter || 0;
   S.roundType = remote.roundType || null;
@@ -3807,6 +3831,7 @@ function pushStateToFirebase(){
     currentTrick: S.currentTrick,
     turnInTrick: S.turnInTrick,
     roundNum: S.roundNum,
+    dealNum: S.dealNum,
     totals: S.totals,
     starter: S.starter,
     roundType: S.roundType || null,
