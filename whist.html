@@ -1128,6 +1128,20 @@ function sortHand(h){ return h.slice().sort((a,b)=> suitDisplayRank(a.suit)-suit
 
 /* ============================= STATE ============================= */
 let S = null;
+// Monotonic, page-lifetime counter behind S.dealNum — deliberately kept OUTSIDE of S. S itself
+// gets fully replaced (S = freshState()) every time a match resets in place (resetMatchInPlace(),
+// the online "everyone agreed" reset, a fresh chooseMode()) — freshState() zeroes dealNum back to
+// 0 every time that happens. The fan DOM elements, though, are NOT recreated on a same-room reset
+// — they're the exact same #fan-0..#fan-3 elements carrying over their __slotDealNum/__backDealNum
+// from the PREVIOUS match. If the previous match had only gotten through, say, 1 deal before
+// "New Game" was clicked, and the new match's own first deal also lands on dealNum===1, the fan's
+// cached "last seen dealNum" collides with the new deal's dealNum even though it's a completely
+// different hand — renderOwnFan()/renderBackFan() then wrongly treat it as the SAME deal, reuse
+// the old (now-irrelevant) slot map, and the new hand renders as a corrupted, clustered pile. A
+// counter that lives outside S and only ever counts up for the whole page session — never reset
+// by S = freshState() — guarantees a fresh deal's number can never coincide with anything any fan
+// has seen before, match-reset or not.
+let dealCounter = 0;
 
 // Two-tap card play: first tap on a legal card selects it (lifts it up); a second tap on
 // the SAME card actually plays it. Tapping a different legal card just moves the selection.
@@ -1169,7 +1183,10 @@ function freshState(){
     // dealNum advances on every physical deal of new cards — including a redeal after everyone
     // passes trump bidding, which is still the SAME roundNum but a completely fresh 13-card hand
     // per player. renderOwnFan()'s fresh-deal detection needs to fire on every deal, not just
-    // every scored round — see startRound() and renderOwnFan() for the bug this fixes.
+    // every scored round — see startRound() and renderOwnFan() for the bug this fixes. The actual
+    // value assigned here is irrelevant (startRound() always overwrites it from the page-lifetime
+    // dealCounter, see that variable's own comment for why) — 0 is just a harmless placeholder
+    // for a match that hasn't dealt its first hand yet.
     dealNum:0,
     starter:0,
     phase:'idle',
@@ -1559,6 +1576,12 @@ function clearSavedGame(){
 // drive" approach below, since a page reload is really just a very long tab-hidden gap.
 function resumeSavedGame(saved){
   S = Object.assign(freshState(), saved.state);
+  // Keep the page-lifetime dealCounter (see its own declaration comment) from ever falling
+  // BEHIND a dealNum restored from a save — otherwise the very next real deal on this fresh
+  // page load could hand out a dealNum the fan elements already saw during THIS resumed
+  // session's first render, re-triggering the exact same stale-slot collision dealCounter
+  // exists to prevent.
+  dealCounter = Math.max(dealCounter, S.dealNum||0);
   isOnline=false; isHost=false; myOnlineSeat=0;
   S.genId = (S.genId||0)+1;
   S.turnSig=''; S.turnSigTime=Date.now();
@@ -1720,7 +1743,7 @@ function startRound(){
   // redealt" (see its own comment); roundNum alone doesn't change on a same-round redeal, which
   // used to leave the previous deal's per-card slot assignments in place and made the freshly
   // dealt hand render as a jumbled, badly-spread pile instead of a clean fan.
-  S.dealNum = (S.dealNum||0) + 1;
+  S.dealNum = ++dealCounter;
   let deck = shuffle(makeDeck());
   S.hands = [ sortHand(deck.slice(0,13)), sortHand(deck.slice(13,26)), sortHand(deck.slice(26,39)), sortHand(deck.slice(39,52)) ];
   S.trumpBid=null;
@@ -3769,6 +3792,10 @@ function applyRemoteState(remote){
   S.turnInTrick = remote.turnInTrick !== undefined ? remote.turnInTrick : 0;
   S.roundNum = remote.roundNum || 1;
   S.dealNum = remote.dealNum !== undefined ? remote.dealNum : S.dealNum;
+  // Same reasoning as resumeSavedGame()'s own comment: never let the local dealCounter fall
+  // behind a dealNum received from the host, or a later locally-driven deal on this client
+  // could collide with a dealNum its own fan elements already rendered during this session.
+  dealCounter = Math.max(dealCounter, S.dealNum||0);
   S.totals = remote.totals || [0,0,0,0];
   S.starter = remote.starter || 0;
   S.roundType = remote.roundType || null;
