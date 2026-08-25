@@ -406,9 +406,17 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    an already-played card. */
 /* Consolidated, exact lockdown block: the bottom seat's own wrapper AND its fan AND every
    descendant inside it must out-rank the side/top opponent seats (so the player's hand can never
-   render partially hidden underneath a side fan on any viewport where the two visually overlap),
-   and the fan and everything in it must never transition/animate (kills the hand-jitter bug —
-   see renderOwnFan()'s own memoization guard in the JS for the render-side half of that fix). */
+   render partially hidden underneath a side fan on any viewport where the two visually overlap).
+   NOTE: this used to also force transition:none!important/animation:none!important on every
+   descendant here, on the theory that killing all motion was what fixed the hand-jitter bug. That
+   was the wrong fix for the wrong problem: the actual jitter was DOM elements being wiped and
+   rebuilt from scratch every render (fixed in the JS reconciliation — see renderOwnFan()'s own
+   comments), not the CSS transition itself. Blanket-killing transition here as "belt and
+   suspenders" had a real, user-visible cost: it also killed the intentional glide when the fan
+   re-tightens after a card is thrown (see the fanGeometry() comment in the JS), which is exactly
+   why cards used to stay frozen in their old, now-gapped positions instead of smoothly closing
+   ranks. .card's own transition:transform rule (see its own CSS) is what should be doing that
+   work, and now can. */
 .seat.bottom{
   position:absolute !important;
   bottom:6px !important;
@@ -419,10 +427,6 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 .seat.bottom .fan{
   position:relative !important;
   z-index:100 !important;
-}
-.seat.bottom .fan, .seat.bottom .fan *{
-  transition:none !important;
-  animation:none !important;
 }
 /* Left/right opponents in this file's markup are .side-badge (name badge) + a separate sibling
    .fan.side.left-fan/.right-fan element — there is no literal .seat.left/.seat.right node — and
@@ -1902,7 +1906,17 @@ function renderOwnFan(fan, actual){
   // isPlayable is computed here (not further below, where it used to live) precisely so the
   // signature and the actual render logic can share this ONE computation rather than risk the
   // two silently diverging if either copy is ever edited alone in the future.
-  const isPlayable = (S.phase==='playing' && currentTrickPlayer()===actual && S.isHuman[actual] && (!isOnline || isHost || actual===myOnlineSeat));
+  // currentTrick.length<4 is deliberately part of this check (matching isCurrentActor()'s own
+  // guard elsewhere) — without it, this is missing exactly the one condition that keeps a hand
+  // from looking playable during the ~900ms window between the trick's 4th card landing and
+  // resolveTrick() actually clearing it. currentTrickPlayer() is (leader+turnInTrick)%4 with no
+  // awareness of trick length on its own — once turnInTrick reaches 4, that wraps right back
+  // around to the trick's own leader. If the human happens to be that leader, isPlayable went
+  // back to true for a hand that has nothing left to legally do this trick: cards lit up as
+  // tappable, taps landed and even lifted the card as "selected", but playCard()'s own separate
+  // currentTrick.length>=4 guard silently rejected the play underneath — which is exactly what
+  // read as "sometimes tapping a card just doesn't do anything."
+  const isPlayable = (S.phase==='playing' && S.currentTrick.length<4 && currentTrickPlayer()===actual && S.isHuman[actual] && (!isOnline || isHost || actual===myOnlineSeat));
   const legalSig = legal===null ? 'null' : legal.map(c=>c.suit+'-'+c.rank).join(',');
   const selSig = selectedCard ? (selectedCard.suit+'-'+selectedCard.rank) : '';
   const handSig = hand.map(c=>c.suit+'-'+c.rank).join('|');
@@ -1934,60 +1948,31 @@ function renderOwnFan(fan, actual){
   const cardW = probe.offsetWidth || 60;
   fan.removeChild(probe);
 
-  // Static, index-based slots: every card keeps the EXACT physical slot (x/y/angle) it was
-  // originally dealt into for the whole round, even as other cards are thrown and the hand
-  // shrinks — a card's slot is never reassigned just because n got smaller. Without this, x/y/
-  // angle were recomputed from the CURRENT hand length n on every layout pass, so throwing any
-  // card re-flowed and visibly moved every OTHER remaining card into a newly-tightened spread —
-  // exactly the "jump" being fixed here. fan.__slotByKey (a real Map kept on the element, not
-  // dataset — a dataset string can't hold structured per-key data cheaply) persists across
-  // renders; a card thrown only ever REMOVES that one key's slot, never renumbers the rest.
+  // Index-based geometry, recomputed from the CURRENT hand every time it changes: a card's x/y/
+  // angle come from its plain array index (i) among the cards still in hand, and spread is based
+  // on the current count (n) — so the fan visibly, deliberately re-tightens each time a card
+  // leaves, instead of leaving a gap where the thrown card used to sit.
   //
-  // Fresh-deal detection is keyed off S.dealNum, NOT off guessing from card-key overlap — an
-  // overlap-based heuristic ("every current key is new") is a real correctness bug: a fresh
-  // 13-card deal can easily happen to contain a card with the exact same suit+rank as one from
-  // the PREVIOUS deal's hand (there's nothing preventing that), which made the old heuristic
-  // treat it as "not a fresh deal", carry over the old slotByKey map, and hand out slot numbers
-  // far past the fan's actual card count for the genuinely-new cards — silently corrupting the
-  // whole hand's spread/positions (and with it, the legal-card hit-boxes computed from those
-  // positions).
-  // NOTE: this used to key off S.roundNum instead, on the assumption that it "only ever changes
-  // exactly once per dealt round". That assumption was wrong: a redeal after all four players
-  // pass trump bidding calls startRound() again — a genuinely fresh 13-card deal — WITHOUT
-  // roundNum changing (roundNum only advances once a round is actually scored). That mismatch is
-  // exactly what caused the "cards land in a jumbled heap" bug after an all-pass redeal: the old
-  // slotByKey map (and its already-maxed-out __slotMax) carried straight over into the new hand,
-  // so freshly dealt cards kept getting handed slot numbers past the fan's actual size instead of
-  // 0..12. dealNum (see its own comment in freshState()/startRound()) advances on every physical
-  // deal, redeal included, so it's the correct, unambiguous signal here.
-  if(!fan.__slotByKey) fan.__slotByKey = new Map();
-  if(!fan.__slotMax) fan.__slotMax = 0;
-  const slotByKey = fan.__slotByKey;
-  const keysNow = hand.map(c=>c.suit+'-'+c.rank);
-  const keysNowSet = new Set(keysNow);
-  const isFreshDeal = fan.__slotDealNum !== S.dealNum;
+  // This used to be a fixed, per-card "slot" that a card kept for the whole deal regardless of
+  // how many cards were still in hand — that was the fix for an actual jumping/snapping bug, but
+  // it overcorrected: it also stopped the fan from ever re-tightening at all, so remaining cards
+  // sat frozen with an ever-widening gap where each thrown card had been. The genuine fix for the
+  // original snapping was never "never move a card" — it's DOM reconciliation (existingByKey
+  // below reuses each remaining card's own element instead of destroying and recreating it) plus
+  // a real CSS transition on transform (see .card's own transition rule, no longer overridden —
+  // see the .seat.bottom CSS comment for why) so that when a card's target x DOES change here,
+  // the browser glides it there instead of teleporting it. Recomputing from n is what makes the
+  // shrink actually happen at all; the transition is what makes it look intentional instead of a
+  // jarring jump.
+  //
+  // dealNum is still tracked (fan.__slotDealNum) purely so a genuinely fresh deal is detected —
+  // not for any position-locking purpose anymore. See freshState()/startRound()'s own comments
+  // on dealNum/dealCounter for why S.dealNum (rather than S.roundNum, or a same-round redeal) is
+  // the correct fresh-deal signal.
   fan.__slotDealNum = S.dealNum;
-  if(isFreshDeal){
-    slotByKey.clear();
-    keysNow.forEach((k,i)=>slotByKey.set(k,i));
-    fan.__slotMax = n;
-  } else {
-    // Drop slots for cards no longer in hand; every remaining card keeps its existing slot.
-    Array.from(slotByKey.keys()).forEach(k=>{ if(!keysNowSet.has(k)) slotByKey.delete(k); });
-    // Any card present now but with no assigned slot yet (shouldn't normally happen outside a
-    // fresh deal, but guards a hand mutated via some path other than draw-then-discard) gets the
-    // next free slot past the current maximum rather than colliding with an existing one.
-    keysNow.forEach(k=>{
-      if(!slotByKey.has(k)){ slotByKey.set(k, fan.__slotMax); fan.__slotMax++; }
-    });
-  }
-  const slotCount = Math.max(fan.__slotMax, keysNow.length);
+  const slotCount = n;
 
   const maxSpread = cardW*0.86;
-  // Geometry is computed once from slotCount (the highest slot index ever occupied THIS deal),
-  // never from the current (possibly-shrunk) n — this is what keeps a remaining card's own x/y/
-  // angle permanently fixed to the slot it was dealt into, instead of the whole fan re-tightening
-  // its spread every time a card leaves.
   const spread = slotCount>1 ? Math.min(maxSpread, (containerW-cardW)/(slotCount-1)) : 0;
   const totalWidth = cardW + spread*(slotCount-1);
   const startX = Math.max(0, (containerW-totalWidth)/2);
@@ -2056,24 +2041,26 @@ function renderOwnFan(fan, actual){
       fan.appendChild(el);
     }
 
-    // slot (not the loop index i) drives every geometric value — this is the actual fixed,
-    // per-card physical position for the whole round; i only still matters for reconciliation
-    // bookkeeping, never for where a card sits.
-    const slot = slotByKey.get(key);
+    // slot === i now (plain array index in the CURRENT hand) — every render where the hand
+    // actually changed recomputes every remaining card's slot from scratch, which is exactly
+    // what lets the fan visibly re-tighten. The DOM element itself (el) is still reused across
+    // renders (see existingByKey above), so its transform TRANSITIONS from the old x/y/angle to
+    // this new one instead of teleporting — that's what turns "recompute every time" from a snap
+    // back into a smooth, intentional-looking glide.
+    const slot = i;
     const offsetFromMid = mid ? (slot-mid)/mid : 0;
     const angle = offsetFromMid * maxAngle;
     const lift = arcLift*(1-offsetFromMid*offsetFromMid);
     const x = startX + slot*spread;
     const y = 10 - lift;
     el.style.transformOrigin = '50% 120%';
-    // Positioning lives ENTIRELY in transform (translate+rotate[+scale]) now — never in left/top.
+    // Positioning lives ENTIRELY in transform (translate+rotate[+scale]) — never in left/top.
     // left/top are plain layout properties with no transition covering them (only transform/
-    // box-shadow/filter/opacity are in .card's transition list — see its own CSS), so setting
-    // them to a new pixel value on every render made the fan SNAP instantly to its tightened
-    // spread the moment a card left the hand. Combined with the static per-slot geometry above
-    // (x/angle keyed by the card's OWN fixed slot, never by n), a remaining card's transform is
-    // now byte-identical across a throw that doesn't involve it — nothing to even transition,
-    // let alone jump.
+    // box-shadow/filter/opacity are in .card's transition list — see its own CSS); transform is
+    // the one that's actually animated here, and — now that the .seat.bottom CSS no longer force-
+    // kills transition on every descendant (see that rule's own comment) — setting a new
+    // translate/rotate value on a REUSED element (see existingByKey above) lets the browser
+    // interpolate from the old position to this one instead of snapping straight to it.
     el.style.transform = isSelected
       ? `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg) translateY(-16px) scale(1.06)`
       : `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${angle.toFixed(1)}deg)`;
@@ -2082,12 +2069,10 @@ function renderOwnFan(fan, actual){
     el.style.boxShadow = isSelected ? '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)' : '';
 
     if(cls==='legal'){
-      // Hit-box centered directly on this card's own slot (half a spread-width to either side),
-      // not a boundaries-array computed from adjacent LOOP positions — with static slots, the
-      // card to either side of this one in the array is no longer necessarily adjacent in space
-      // (a thrown card leaves a gap), so a shared-boundary approach would either leave dead
-      // zones or make hit-boxes overlap. A fixed half-spread box per card is correct regardless
-      // of which slots are currently occupied.
+      // Hit-box centered directly on this card's own current slot (half a spread-width to
+      // either side). Since slot is now just the plain array index and every card's slot is
+      // reassigned together on any hand change, adjacent cards in the array are always adjacent
+      // in space too — no gaps to worry about the way there were under fixed slots.
       const hit = document.createElement('div');
       hit.style.position='absolute';
       hit.style.left = Math.max(0, x - spread/2)+'px';
@@ -2165,13 +2150,10 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
   const cardW = probe.offsetWidth || 60;
   fan.removeChild(probe);
   const maxSpread = cardW*0.86;
-  // Same static per-slot geometry as the full-layout path (see its own comment on fan.__slotByKey)
-  // — handSig matched to get here, so the hand/slots are guaranteed unchanged from the last full
-  // layout pass; reusing fan.__slotByKey/__slotMax (rather than n) keeps a hit-box correctly
-  // centered on a card whose slot may not be contiguous with its neighbors' (a gap left by an
-  // earlier-thrown card).
-  const slotByKey = fan.__slotByKey || new Map();
-  const slotCount = Math.max(fan.__slotMax || hand.length, hand.length);
+  // Same index-based geometry as the full-layout path (see its own comment) — handSig matched
+  // to get here, so hand order/length are guaranteed unchanged since the last full layout pass,
+  // meaning slot===i reproduces the exact same x every card already has from that pass.
+  const slotCount = hand.length;
   const spread = slotCount>1 ? Math.min(maxSpread, (containerW-cardW)/(slotCount-1)) : 0;
   const totalWidth = cardW + spread*(slotCount-1);
   const startX = Math.max(0, (containerW-totalWidth)/2);
@@ -2194,7 +2176,7 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
     // el.style.left/top/transform are NEVER written here — only className changes.
 
     if(cls==='legal'){
-      const slot = slotByKey.has(key) ? slotByKey.get(key) : i;
+      const slot = i;
       const x = startX + slot*spread;
       const hit = document.createElement('div');
       hit.style.position='absolute';
@@ -2235,40 +2217,22 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
 function renderBackFan(fan, disp, n){
   // This used to be called after an unconditional fan.innerHTML='' on every renderTable() pass
   // (renderTable() itself fires after essentially every state change — any player's bid, any
-  // player's play, a resolved trick...), and the spread/startX below were computed from `n`, the
-  // CURRENT hand count. That combination is exactly the "own hand" jumping bug that renderOwnFan()
-  // was fixed for (see its own comments), just never applied here: every single render tore down
-  // and rebuilt EVERY opponent's card-back fan from scratch, re-spread to fit whatever the
-  // hand size happened to be at that instant — so the moment any player (including a bot) threw
-  // a card, that player's own back-fan visibly snapped into a tighter formation, and because the
-  // elements are freshly created every time, there's nothing for a transition to interpolate
-  // FROM even if one were added.
-  //
-  // Fix mirrors renderOwnFan()'s static-slot approach, just simplified for backs (which are all
-  // visually identical, so there's no need to key by card identity — only the SLOT COUNT needs
-  // to stay fixed for the whole deal). fan.__backSlotCount is locked in once per deal (detected
-  // via S.dealNum — see its own comment in freshState()/startRound() for why this is dealNum and
-  // not roundNum: a same-round redeal after all-pass bidding changes dealNum but not roundNum,
-  // and this needs to reset on THAT too, not just on a fully scored new round) and geometry is
-  // always computed from that locked count, never from the current, possibly-shrunk `n` — so a
-  // card thrown removes exactly one element from the end and leaves every remaining card-back
-  // element completely untouched at its already-correct position.
+  // player's play, a resolved trick...), which restarted every card-back element from scratch on
+  // every single call — so even a same-content re-render had nothing for a transition to
+  // interpolate FROM, and any actual change (a card thrown) looked like a snap. Fixed the same
+  // way renderOwnFan() is fixed: recompute geometry from the CURRENT count n every time it
+  // changes (so the fan genuinely re-tightens), but REUSE existing elements instead of wiping
+  // them, and position them with transform (which .card's own CSS transition rule already
+  // animates) instead of left/top — so a change in n glides the remaining backs into their new,
+  // tighter spread instead of jumping there.
   const isFreshDeal = fan.__backDealNum !== S.dealNum;
+  fan.__backDealNum = S.dealNum;
   if(isFreshDeal){
-    fan.__backDealNum = S.dealNum;
-    fan.__backSlotCount = n;
     fan.innerHTML = '';
     fan.__backCount = 0;
-  } else if(n > (fan.__backSlotCount||0)){
-    // Defensive only — a hand should never grow mid-deal, but if it somehow does, don't let
-    // slotCount fall behind the actual count.
-    fan.__backSlotCount = n;
   }
-  const slotCount = fan.__backSlotCount||0;
-  if(slotCount===0) return;
   if(n===0){
-    // Hand emptied out — clear everything and reset for the next fresh deal.
-    fan.innerHTML=''; fan.__backCount=0; fan.__backSlotCount=0; fan.__backDealNum=undefined;
+    fan.innerHTML=''; fan.__backCount=0;
     return;
   }
 
@@ -2280,42 +2244,52 @@ function renderBackFan(fan, disp, n){
   const cardH = probe.offsetHeight || 72;
   fan.removeChild(probe);
 
-  // Geometry driven ENTIRELY by slotCount (the size the hand was dealt at this round), never by
-  // the current, possibly-smaller n — this is what keeps every remaining back-card's position
-  // fixed for the whole round instead of re-flowing tighter each time a card leaves.
+  // Geometry driven by the CURRENT count n — recomputed every call, so the fan visibly closes
+  // ranks each time a card leaves, exactly like renderOwnFan()'s own index-based geometry.
   let slotPos;
   if(vertical){
     const containerH = fan.clientHeight || 220;
-    const spread = slotCount>1 ? Math.min(cardH*0.32, (containerH-cardH)/(slotCount-1)) : 0;
-    const totalH = cardH + spread*(slotCount-1);
+    const spread = n>1 ? Math.min(cardH*0.32, (containerH-cardH)/(n-1)) : 0;
+    const totalH = cardH + spread*(n-1);
     const startY = Math.max(0,(containerH-totalH)/2);
-    slotPos = i => ({left:'2px', top:(startY+i*spread)+'px'});
+    slotPos = i => ({x:0, y:(startY+i*spread)});
   } else {
     const containerW = fan.clientWidth || 300;
-    const spread = slotCount>1 ? Math.min(cardW*0.5, (containerW-cardW)/(slotCount-1)) : 0;
-    const totalW = cardW + spread*(slotCount-1);
+    const spread = n>1 ? Math.min(cardW*0.5, (containerW-cardW)/(n-1)) : 0;
+    const totalW = cardW + spread*(n-1);
     const startX = Math.max(0,(containerW-totalW)/2);
-    slotPos = i => ({left:(startX+i*spread)+'px', top:'8px'});
+    slotPos = i => ({x:(startX+i*spread), y:8});
   }
 
-  // Grow (only happens right after a fresh deal, when __backCount starts at 0) up to n — each
-  // new element's position is set once, at creation, from its fixed slot.
+  // Grow: new elements start life already at their correct target transform (nothing to
+  // transition FROM on a brand-new element anyway — same reasoning as renderOwnFan()'s own card
+  // creation). left/top stay fixed at 0,0; transform carries the real per-render position.
   while(fan.__backCount < n){
     const i = fan.__backCount;
     const div=document.createElement('div');
     div.className='card back';
+    div.style.left='0px'; div.style.top='0px';
     const pos = slotPos(i);
-    div.style.left=pos.left; div.style.top=pos.top; div.style.zIndex=i;
+    div.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+    div.style.zIndex=i;
     fan.appendChild(div);
     fan.__backCount++;
   }
-  // Shrink from the end only, one element per card thrown — every remaining element's left/top
-  // is never re-touched, so nothing else in the fan moves.
+  // Shrink from the end, one element per card thrown.
   while(fan.__backCount > n){
     fan.__backCount--;
     const last = fan.lastElementChild;
     if(last) fan.removeChild(last);
   }
+  // Re-target EVERY remaining element to its new slot position on every call (not just newly
+  // grown ones) — this is what makes the fan actually re-tighten instead of leaving a gap where
+  // a thrown card used to sit. Reused elements already have a transform inline from their last
+  // render, so this is a genuine FROM->TO change the browser can interpolate.
+  Array.from(fan.children).forEach((el,i)=>{
+    const pos = slotPos(i);
+    el.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+    el.style.zIndex = i;
+  });
 }
 function renderTrickArea(){
   const area = document.getElementById('trick-area');
