@@ -1876,12 +1876,9 @@ function renderOwnFan(fan, actual){
     if(hint) hint.classList.remove('show');
     fan.dataset.ownFanSig = '';
     fan.dataset.ownFanHandSig = '';
-    // Reset the static slot map too — the next hand dealt (a new round) must start every card
-    // fresh at slot 0..n-1, not continue counting up from wherever the previous round's hand
-    // left off.
-    if(fan.__slotByKey) fan.__slotByKey.clear();
-    fan.__slotMax = 0;
-    fan.__slotRoundNum = undefined;
+    // Reset the fresh-deal marker too — the next hand dealt (a new round) must be detected as a
+    // genuinely fresh deal, not compared against this now-empty hand's dealNum.
+    fan.__slotDealNum = undefined;
     return;
   }
   const legal = getLegalCardsForHuman();
@@ -2069,15 +2066,23 @@ function renderOwnFan(fan, actual){
     el.style.boxShadow = isSelected ? '0 0 0 3px var(--gold-bright), 0 10px 18px rgba(0,0,0,.5)' : '';
 
     if(cls==='legal'){
-      // Hit-box centered directly on this card's own current slot (half a spread-width to
-      // either side). Since slot is now just the plain array index and every card's slot is
-      // reassigned together on any hand change, adjacent cards in the array are always adjacent
-      // in space too — no gaps to worry about the way there were under fixed slots.
+      // Hit-box derived from the card's OWN actual rendered getBoundingClientRect(), not
+      // hand-computed rotation trig. An earlier version tried to compute the rotated bounding
+      // box analytically (cardW*cos+cardH*sin, centered on x+cardW/2) — that formula is correct
+      // for rotation about the shape's own geometric center, but this fan rotates every card
+      // around transform-origin:'50% 120%' (a point BELOW the card, not its center), which shifts
+      // the rotated shape's actual on-screen center measurably away from the naive x+cardW/2 —
+      // enough that the analytic hit-box ended up misaligned with the real card and missed it
+      // entirely in testing. Reading the real post-transform rect directly sidesteps the need to
+      // reason about transform-origin math at all and is guaranteed to match whatever the browser
+      // actually painted, including any future change to rotation/origin/scale.
+      const cardRect = el.getBoundingClientRect();
+      const fanRect = fan.getBoundingClientRect();
       const hit = document.createElement('div');
       hit.style.position='absolute';
-      hit.style.left = Math.max(0, x - spread/2)+'px';
+      hit.style.left = (cardRect.left - fanRect.left)+'px'; // no Math.max(0,...) clamp: the fan container has no overflow:hidden, and clamping here silently discarded the portion of the leftmost (negative-angle) rotated card that extends left of the fan's nominal x=0 boundary -- exactly the same missed-tap bug as the unrotated-hitbox one, just on the opposite edge.
       hit.style.top = '0px';
-      hit.style.width = (spread>0 ? spread : cardW)+'px';
+      hit.style.width = cardRect.width+'px';
       hit.style.height = containerH+'px';
       hit.style.zIndex = 300+slot;
       hit.style.cursor='pointer';
@@ -2142,21 +2147,7 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
     if(!el.dataset || !el.dataset.cardKey) fan.removeChild(el);
   });
 
-  const containerW = fan.clientWidth || 300;
   const containerH = fan.clientHeight || 100;
-  const probe = document.createElement('div');
-  probe.className='card'; probe.style.visibility='hidden'; probe.style.position='absolute';
-  fan.appendChild(probe);
-  const cardW = probe.offsetWidth || 60;
-  fan.removeChild(probe);
-  const maxSpread = cardW*0.86;
-  // Same index-based geometry as the full-layout path (see its own comment) — handSig matched
-  // to get here, so hand order/length are guaranteed unchanged since the last full layout pass,
-  // meaning slot===i reproduces the exact same x every card already has from that pass.
-  const slotCount = hand.length;
-  const spread = slotCount>1 ? Math.min(maxSpread, (containerW-cardW)/(slotCount-1)) : 0;
-  const totalWidth = cardW + spread*(slotCount-1);
-  const startX = Math.max(0, (containerW-totalWidth)/2);
 
   let selectionStillValid = false;
   hand.forEach((c,i)=>{
@@ -2177,12 +2168,19 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
 
     if(cls==='legal'){
       const slot = i;
-      const x = startX + slot*spread;
+      // Hit-box read straight from the card's OWN current getBoundingClientRect() — this path
+      // never touches el.style.transform (see the comment above), so whatever rect the card
+      // already has from the last full layout pass IS its real on-screen position/rotation right
+      // now; no need to recompute x/angle/rotation math at all, and no risk of it drifting out of
+      // sync with what renderOwnFan()'s own hit-box logic would produce for the same card (see
+      // its own comment on why an analytic rotated-bounding-box formula isn't trustworthy here).
+      const cardRect = el.getBoundingClientRect();
+      const fanRect = fan.getBoundingClientRect();
       const hit = document.createElement('div');
       hit.style.position='absolute';
-      hit.style.left = Math.max(0, x - spread/2)+'px';
+      hit.style.left = (cardRect.left - fanRect.left)+'px'; // no Math.max(0,...) clamp: the fan container has no overflow:hidden, and clamping here silently discarded the portion of the leftmost (negative-angle) rotated card that extends left of the fan's nominal x=0 boundary -- exactly the same missed-tap bug as the unrotated-hitbox one, just on the opposite edge.
       hit.style.top = '0px';
-      hit.style.width = (spread>0 ? spread : cardW)+'px';
+      hit.style.width = cardRect.width+'px';
       hit.style.height = containerH+'px';
       hit.style.zIndex = 300+slot;
       hit.style.cursor='pointer';
