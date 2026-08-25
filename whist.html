@@ -2293,27 +2293,51 @@ function renderTrickArea(){
   const area = document.getElementById('trick-area');
   // renderTable() (and therefore renderTrickArea()) fires on essentially every render pass —
   // a Firebase gameState 'value' event, the visibility-resume repaint, the heartbeat watchdog,
-  // even ticks where S.currentTrick itself hasn't changed at all. The old code unconditionally
-  // did area.innerHTML='' and rebuilt every .played-card from scratch on every single call,
-  // which restarted the one-shot cardLand entrance animation on cards that were already sitting
-  // still on the table — the "dancing/trembling cards" bug. A played card should land ONCE and
-  // then stay perfectly static until the trick actually changes (a card added or the trick
-  // cleared/resolved). Guard on a cheap signature of "who played what" so a same-content render
-  // is a total no-op for this area — the DOM nodes (and their finished animation state) are left
-  // completely untouched.
+  // even ticks where S.currentTrick itself hasn't changed at all.
+  //
+  // This used to do an unconditional area.innerHTML='' + full rebuild every time the trick
+  // signature changed AT ALL — including the ordinary case of a trick simply growing from 2
+  // cards to 3, or 3 to 4. That wipes out the DOM elements for the cards that were ALREADY on
+  // the table and had already finished landing, and recreates them as brand-new elements —
+  // which restarts their one-shot cardLand entrance animation from scratch. Visually, that's
+  // exactly "the cards already on the table shift/jump a little every time someone else throws
+  // a card": nothing about their target position actually changed (dispPositions below is fixed
+  // per-player, independent of trick length), but replaying the landing animation on an
+  // already-settled card reads as a little jump or resettle. The sig-based early-return already
+  // here only ever caught the narrower case of an EXACT repeat render with no new card at all —
+  // it did nothing to protect an already-landed card across a trick that's still growing.
+  //
+  // Fix: reconcile by player (a trick has at most one card per player, so player is a stable,
+  // unique key) — keep and never touch the DOM element for a card that was already on the
+  // table, only ever create a new element for a player who just played and doesn't have one
+  // yet. An already-landed card's node is now never destroyed just because a DIFFERENT player
+  // added a card to the same trick.
   const sig = S.currentTrick.map(pc=>pc.player+':'+pc.card.suit+pc.card.rank).join('|');
   if(area.dataset.trickSig === sig) return;
   area.dataset.trickSig = sig;
-  area.innerHTML='';
   // Percentages are relative to #trick-area's own box (now a small, safely-centered 52%x40%
   // slice of the felt — see its CSS comment), not the whole felt, so these four positions form
   // a tight diamond that never reaches the top/side seats' badges or fans.
   const dispPositions = { 0:{left:'50%',top:'74%'}, 1:{left:'18%',top:'50%'}, 2:{left:'50%',top:'26%'}, 3:{left:'82%',top:'50%'} };
+
+  const existingByPlayer = new Map();
+  Array.from(area.children).forEach(el=>{
+    if(el.dataset && el.dataset.trickPlayer!==undefined) existingByPlayer.set(+el.dataset.trickPlayer, el);
+  });
+  const playersNow = new Set(S.currentTrick.map(pc=>pc.player));
+  // A player no longer in the trick (it was just cleared/resolved) loses their card; anyone
+  // still in the trick keeps their existing, already-landed element completely untouched.
+  existingByPlayer.forEach((el,player)=>{
+    if(!playersNow.has(player)) area.removeChild(el);
+  });
+
   S.currentTrick.forEach(pc=>{
+    if(existingByPlayer.has(pc.player)) return; // already on the table — leave it exactly as is
     const disp = displayFor(pc.player);
     const pos = dispPositions[disp];
     const wrap = document.createElement('div');
     wrap.className='played-card';
+    wrap.dataset.trickPlayer = pc.player;
     wrap.style.left = pos.left; wrap.style.top=pos.top; wrap.style.transform='translate(-50%,-50%)';
     wrap.innerHTML = cardHTML(pc.card,'');
     // Belt-and-suspenders on top of the CSS-level fixes above (the no-"transition:all" base rule
