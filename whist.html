@@ -1761,7 +1761,9 @@ function renderTable(){
       // interpolate it sliding quietly to its new angle/position.
       renderOwnFan(fan, actual);
     } else {
-      fan.innerHTML='';
+      // NOTE: no fan.innerHTML='' here anymore — see renderBackFan()'s own comment for why a
+      // full wipe-and-rebuild on every render is exactly what caused the opponents' card backs
+      // to visibly "jump" every time ANY player (including a bot) threw a card.
       const count = (S.hands[actual]||[]).length;
       renderBackFan(fan, disp, count);
     }
@@ -2187,7 +2189,43 @@ function renderOwnFanStatusOnly(fan, actual, hand, legal, isPlayable){
   if(hint) hint.classList.toggle('show', selectionStillValid);
 }
 function renderBackFan(fan, disp, n){
-  if(n===0) return;
+  // This used to be called after an unconditional fan.innerHTML='' on every renderTable() pass
+  // (renderTable() itself fires after essentially every state change — any player's bid, any
+  // player's play, a resolved trick...), and the spread/startX below were computed from `n`, the
+  // CURRENT hand count. That combination is exactly the "own hand" jumping bug that renderOwnFan()
+  // was fixed for (see its own comments), just never applied here: every single render tore down
+  // and rebuilt EVERY opponent's card-back fan from scratch, re-spread to fit whatever the
+  // hand size happened to be at that instant — so the moment any player (including a bot) threw
+  // a card, that player's own back-fan visibly snapped into a tighter formation, and because the
+  // elements are freshly created every time, there's nothing for a transition to interpolate
+  // FROM even if one were added.
+  //
+  // Fix mirrors renderOwnFan()'s static-slot approach, just simplified for backs (which are all
+  // visually identical, so there's no need to key by card identity — only the SLOT COUNT needs
+  // to stay fixed for the whole round). fan.__backSlotCount is locked in once per round (detected
+  // via S.roundNum, same signal renderOwnFan() uses for its own fresh-deal check) and geometry
+  // is always computed from that locked count, never from the current, possibly-shrunk `n` — so
+  // a card thrown removes exactly one element from the end and leaves every remaining card-back
+  // element completely untouched at its already-correct position.
+  const isFreshDeal = fan.__backRoundNum !== S.roundNum;
+  if(isFreshDeal){
+    fan.__backRoundNum = S.roundNum;
+    fan.__backSlotCount = n;
+    fan.innerHTML = '';
+    fan.__backCount = 0;
+  } else if(n > (fan.__backSlotCount||0)){
+    // Defensive only — a hand should never grow mid-round, but if it somehow does, don't let
+    // slotCount fall behind the actual count.
+    fan.__backSlotCount = n;
+  }
+  const slotCount = fan.__backSlotCount||0;
+  if(slotCount===0) return;
+  if(n===0){
+    // Round/hand emptied out — clear everything and reset for the next fresh deal.
+    fan.innerHTML=''; fan.__backCount=0; fan.__backSlotCount=0; fan.__backRoundNum=undefined;
+    return;
+  }
+
   const vertical = (disp===1||disp===3);
   const probe = document.createElement('div');
   probe.className='card back'; probe.style.visibility='hidden'; probe.style.position='absolute';
@@ -2196,32 +2234,41 @@ function renderBackFan(fan, disp, n){
   const cardH = probe.offsetHeight || 72;
   fan.removeChild(probe);
 
+  // Geometry driven ENTIRELY by slotCount (the size the hand was dealt at this round), never by
+  // the current, possibly-smaller n — this is what keeps every remaining back-card's position
+  // fixed for the whole round instead of re-flowing tighter each time a card leaves.
+  let slotPos;
   if(vertical){
     const containerH = fan.clientHeight || 220;
-    const spread = n>1 ? Math.min(cardH*0.32, (containerH-cardH)/(n-1)) : 0;
-    const totalH = cardH + spread*(n-1);
+    const spread = slotCount>1 ? Math.min(cardH*0.32, (containerH-cardH)/(slotCount-1)) : 0;
+    const totalH = cardH + spread*(slotCount-1);
     const startY = Math.max(0,(containerH-totalH)/2);
-    for(let i=0;i<n;i++){
-      const div=document.createElement('div');
-      div.className='card back';
-      div.style.left='2px';
-      div.style.top=(startY+i*spread)+'px';
-      div.style.zIndex=i;
-      fan.appendChild(div);
-    }
+    slotPos = i => ({left:'2px', top:(startY+i*spread)+'px'});
   } else {
     const containerW = fan.clientWidth || 300;
-    const spread = n>1 ? Math.min(cardW*0.5, (containerW-cardW)/(n-1)) : 0;
-    const totalW = cardW + spread*(n-1);
+    const spread = slotCount>1 ? Math.min(cardW*0.5, (containerW-cardW)/(slotCount-1)) : 0;
+    const totalW = cardW + spread*(slotCount-1);
     const startX = Math.max(0,(containerW-totalW)/2);
-    for(let i=0;i<n;i++){
-      const div=document.createElement('div');
-      div.className='card back';
-      div.style.left=(startX+i*spread)+'px';
-      div.style.top='8px';
-      div.style.zIndex=i;
-      fan.appendChild(div);
-    }
+    slotPos = i => ({left:(startX+i*spread)+'px', top:'8px'});
+  }
+
+  // Grow (only happens right after a fresh deal, when __backCount starts at 0) up to n — each
+  // new element's position is set once, at creation, from its fixed slot.
+  while(fan.__backCount < n){
+    const i = fan.__backCount;
+    const div=document.createElement('div');
+    div.className='card back';
+    const pos = slotPos(i);
+    div.style.left=pos.left; div.style.top=pos.top; div.style.zIndex=i;
+    fan.appendChild(div);
+    fan.__backCount++;
+  }
+  // Shrink from the end only, one element per card thrown — every remaining element's left/top
+  // is never re-touched, so nothing else in the fan moves.
+  while(fan.__backCount > n){
+    fan.__backCount--;
+    const last = fan.lastElementChild;
+    if(last) fan.removeChild(last);
   }
 }
 function renderTrickArea(){
