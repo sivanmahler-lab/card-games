@@ -647,10 +647,13 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   z-index:50 !important;
   pointer-events:none;
 }
-/* Cards land on the trick area with a small bouncy pop instead of just appearing — a brief lift
-   +scale that settles back down, echoing the "throw a card, it hops slightly then lands softly"
-   physics requested for card play. Purely a CSS entrance animation on the element the render code
-   already creates fresh each play (see renderTable()'s ~line 2546 area), so it needs no new JS.
+/* Cards land on the trick area with a plain fade-in — no lift/bounce/hop. An earlier version of
+   this game explicitly requested a small bouncy "hop then land softly" pop here (translateY
+   swinging up to -14px before settling), but that motion is exactly what read as the played
+   card itself "jumping" once the OTHER dancing-card bugs (see renderTrickArea()'s own comment,
+   and the #app 100svh fix on its own rule) were fixed and this became the one motion left to
+   notice. Purely a CSS entrance animation on the element the render code already creates fresh
+   each play (see renderTable()'s ~line 2546 area), so it needs no new JS.
    Deliberately NO "transition: all" (or any transition) on the base rule — a played card must be
    completely static (a fixed transform, zero ongoing motion) the instant this one-shot animation
    finishes; a lingering "transition: all" would silently re-animate the card's transform/opacity
@@ -659,11 +662,10 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    the JS) both fix from two different angles. animateTrickToWinner() below still sets its OWN
    temporary inline transition for the deliberate "cards fly to the winner" moment when a trick
    resolves — that's an intentional, explicit one-shot motion, not this bug. */
-.played-card{position:absolute;width:58px;height:82px;animation:cardLand .38s var(--spring) both;transition:none;z-index:50 !important;}
+.played-card{position:absolute;width:58px;height:82px;animation:cardLand .22s ease-out both;transition:none;z-index:50 !important;}
 @keyframes cardLand{
-  0%{opacity:0;transform:scale(1.08) translateY(-14px);}
-  70%{opacity:1;transform:scale(1.03) translateY(-3px);}
-  100%{opacity:1;transform:scale(1) translateY(0);}
+  0%{opacity:0;}
+  100%{opacity:1;}
 }
 @media (prefers-reduced-motion: reduce){
   .played-card{animation:none;}
