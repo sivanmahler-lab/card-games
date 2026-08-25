@@ -403,7 +403,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    clipped — only the name/score text shrinks/ellipsizes, which is the one part that's fine to
    lose characters from if space is tight. */
 .p-name.magnify-target{display:flex;align-items:center;gap:0;overflow:hidden;}
-.p-name.magnify-target .pn-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+/* Was white-space:nowrap + text-overflow:ellipsis, matching every other .p-name state — but for
+   the round-end badges specifically (name + score together, e.g. "אנדרטה • 12 נק'"), that combo
+   was silently truncating BOTH the name and the score down to just "..." on the two side seats,
+   whose whole grid (name badge included) is capped to 72-104px on narrow phones — there was
+   nothing left to read at all except an ellipsis. Wrapping onto up to 2 lines instead of
+   truncating to one keeps every player's name and score fully legible even in that width. */
+.p-name.magnify-target .pn-text{overflow:hidden;white-space:normal;overflow-wrap:break-word;text-overflow:clip;min-width:0;font-size:11px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;}
+.p-name.magnify-target{white-space:normal;line-height:12px;align-items:flex-start;padding-top:4px;padding-bottom:4px;}
 .p-name.magnify-target .magnify-hint{flex:none;}
 .pgrid-inner{display:flex;flex-direction:column;align-items:center;gap:1px;}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
@@ -455,6 +462,14 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .magnify-card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .magnify-card-grid .pcell{width:62px;height:86px;font-size:24px;}
 .magnify-card-grid .pcell .r{font-size:15px;}
+/* The breakdown line (e.g. "3+3 = 0   •   K = 0   •   Q+Q+Q = 0") plus the final total right
+   below the enlarged cards — see openMagnifyOverlay() for why this needed adding: previously
+   the overlay showed the 6 cards and nothing else, so a player had no way to actually verify
+   the "• X נק'" total already shown on their small name badge against their own hand without
+   doing the math themselves from scratch. */
+.magnify-card-breakdown{color:#e8ddc0;font-size:12px;text-align:center;opacity:.85;max-width:280px;line-height:1.5;}
+.magnify-card-adjustment{color:#f0c98f;font-size:12px;text-align:center;opacity:.9;}
+.magnify-card-total{color:var(--gold-bright);font-weight:800;font-size:17px;text-align:center;}
 .magnify-card-close{
   position:absolute;top:-10px;right:-10px;
   width:28px;height:28px;border-radius:50%;
@@ -468,6 +483,19 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    the tap target and its purpose obvious without relying on a hover state mobile doesn't have. */
 .magnify-hint{font-size:11px;opacity:.8;margin-inline-start:4px;flex:none;}
 .p-name.magnify-target{cursor:pointer;}
+/* One-time attention pulse on the 🔍 hint right when a round ends, so a player who's never seen
+   this feature notices it's tappable instead of reading it as decoration — see renderAll()'s own
+   comment on roundJustEnded for when this class actually gets added/removed. Runs a few times
+   then stops on its own (the class is removed after a timeout in the JS) rather than pulsing
+   forever, which would just become visual noise for the rest of the round-end screen. */
+@keyframes magnifyHintPulse{
+  0%,100%{ transform:scale(1); opacity:.8; }
+  50%{ transform:scale(1.45); opacity:1; }
+}
+.magnify-hint.hint-pulse{animation:magnifyHintPulse 0.9s ease-in-out 3;}
+@media (prefers-reduced-motion: reduce){
+  .magnify-hint.hint-pulse{animation:none;}
+}
 .pgrid.small{transform:scale(.62);}
 @media(min-width:700px){
   /* On wider screens there's plenty of room — don't shrink the other players' cards
@@ -1155,6 +1183,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
           <button class="magnify-card-close" onclick="closeMagnifyOverlay()">✕</button>
           <div class="magnify-card-name" id="magnify-card-name"></div>
           <div class="magnify-card-grid" id="magnify-card-grid"></div>
+          <div class="magnify-card-score" id="magnify-card-score"></div>
         </div>
       </div>
       <!-- Single centered flex row: [button column] — [#pw-0, the player's own hand] — [hint
@@ -2083,6 +2112,11 @@ let rpCarouselSeat = 0;
 // renders in a 2-player game (see layoutSlotFor()). Reset to null on every new round/game so a
 // magnified hand from a previous round never carries over onto a fresh, still-hidden one.
 let magnifiedSeat = null;
+// Whether the one-time attention pulse (see .magnify-hint.hint-pulse in the CSS) has already
+// played for the CURRENT round-end screen — reset to false the moment the round is no longer
+// 'ended' (see renderAll()) so the very next round-end shows the pulse again fresh, but it only
+// plays once per round-end rather than re-triggering on every renderAll() call while ended.
+let magnifyHintPulsed = false;
 // Opens/updates the centered magnify overlay for `actual`'s hand, or closes it if that seat is
 // already the one showing. Deliberately does NOT call renderAll() or touch any other element on
 // the felt — it only writes #magnify-overlay's own content and toggles its own .show class, so
@@ -2099,8 +2133,35 @@ function openMagnifyOverlay(actual){
   if(!overlay) return;
   const nameEl = document.getElementById('magnify-card-name');
   const gridEl = document.getElementById('magnify-card-grid');
+  const scoreEl = document.getElementById('magnify-card-score');
   if(nameEl) nameEl.textContent = S.names[actual] || '';
   if(gridEl) gridEl.innerHTML = (S.hands[actual]||[]).map(c=>cardHTML(c)).join('');
+  // Breakdown (computeScoreBreakdown — same matched-pair-or-better-groups-are-worth-0 grouping as
+  // the actual scoring, just spelled out per-group so a player can check it against their own
+  // hand) plus the final total actually applied to this round, from the same S.matchHistory
+  // record the small name-badge score already reads (see renderAll()'s own lastRoundScores) —
+  // NOT just the raw hand total, since a caller-declaration bonus/penalty (see endRound()) can
+  // make final differ from raw, and showing raw here would silently disagree with the badge.
+  if(scoreEl){
+    const hand = S.hands[actual]||[];
+    const breakdown = computeScoreBreakdown(hand);
+    const raw = computeRawScore(hand);
+    const history = S.matchHistory;
+    const final = (history && history.length) ? history[history.length-1].final[actual] : raw;
+    // When final differs from the hand's own raw total, it's because of the "סיימתי" caller
+    // bonus/penalty (see endRound()) — showing the breakdown (which only ever sums to raw)
+    // right next to a DIFFERENT final total with no explanation would look like the two numbers
+    // just don't agree. Spelling out the adjustment here is what actually answers "why do I have
+    // 10 when my cards clearly add up to 0".
+    let adjustmentNote = '';
+    if(final !== raw){
+      const diff = final - raw;
+      adjustmentNote = diff < 0
+        ? `<div class="magnify-card-adjustment">הכרזת "סיימתי" בהצלחה: ${raw} − 10 = ${final}</div>`
+        : `<div class="magnify-card-adjustment">עבר/ה את מי שהכריז "סיימתי" בלי להגיע ל-0: ${raw} + 10 = ${final}</div>`;
+    }
+    scoreEl.innerHTML = `<div class="magnify-card-breakdown">${escapeHTML(breakdown)}</div>${adjustmentNote}<div class="magnify-card-total">סה"כ: ${final} נק'</div>`;
+  }
   overlay.classList.add('show');
 }
 function closeMagnifyOverlay(){
@@ -2269,6 +2330,7 @@ function renderAll(){
   // itself is no longer 'ended' (a new round started), so a leftover magnified seat from a
   // previous round never silently reappears wrong on a fresh one.
   if(!roundEnded && magnifiedSeat!==null) closeMagnifyOverlay();
+  if(!roundEnded) magnifyHintPulsed = false;
   for(const disp of activeDisps){
     const actual = seatFor(disp);
     const slot = layoutSlotFor(disp);
@@ -2289,7 +2351,7 @@ function renderAll(){
       // implied a fresh element isn't being reused across renders in a way that would double up
       // listeners — but this file's own convention throughout is plain .onclick=, kept consistent
       // here too.
-      nameEl.innerHTML = `<span class="pn-text">${escapeHTML(label)}</span><span class="magnify-hint">🔍</span>`;
+      nameEl.innerHTML = `<span class="pn-text">${escapeHTML(label)}</span><span class="magnify-hint${magnifyHintPulsed?'':' hint-pulse'}">🔍</span>`;
       nameEl.classList.add('magnify-target');
       nameEl.onclick = ()=>toggleMagnifiedSeat(actual);
     } else {
@@ -2301,6 +2363,7 @@ function renderAll(){
     nameEl.classList.toggle('declared-finish', declared);
     renderPlayerGrid(slot, actual);
   }
+  if(roundEnded) magnifyHintPulsed = true;
 
   // piles
   const closedEl = document.getElementById('pile-closed');
