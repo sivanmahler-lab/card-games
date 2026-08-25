@@ -120,8 +120,22 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
    viewport. Giving #app its own explicit viewport-based height (100dvh, with 100vh as the
    fallback for browsers that don't support dvh yet) fixes the collapse without having to put a
    fixed height back on body/html, which the background-photo sizing above depends on staying
-   min-height. */
-#app{position:relative;width:100%;height:100vh;height:100dvh;}
+   min-height.
+   100svh (small viewport height — the height guaranteed visible even while the mobile browser's
+   own address-bar/toolbar chrome is showing) is listed LAST, on top of the vh/dvh fallbacks above,
+   because dvh is a genuinely live-updating value: on iOS/Android, it changes in real time as that
+   browser chrome auto-hides and reappears while scrolling. #app's height feeding straight into
+   #felt's own max-height:100% chain meant every one of THOSE toolbar animations reflowed #felt's
+   resolved size — and #trick-area is positioned at top:50%;left:50% of #felt (see its own CSS
+   comment on why its own width/height are fixed px specifically to avoid this), so that anchor
+   point itself moved slightly every time the toolbar so much as twitched, dragging every already-
+   landed played card sideways with it even though renderTrickArea() never touched their elements
+   or their own inline style. svh is the small/stable viewport height — the worst-case (toolbar
+   always assumed visible) value that never changes as the toolbar animates — which is exactly
+   what a layout that must never visibly jitter needs, at the cost of not reclaiming the sliver of
+   extra space when the toolbar happens to be hidden. Browsers without svh support (older WebKit/
+   Chromium) simply ignore this line and keep the dvh/vh value above. */
+#app{position:relative;width:100%;height:100vh;height:100dvh;height:100svh;}
 
 /* ---------- SPLASH / LOADING SCREEN ---------- */
 @keyframes splashEmblemGlow{0%,100%{filter:drop-shadow(0 0 8px rgba(240,216,150,.35));}50%{filter:drop-shadow(0 0 20px rgba(240,216,150,.7));}}
