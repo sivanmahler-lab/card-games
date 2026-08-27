@@ -739,6 +739,17 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    still reads as physical motion rather than the art just instantly changing underneath the
    player's cursor. */
 .pile.drawn{animation:pileDrawPop .4s var(--spring);}
+/* .pile.face-pop is the SAME pop keyframe, deliberately on its own class instead of reusing
+   .pile.drawn — 'drawn' also carries real styling (white background, gold border, disabled
+   cursor: see .pile.closed.drawn's own rule) that means "you're currently holding this as a
+   decision", which is semantically wrong for the open/discard pile's ordinary top-card display
+   — the open pile updates constantly as every player's turn discards a new card, and it should
+   never look "held"/disabled. revealPileFace() (see its own JS comment) toggles THIS class via
+   the same remove+reflow+re-add cycle it uses for 'face', independent of whether 'drawn' is
+   ever present — which is also what fixes the closed pile's own case where a SECOND consecutive
+   reveal (a different card while 'drawn' was already sitting there from the first one) used to
+   silently not replay the pop at all, since adding an already-present class is a no-op. */
+.pile.face-pop{animation:pileDrawPop .4s var(--spring);}
 @keyframes pileDrawPop{
   0%{transform:translateY(6px) scale(.85);}
   60%{transform:translateY(-10px) scale(1.08);}
@@ -746,6 +757,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 }
 @media (prefers-reduced-motion: reduce){
   .pile.drawn{animation:none;}
+  .pile.face-pop{animation:none;}
 }
 
 /* ---- "Your turn" affordance ------------------------------------------------------------------
@@ -2450,17 +2462,28 @@ function renderAll(){
   // ACTUALLY changes — not on every one of renderAll()'s frequent, often no-op-for-this-cell
   // calls (a Firebase tick, the visibility-resume repaint, etc.), which would otherwise flip
   // the same already-revealed card over and over on every unrelated re-render.
+  //
+  // ALSO drives .pile.face-pop (see its own CSS comment) the exact same remove+reflow+re-add
+  // way, for the same reason — this used to piggyback on the 'drawn' class already being added
+  // right after this function returns, which happened to work ONCE (drawn wasn't present yet on
+  // the very first reveal, so adding it was a genuine change) but silently did nothing for every
+  // OTHER case: a second consecutive reveal while 'drawn' was already sitting there from the
+  // first one (adding an already-present class is a no-op), and — far more commonly during real
+  // play — the open/discard pile, which never gets 'drawn' added AT ALL (that class means
+  // "you're holding this as a pending decision", which the open pile's ordinary top-card display
+  // never is) and therefore had ZERO pop animation on every single discard, from every player,
+  // for the entire game — the single most frequent visible change on the whole board.
   function revealPileFace(el, card){
     const sig = card ? (card.suit+card.rank) : '';
     if(el.dataset.faceSig === sig) return;
     el.dataset.faceSig = sig;
-    el.classList.remove('face');
+    el.classList.remove('face','face-pop');
     void el.offsetWidth;
     if(card){
       const info = SUITS_INFO[card.suit];
       el.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
       el.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
-      el.classList.add('face', info.color);
+      el.classList.add('face', 'face-pop', info.color);
     } else {
       el.innerHTML = '🎴';
       el.style.color = '';
