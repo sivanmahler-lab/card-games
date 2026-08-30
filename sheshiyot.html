@@ -738,7 +738,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    closed-back/previous-discard look to the newly-drawn card's face), so the moment of drawing
    still reads as physical motion rather than the art just instantly changing underneath the
    player's cursor. */
-.pile.drawn{animation:pileDrawPop .4s var(--spring);}
+.pile.drawn{animation:pileDrawPop .55s var(--spring);}
 /* .pile.face-pop is the SAME pop keyframe, deliberately on its own class instead of reusing
    .pile.drawn — 'drawn' also carries real styling (white background, gold border, disabled
    cursor: see .pile.closed.drawn's own rule) that means "you're currently holding this as a
@@ -749,11 +749,18 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    ever present — which is also what fixes the closed pile's own case where a SECOND consecutive
    reveal (a different card while 'drawn' was already sitting there from the first one) used to
    silently not replay the pop at all, since adding an already-present class is a no-op. */
-.pile.face-pop{animation:pileDrawPop .4s var(--spring);}
+.pile.face-pop{animation:pileDrawPop .55s var(--spring);}
 @keyframes pileDrawPop{
-  0%{transform:translateY(6px) scale(.85);}
-  60%{transform:translateY(-10px) scale(1.08);}
-  100%{transform:translateY(0) scale(1);}
+  /* Amplitude roughly doubled and duration extended (.4s->.55s) from the original — 6-10px of
+     vertical travel and a .85-1.08 scale range on a 58x82px card turned out to be genuinely
+     imperceptible in practice (confirmed by frame-stepping an actual recording: the "before" and
+     "after" frames were indistinguishable from an instant swap, even though the animation was
+     verified to be technically running via computed style). A card popping up clear of its own
+     footprint and back is what actually reads as "something just landed here" at a glance,
+     instead of only being detectable by someone already staring at the exact pixel. */
+  0%{transform:translateY(14px) scale(.7) rotate(-3deg);}
+  55%{transform:translateY(-22px) scale(1.16) rotate(2deg);}
+  100%{transform:translateY(0) scale(1) rotate(0);}
 }
 @media (prefers-reduced-motion: reduce){
   .pile.drawn{animation:none;}
@@ -1626,9 +1633,29 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   // glide with nothing to overshoot or snap back from, and no layout shift (the ghost is
   // position:fixed and only ever has its own transform/opacity touched, never left/top/width/
   // height again after creation).
+  //
+  // DOUBLE rAF, not a single one, AND matching flyGhostBack()'s own synchronous void
+  // offsetHeight reflow right before it — belt and suspenders, but for good reason: this is the
+  // actual reason the whole flight was invisible on a real phone despite testing correctly in
+  // this sandbox's desktop Chromium. Setting `transition` and the target `transform` assumes the
+  // browser already painted the ghost's untransformed starting state on some EARLIER frame —
+  // true if enough happened before this call to force an intervening paint, but here the element
+  // was created, appended, and given its starting transform all in the same synchronous tick
+  // that led directly into what used to be a single rAF. Some engines (this reproduced
+  // specifically on iOS Safari, not the Chromium used for automated testing here) can coalesce
+  // "append with no transform" and "add transition + new transform" into ONE style/paint pass
+  // when they're only one rAF apart, which skips the transition entirely and jumps straight to
+  // the final position — exactly "instant swap, no visible flight" even though the exact same
+  // code measurably animates in Chromium. flyGhostBack() (below) never had this bug because it
+  // already forces a synchronous reflow (void ghost.offsetHeight) before touching transition/
+  // transform — the single most reliable way to guarantee the browser has actually committed the
+  // starting state first. Doing the same reflow here, on top of the double rAF, removes any doubt.
+  void ghost.offsetHeight;
   requestAnimationFrame(()=>{
-    ghost.style.transition = 'transform 0.28s ease-out, opacity 0.28s ease';
-    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+    requestAnimationFrame(()=>{
+      ghost.style.transition = 'transform 0.28s ease-out, opacity 0.28s ease';
+      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+    });
   });
   setTimeout(landHighlight, 280);
   setTimeout(()=>{ ghost.style.opacity='0'; }, 280);
