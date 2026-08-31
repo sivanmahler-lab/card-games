@@ -1622,8 +1622,8 @@ function flyGhostCard(card, fromRect, toRect, toEl){
     // just without any motion to reduce.
     ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
     landHighlight();
-    setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 200);
-    setTimeout(cleanup, 320);
+    setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 400);
+    setTimeout(cleanup, 520);
     return;
   }
   // Plain, single-property transition — no per-call @keyframes, no arc/lift, no scale-overshoot
@@ -1653,13 +1653,21 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   void ghost.offsetHeight;
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      ghost.style.transition = 'transform 0.28s ease-out, opacity 0.28s ease';
+      // Duration roughly doubled (0.28s -> 0.65s) and eased to have a distinct beginning-middle-
+      // end instead of a flat ease-out — "still too fast and unclear" even once the flight was
+      // actually rendering at all (see the block comment above): a card crossing a phone screen
+      // in under 300ms doesn't give a human eye time to register a start point, a path, AND an
+      // end point as three separate things — it just reads as a blur. cubic-bezier(.22,.9,.32,1)
+      // keeps a normal-speed launch but lands with a distinctly slower, softer settle (closer to
+      // ease-out-quart than the plain "ease-out" this used before), which is what actually makes
+      // the landing spot legible instead of the ghost just stopping mid-blur.
+      ghost.style.transition = 'transform 0.65s cubic-bezier(.22,.9,.32,1), opacity 0.65s ease';
       ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
     });
   });
-  setTimeout(landHighlight, 280);
-  setTimeout(()=>{ ghost.style.opacity='0'; }, 280);
-  setTimeout(cleanup, 400);
+  setTimeout(landHighlight, 650);
+  setTimeout(()=>{ ghost.style.opacity='0'; }, 650);
+  setTimeout(cleanup, 780);
 }
 // Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
 // draw, still face-down. Reuses the plain card-back look.
@@ -1682,20 +1690,23 @@ function flyGhostBack(fromRect, toRect, toEl){
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
   void ghost.offsetHeight;
-  ghost.style.transition = 'transform .45s cubic-bezier(.35,0,.25,1), opacity .45s ease';
+  // Duration matched to flyGhostCard()'s own updated .65s (was .45s here vs .28s there — the two
+  // flights of a swap now run at the same visible speed, so a face-down ghost isn't noticeably
+  // faster or slower than a face-up one, which read as inconsistent/unclear).
+  ghost.style.transition = 'transform .65s cubic-bezier(.22,.9,.32,1), opacity .65s ease';
   ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
   // Same landing pulse as flyGhostCard() — see its own comment. Timed to this function's own
-  // (longer, .45s) flight duration rather than flyGhostCard's .28s.
+  // (now equal, .65s) flight duration.
   if(toEl){
     setTimeout(()=>{
       toEl.classList.remove('land-highlight');
       void toEl.offsetWidth;
       toEl.classList.add('land-highlight');
       setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
-    }, 450);
+    }, 650);
   }
-  setTimeout(()=>{ ghost.style.opacity='0'; }, 360);
-  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 480);
+  setTimeout(()=>{ ghost.style.opacity='0'; }, 560);
+  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 700);
 }
 
 // Compares a player's hand/discard-pile BEFORE and AFTER a single action (a plain
@@ -1814,6 +1825,27 @@ function useDrawnOnSlot(slotIdx){
   const myActual = seatFor(0);
   if(!pendingDraw) return;
   if(S.graduated[myActual] && slotIdx>2){ showToast('כבר עברת לשחק עם השורה העליונה'); return; }
+  const isTopSlot = slotIdx<=2;
+  // Graduating is explicitly permanent and one-way (see the toast text below, unchanged) — a
+  // single mis-tap on the top row (an accidental touch, a tap that lands during the drawn card's
+  // own pop-in animation, simple unfamiliarity with which row is which before the player has
+  // learned the layout) used to commit to it immediately and irreversibly with no chance to back
+  // out. This confirms ONLY the specific transition that's actually irreversible — an already-
+  // graduated player placing another top-row card (routine, not a one-way decision) and any
+  // bottom-row placement (also routine, and never graduates) both skip straight to
+  // commitToSlot() below with no dialog, exactly as before.
+  if(isTopSlot && !S.graduated[myActual]){
+    showConfirmBox(
+      'לשחק עם השורה העליונה?',
+      'זו פעולה חד-כיוונית — אחרי שתעברי לשחק עם השורה העליונה, לא ניתן לחזור לשורה התחתונה למשך שאר המשחק.',
+      ()=>commitToSlot(slotIdx)
+    );
+    return;
+  }
+  commitToSlot(slotIdx);
+}
+function commitToSlot(slotIdx){
+  const myActual = seatFor(0);
   const isTopSlot = slotIdx<=2;
   const closedEl = document.getElementById('pile-closed');
   const openEl = document.getElementById('pile-open');
@@ -2013,7 +2045,10 @@ function botTakeTurn(p){
     // Reveal it face-up in the pile slot it came from, and pause before resolving.
     botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
     renderAll();
-    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 1600);
+    // 2000ms (was 1600ms) — matches the "reveal, pause ~2 seconds, then place" pacing asked
+    // for explicitly: a bot's draw needs to actually be readable before it moves, not just
+    // technically displayed for a moment.
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 2000);
   } catch(err){
     console.error('botTakeTurn (phase 1) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
