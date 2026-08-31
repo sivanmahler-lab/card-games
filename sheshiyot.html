@@ -691,7 +691,15 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   color:var(--cream);font-size:12.5px;font-weight:700;cursor:pointer;}
 .rp-carousel-tab.active{background:linear-gradient(160deg,var(--gold-bright),var(--gold));color:#241a05;border-color:transparent;}
 .rp-carousel-body{display:flex;flex-direction:column;align-items:center;gap:10px;}
-.rp-carousel-cards{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;}
+/* Was display:flex + flex-wrap — flex-wrap fits as many cards as the row's actual width allows
+   before wrapping, which is NOT the same as "exactly 3 per row": on a wide enough modal
+   (.results-modal goes up to 640-680px, see its own rule) 4 of these 48px cards plus gap fit
+   comfortably in one line before wrapping, showing 4+2 instead of the real 3-top/3-bottom hand
+   shape every other view of a hand (.pgrid itself, #magnify-overlay's .magnify-card-grid) already
+   gets right via CSS Grid with a fixed repeat(3,1fr). Grid here forces exactly 3 columns
+   regardless of how much width is available, matching what the cards actually represent — slots
+   0-2 on top, 3-5 below — consistently with the rest of the app. */
+.rp-carousel-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;justify-content:center;justify-items:center;}
 /* Root cause of the vanishing rank digit: position:static here overrode .pcell's own base
    position:relative, breaking the containing block .pcell.face .r's position:absolute relies on
    to anchor "top:2px;right:3px" INSIDE the card. Without a positioned ancestor, that absolute .r
@@ -1595,7 +1603,7 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   ghost.style.width = fromRect.width+'px';
   ghost.style.height = fromRect.height+'px';
   ghost.style.margin = '0';
-  ghost.style.zIndex = 999;
+  ghost.style.zIndex = 99999;
   ghost.style.pointerEvents = 'none';
   ghost.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
   document.body.appendChild(ghost);
@@ -1711,7 +1719,7 @@ function flyGhostBack(fromRect, toRect, toEl){
   ghost.style.width = fromRect.width+'px';
   ghost.style.height = fromRect.height+'px';
   ghost.style.margin = '0';
-  ghost.style.zIndex = 998;
+  ghost.style.zIndex = 99998;
   ghost.style.pointerEvents = 'none';
   document.body.appendChild(ghost);
   const dx = toRect.left - fromRect.left;
