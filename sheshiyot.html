@@ -1651,23 +1651,52 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   // transform — the single most reliable way to guarantee the browser has actually committed the
   // starting state first. Doing the same reflow here, on top of the double rAF, removes any doubt.
   void ghost.offsetHeight;
+  // TWO-PHASE flight, not one blended transition — this is what actually makes a flight to an
+  // opponent's tiny hand-card slot (which can be 3-4x smaller than the source pile card)
+  // "deliberate, elegant, and easy to follow" instead of just faster. Shrinking AND translating
+  // together over the SAME duration means most of the size change happens while the card is
+  // also mid-motion — for a large shrink ratio, the card is already too small to read well
+  // before it's even halfway to the destination, so the "travel" part of the flight is barely
+  // visible as a card at all, just a moving blur. Phase 1 below travels the full distance at the
+  // ORIGINAT full source size (nothing to read yet is lost — the card stays exactly as legible in
+  // flight as it was sitting on the pile); phase 2 is a short, distinct "settling into the slot"
+  // beat that does the shrink once the card has already visibly arrived. A real hand physically
+  // carrying a card across a table and setting it down doesn't shrink the card mid-air either —
+  // this mirrors that same two-beat physical intuition.
+  const travelMs = 620, settleMs = 320;
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      // Duration roughly doubled (0.28s -> 0.65s) and eased to have a distinct beginning-middle-
-      // end instead of a flat ease-out — "still too fast and unclear" even once the flight was
-      // actually rendering at all (see the block comment above): a card crossing a phone screen
-      // in under 300ms doesn't give a human eye time to register a start point, a path, AND an
-      // end point as three separate things — it just reads as a blur. cubic-bezier(.22,.9,.32,1)
-      // keeps a normal-speed launch but lands with a distinctly slower, softer settle (closer to
-      // ease-out-quart than the plain "ease-out" this used before), which is what actually makes
-      // the landing spot legible instead of the ghost just stopping mid-blur.
-      ghost.style.transition = 'transform 0.65s cubic-bezier(.22,.9,.32,1), opacity 0.65s ease';
-      ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+      // DOUBLE rAF, not a single one — this is the actual reason the whole flight was invisible
+      // on a real phone despite testing correctly in this sandbox's desktop Chromium. Setting
+      // `transition` and the target `transform` assumes the browser already painted the ghost's
+      // untransformed starting state on some EARLIER frame — true if enough happened before this
+      // call to force an intervening paint, but here the element was created, appended, and given
+      // its starting transform all in the same synchronous tick that led directly into what used
+      // to be a single rAF. Some engines (this reproduced specifically on iOS Safari, not the
+      // Chromium used for automated testing here) can coalesce "append with no transform" and
+      // "add transition + new transform" into ONE style/paint pass when they're only one rAF
+      // apart, which skips the transition entirely and jumps straight to the final position —
+      // exactly "instant swap, no visible flight" even though the exact same code measurably
+      // animates in Chromium. flyGhostBack() (below) never had this bug because it already forces
+      // a synchronous reflow (void ghost.offsetHeight, done above) before touching transition/
+      // transform — the single most reliable way to guarantee the browser has actually committed
+      // the starting state first.
+      ghost.style.transition = `transform ${travelMs}ms cubic-bezier(.3,.62,.4,1), opacity ${travelMs}ms ease`;
+      ghost.style.transform = `translate(${dx}px, ${dy}px)`;
+      setTimeout(()=>{
+        // Phase 2: settle into the slot's actual size, right where it already visually is —
+        // a distinctly slower, softer easing (closer to ease-out-quart) than phase 1's launch,
+        // since THIS is the part that should read as "arriving and coming to rest", not more
+        // travel.
+        ghost.style.transition = `transform ${settleMs}ms cubic-bezier(.22,.9,.32,1)`;
+        ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+      }, travelMs);
     });
   });
-  setTimeout(landHighlight, 650);
-  setTimeout(()=>{ ghost.style.opacity='0'; }, 650);
-  setTimeout(cleanup, 780);
+  const totalMs = travelMs + settleMs;
+  setTimeout(landHighlight, totalMs);
+  setTimeout(()=>{ ghost.style.transition = 'opacity .25s ease'; ghost.style.opacity='0'; }, totalMs);
+  setTimeout(cleanup, totalMs+260);
 }
 // Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
 // draw, still face-down. Reuses the plain card-back look.
@@ -1690,23 +1719,29 @@ function flyGhostBack(fromRect, toRect, toEl){
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
   void ghost.offsetHeight;
-  // Duration matched to flyGhostCard()'s own updated .65s (was .45s here vs .28s there — the two
-  // flights of a swap now run at the same visible speed, so a face-down ghost isn't noticeably
-  // faster or slower than a face-up one, which read as inconsistent/unclear).
-  ghost.style.transition = 'transform .65s cubic-bezier(.22,.9,.32,1), opacity .65s ease';
-  ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
-  // Same landing pulse as flyGhostCard() — see its own comment. Timed to this function's own
-  // (now equal, .65s) flight duration.
+  // Same two-phase travel-then-settle approach as flyGhostCard() — see its own comment for why:
+  // shrinking a card 3-4x while it's ALSO still moving is what made the flight unreadable, not
+  // just its speed. Durations matched to flyGhostCard()'s own (travelMs+settleMs) so a face-down
+  // ghost never looks faster or slower than a face-up one in the same swap.
+  const travelMs = 620, settleMs = 320;
+  ghost.style.transition = `transform ${travelMs}ms cubic-bezier(.3,.62,.4,1), opacity ${travelMs}ms ease`;
+  ghost.style.transform = `translate(${dx}px, ${dy}px)`;
+  setTimeout(()=>{
+    ghost.style.transition = `transform ${settleMs}ms cubic-bezier(.22,.9,.32,1)`;
+    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
+  }, travelMs);
+  const totalMs = travelMs + settleMs;
+  // Same landing pulse as flyGhostCard() — see its own comment.
   if(toEl){
     setTimeout(()=>{
       toEl.classList.remove('land-highlight');
       void toEl.offsetWidth;
       toEl.classList.add('land-highlight');
       setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
-    }, 650);
+    }, totalMs);
   }
-  setTimeout(()=>{ ghost.style.opacity='0'; }, 560);
-  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 700);
+  setTimeout(()=>{ ghost.style.transition = 'opacity .25s ease'; ghost.style.opacity='0'; }, totalMs);
+  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, totalMs+260);
 }
 
 // Compares a player's hand/discard-pile BEFORE and AFTER a single action (a plain
@@ -1825,27 +1860,6 @@ function useDrawnOnSlot(slotIdx){
   const myActual = seatFor(0);
   if(!pendingDraw) return;
   if(S.graduated[myActual] && slotIdx>2){ showToast('כבר עברת לשחק עם השורה העליונה'); return; }
-  const isTopSlot = slotIdx<=2;
-  // Graduating is explicitly permanent and one-way (see the toast text below, unchanged) — a
-  // single mis-tap on the top row (an accidental touch, a tap that lands during the drawn card's
-  // own pop-in animation, simple unfamiliarity with which row is which before the player has
-  // learned the layout) used to commit to it immediately and irreversibly with no chance to back
-  // out. This confirms ONLY the specific transition that's actually irreversible — an already-
-  // graduated player placing another top-row card (routine, not a one-way decision) and any
-  // bottom-row placement (also routine, and never graduates) both skip straight to
-  // commitToSlot() below with no dialog, exactly as before.
-  if(isTopSlot && !S.graduated[myActual]){
-    showConfirmBox(
-      'לשחק עם השורה העליונה?',
-      'זו פעולה חד-כיוונית — אחרי שתעברי לשחק עם השורה העליונה, לא ניתן לחזור לשורה התחתונה למשך שאר המשחק.',
-      ()=>commitToSlot(slotIdx)
-    );
-    return;
-  }
-  commitToSlot(slotIdx);
-}
-function commitToSlot(slotIdx){
-  const myActual = seatFor(0);
   const isTopSlot = slotIdx<=2;
   const closedEl = document.getElementById('pile-closed');
   const openEl = document.getElementById('pile-open');
@@ -2045,10 +2059,9 @@ function botTakeTurn(p){
     // Reveal it face-up in the pile slot it came from, and pause before resolving.
     botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
     renderAll();
-    // 2000ms (was 1600ms) — matches the "reveal, pause ~2 seconds, then place" pacing asked
-    // for explicitly: a bot's draw needs to actually be readable before it moves, not just
-    // technically displayed for a moment.
-    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 2000);
+    // 3200ms — extended again from 2000ms: "much clearer now" but still needed more dwell time
+    // to comfortably read and process which card a bot revealed before it moves on.
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 3200);
   } catch(err){
     console.error('botTakeTurn (phase 1) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
