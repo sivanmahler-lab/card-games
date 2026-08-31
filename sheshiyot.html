@@ -406,6 +406,29 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
      bug, since .pgrid-inner stacks the grid directly below the badge in normal flow. */
   line-height:16px;}
 .p-name.active{border-color:var(--gold-bright);box-shadow:0 0 10px rgba(240,216,150,.5);color:var(--gold-bright);animation:codePulse 1.3s ease-in-out infinite;}
+/* Whole-panel version of the active-turn cue — see renderAll()'s own comment for why the name
+   badge alone (already handled by .p-name.active above, kept as-is) wasn't prominent enough on
+   a real phone: a glow around the entire name+board panel, plus visibly dimming every OTHER
+   panel at the same moment, is what makes "whose turn is it" legible at a glance instead of
+   something you have to go hunting for in a small badge. transition on opacity/filter (not just
+   an instant toggle) is what makes the HANDOFF between two players' turns itself read as a
+   distinct event rather than a jump-cut. will-change:transform,opacity here doubles as the same
+   Safari-composited-layer hint used on the ghost-flight overlay's own CSS (see its comment) —
+   this panel transitions on every single turn change, all game, so it benefits from being
+   pre-promoted to its own layer the same way. */
+.pgrid-wrap{transition:opacity .35s ease, filter .35s ease; will-change:opacity;}
+.pgrid-wrap.turn-active{
+  animation:turnActiveGlow 1.4s ease-in-out infinite;
+  border-radius:14px;
+}
+.pgrid-wrap.turn-inactive{opacity:.55; filter:grayscale(.25);}
+@keyframes turnActiveGlow{
+  0%,100%{ box-shadow:0 0 0 0 rgba(240,216,150,0), 0 0 14px 2px rgba(240,216,150,.25); }
+  50%{ box-shadow:0 0 0 3px rgba(240,216,150,.55), 0 0 26px 8px rgba(240,216,150,.6); }
+}
+@media (prefers-reduced-motion: reduce){
+  .pgrid-wrap.turn-active{animation:none; box-shadow:0 0 0 3px rgba(240,216,150,.55), 0 0 20px 4px rgba(240,216,150,.5);}
+}
 .p-name.declared-finish{background:rgba(192,39,45,.85);border-color:#f0d896;color:#fff;font-weight:800;}
 /* Round-end name badges (.magnify-target) hold BOTH the name/score text and the 🔍 tap hint —
    the badge's own text-overflow:ellipsis above is exactly what was clipping the icon off on the
@@ -1586,8 +1609,8 @@ function finishCallerName(){
 // @keyframes animation (not a single transition) specifically so the arc's midpoint can exist at
 // all — a plain start->end transition can only ever interpolate a straight line between two
 // transforms, it has no way to pass through a third point along the way.
-function flyGhostCard(card, fromRect, toRect, toEl){
-  if(!fromRect || !toRect) return;
+function flyGhostCard(card, fromRect, toRect, toEl, onComplete){
+  if(!fromRect || !toRect){ if(onComplete) onComplete(); return; }
   // The keyframes below are generated per-call and applied via an inline style.animation, which
   // a CSS prefers-reduced-motion media query can't override without !important fighting inline
   // styles — simplest correct fix is just not building the arc animation at all when the user
@@ -1605,6 +1628,18 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   ghost.style.margin = '0';
   ghost.style.zIndex = 99999;
   ghost.style.pointerEvents = 'none';
+  // will-change hints the browser to promote this to its own compositor layer BEFORE the
+  // transition starts, rather than deciding mid-animation — on iOS Safari specifically, a
+  // transform transition on a layer that gets promoted late/lazily is a known source of the
+  // very "silently skips the animation" failure this whole function exists to avoid.
+  ghost.style.willChange = 'transform';
+  // translate3d (with an explicit -webkit-transform mirror, not just the unprefixed property)
+  // instead of plain translate()/2D transform — this forces GPU compositing on WebKit rather
+  // than a main-thread layout-adjacent path, which is the other half of the same reliability
+  // concern will-change addresses above. Set to the identity transform up front (both
+  // properties) so there's a real "from" 3D transform on record before anything moves.
+  ghost.style.webkitTransform = 'translate3d(0,0,0)';
+  ghost.style.transform = 'translate3d(0,0,0)';
   ghost.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
   document.body.appendChild(ghost);
   const dx = toRect.left - fromRect.left;
@@ -1614,10 +1649,10 @@ function flyGhostCard(card, fromRect, toRect, toEl){
   ghost.style.transformOrigin = 'top right';
   const cleanup = ()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); };
   // Fires the landing pulse (see .land-highlight's own CSS comment) on the ACTUAL destination
-  // element the instant the ghost visually arrives — a short-lived, easy-to-miss ~0.3s flight
-  // is only half the "where did it land" answer; a highlight that lingers a beat longer on the
-  // real slot afterward is what actually makes it unambiguous. toEl is optional (existing call
-  // sites that don't pass it keep working exactly as before, just without this extra cue).
+  // element the instant the ghost visually arrives — a short-lived, easy-to-miss flight is only
+  // half the "where did it land" answer; a highlight that lingers a beat longer on the real slot
+  // afterward is what actually makes it unambiguous. toEl is optional (existing call sites that
+  // don't pass it keep working exactly as before, just without this extra cue).
   const landHighlight = ()=>{
     if(!toEl) return;
     toEl.classList.remove('land-highlight');
@@ -1625,91 +1660,72 @@ function flyGhostCard(card, fromRect, toRect, toEl){
     toEl.classList.add('land-highlight');
     setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
   };
+  const DURATION = 450; // matches the "Draw Pile -> Target Slot over 450ms" spec exactly
+  let finished = false;
+  // finish() is the single place that fires the landing cue AND hands control back to the
+  // caller (onComplete) — called from whichever of {transitionend, timeout backstop, reduced-
+  // motion path} actually happens, but guarded so it only ever runs once. Critically, onComplete
+  // fires BEFORE the ghost's own fade-out/removal: a caller like botResolveTurn() below uses this
+  // to mutate the real card data and re-render only once the flight has genuinely finished, so
+  // onComplete needs to run first — the ghost fading out over the newly-rendered real card is the
+  // correct visual order, not the other way around.
+  const finish = ()=>{
+    if(finished) return;
+    finished = true;
+    landHighlight();
+    if(onComplete) onComplete();
+    ghost.style.transition = 'opacity .2s ease';
+    ghost.style.opacity = '0';
+    setTimeout(cleanup, 240);
+  };
   if(reduceMotion){
     // Jump straight to the final resting transform so the swap is still visually communicated,
     // just without any motion to reduce.
-    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
-    landHighlight();
-    setTimeout(()=>{ ghost.style.transition='opacity .12s ease'; ghost.style.opacity='0'; }, 400);
-    setTimeout(cleanup, 520);
+    const t = `translate3d(${dx}px, ${dy}px, 0) scale(${sw},${sh})`;
+    ghost.style.webkitTransform = t;
+    ghost.style.transform = t;
+    setTimeout(finish, 60);
     return;
   }
-  // Plain, single-property transition — no per-call @keyframes, no arc/lift, no scale-overshoot
-  // step. A dynamically-generated keyframe with its own mid-flight lift and scale-overshoot (peak
-  // at 50%, "settle" at 100%) is exactly what read as jerky/rotating — a straight, monotonic
-  // transition from the identity transform to the final translate+scale is a single continuous
-  // glide with nothing to overshoot or snap back from, and no layout shift (the ghost is
-  // position:fixed and only ever has its own transform/opacity touched, never left/top/width/
-  // height again after creation).
-  //
-  // DOUBLE rAF, not a single one, AND matching flyGhostBack()'s own synchronous void
-  // offsetHeight reflow right before it — belt and suspenders, but for good reason: this is the
-  // actual reason the whole flight was invisible on a real phone despite testing correctly in
-  // this sandbox's desktop Chromium. Setting `transition` and the target `transform` assumes the
-  // browser already painted the ghost's untransformed starting state on some EARLIER frame —
-  // true if enough happened before this call to force an intervening paint, but here the element
-  // was created, appended, and given its starting transform all in the same synchronous tick
-  // that led directly into what used to be a single rAF. Some engines (this reproduced
-  // specifically on iOS Safari, not the Chromium used for automated testing here) can coalesce
-  // "append with no transform" and "add transition + new transform" into ONE style/paint pass
-  // when they're only one rAF apart, which skips the transition entirely and jumps straight to
-  // the final position — exactly "instant swap, no visible flight" even though the exact same
-  // code measurably animates in Chromium. flyGhostBack() (below) never had this bug because it
-  // already forces a synchronous reflow (void ghost.offsetHeight) before touching transition/
-  // transform — the single most reliable way to guarantee the browser has actually committed the
-  // starting state first. Doing the same reflow here, on top of the double rAF, removes any doubt.
+  // DOUBLE rAF plus a forced synchronous reflow (void ghost.offsetHeight) before touching
+  // transition/transform — belt and suspenders, but for good reason: this is the actual reason
+  // the whole flight was invisible on a real iPhone despite testing correctly in this sandbox's
+  // desktop Chromium. Setting `transition` and the target `transform` assumes the browser
+  // already painted the ghost's untransformed starting state on some EARLIER frame — true if
+  // enough happened before this call to force an intervening paint, but here the element was
+  // created, appended, and given its starting transform all in the same synchronous tick that
+  // would otherwise lead directly into a single rAF. iOS Safari specifically (not the Chromium
+  // used for automated testing here) can coalesce "append with no transform" and "add transition
+  // + new transform" into ONE style/paint pass when they're only one rAF apart, which skips the
+  // transition entirely and jumps straight to the final position — exactly "instant swap, no
+  // visible flight" even though the exact same code measurably animates in Chromium. The reflow
+  // plus double rAF together is the single most reliable way to guarantee the browser has
+  // actually committed the starting 3D transform first, on every engine.
   void ghost.offsetHeight;
-  // TWO-PHASE flight, not one blended transition — this is what actually makes a flight to an
-  // opponent's tiny hand-card slot (which can be 3-4x smaller than the source pile card)
-  // "deliberate, elegant, and easy to follow" instead of just faster. Shrinking AND translating
-  // together over the SAME duration means most of the size change happens while the card is
-  // also mid-motion — for a large shrink ratio, the card is already too small to read well
-  // before it's even halfway to the destination, so the "travel" part of the flight is barely
-  // visible as a card at all, just a moving blur. Phase 1 below travels the full distance at the
-  // ORIGINAT full source size (nothing to read yet is lost — the card stays exactly as legible in
-  // flight as it was sitting on the pile); phase 2 is a short, distinct "settling into the slot"
-  // beat that does the shrink once the card has already visibly arrived. A real hand physically
-  // carrying a card across a table and setting it down doesn't shrink the card mid-air either —
-  // this mirrors that same two-beat physical intuition.
-  const travelMs = 620, settleMs = 320;
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      // DOUBLE rAF, not a single one — this is the actual reason the whole flight was invisible
-      // on a real phone despite testing correctly in this sandbox's desktop Chromium. Setting
-      // `transition` and the target `transform` assumes the browser already painted the ghost's
-      // untransformed starting state on some EARLIER frame — true if enough happened before this
-      // call to force an intervening paint, but here the element was created, appended, and given
-      // its starting transform all in the same synchronous tick that led directly into what used
-      // to be a single rAF. Some engines (this reproduced specifically on iOS Safari, not the
-      // Chromium used for automated testing here) can coalesce "append with no transform" and
-      // "add transition + new transform" into ONE style/paint pass when they're only one rAF
-      // apart, which skips the transition entirely and jumps straight to the final position —
-      // exactly "instant swap, no visible flight" even though the exact same code measurably
-      // animates in Chromium. flyGhostBack() (below) never had this bug because it already forces
-      // a synchronous reflow (void ghost.offsetHeight, done above) before touching transition/
-      // transform — the single most reliable way to guarantee the browser has actually committed
-      // the starting state first.
-      ghost.style.transition = `transform ${travelMs}ms cubic-bezier(.3,.62,.4,1), opacity ${travelMs}ms ease`;
-      ghost.style.transform = `translate(${dx}px, ${dy}px)`;
-      setTimeout(()=>{
-        // Phase 2: settle into the slot's actual size, right where it already visually is —
-        // a distinctly slower, softer easing (closer to ease-out-quart) than phase 1's launch,
-        // since THIS is the part that should read as "arriving and coming to rest", not more
-        // travel.
-        ghost.style.transition = `transform ${settleMs}ms cubic-bezier(.22,.9,.32,1)`;
-        ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
-      }, travelMs);
+      ghost.style.transition = `transform ${DURATION}ms cubic-bezier(.3,.62,.4,1), opacity ${DURATION}ms ease`;
+      const t = `translate3d(${dx}px, ${dy}px, 0) scale(${sw},${sh})`;
+      ghost.style.webkitTransform = t;
+      ghost.style.transform = t;
     });
   });
-  const totalMs = travelMs + settleMs;
-  setTimeout(landHighlight, totalMs);
-  setTimeout(()=>{ ghost.style.transition = 'opacity .25s ease'; ghost.style.opacity='0'; }, totalMs);
-  setTimeout(cleanup, totalMs+260);
+  // transitionend is the authoritative "the flight actually finished" signal — a timer alone
+  // can't distinguish "the transition genuinely ran for 450ms" from "it got silently skipped",
+  // which is exactly the failure mode this whole function exists to defend against. The
+  // setTimeout below is only a backstop in case the event is ever missed for an unrelated reason
+  // (e.g. the element getting detached mid-flight), not the primary signal.
+  ghost.addEventListener('transitionend', (e)=>{
+    if(e.propertyName && e.propertyName.indexOf('transform')===-1) return;
+    finish();
+  }, {once:true});
+  setTimeout(finish, DURATION+200);
 }
 // Same idea, but for a card whose identity shouldn't be shown — an opponent's incoming
 // draw, still face-down. Reuses the plain card-back look.
-function flyGhostBack(fromRect, toRect, toEl){
-  if(!fromRect || !toRect) return;
+function flyGhostBack(fromRect, toRect, toEl, onComplete){
+  if(!fromRect || !toRect){ if(onComplete) onComplete(); return; }
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ghost = document.createElement('div');
   ghost.className = 'pcell';
   ghost.textContent = '🎴';
@@ -1721,35 +1737,53 @@ function flyGhostBack(fromRect, toRect, toEl){
   ghost.style.margin = '0';
   ghost.style.zIndex = 99998;
   ghost.style.pointerEvents = 'none';
+  ghost.style.willChange = 'transform';
+  ghost.style.webkitTransform = 'translate3d(0,0,0)';
+  ghost.style.transform = 'translate3d(0,0,0)';
   document.body.appendChild(ghost);
   const dx = toRect.left - fromRect.left;
   const dy = toRect.top - fromRect.top;
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
-  void ghost.offsetHeight;
-  // Same two-phase travel-then-settle approach as flyGhostCard() — see its own comment for why:
-  // shrinking a card 3-4x while it's ALSO still moving is what made the flight unreadable, not
-  // just its speed. Durations matched to flyGhostCard()'s own (travelMs+settleMs) so a face-down
-  // ghost never looks faster or slower than a face-up one in the same swap.
-  const travelMs = 620, settleMs = 320;
-  ghost.style.transition = `transform ${travelMs}ms cubic-bezier(.3,.62,.4,1), opacity ${travelMs}ms ease`;
-  ghost.style.transform = `translate(${dx}px, ${dy}px)`;
-  setTimeout(()=>{
-    ghost.style.transition = `transform ${settleMs}ms cubic-bezier(.22,.9,.32,1)`;
-    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(${sw},${sh})`;
-  }, travelMs);
-  const totalMs = travelMs + settleMs;
-  // Same landing pulse as flyGhostCard() — see its own comment.
-  if(toEl){
-    setTimeout(()=>{
+  const cleanup = ()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); };
+  const DURATION = 450;
+  let finished = false;
+  const finish = ()=>{
+    if(finished) return;
+    finished = true;
+    if(toEl){
       toEl.classList.remove('land-highlight');
       void toEl.offsetWidth;
       toEl.classList.add('land-highlight');
       setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
-    }, totalMs);
+    }
+    if(onComplete) onComplete();
+    ghost.style.transition = 'opacity .2s ease';
+    ghost.style.opacity = '0';
+    setTimeout(cleanup, 240);
+  };
+  if(reduceMotion){
+    const t = `translate3d(${dx}px, ${dy}px, 0) scale(${sw},${sh})`;
+    ghost.style.webkitTransform = t;
+    ghost.style.transform = t;
+    setTimeout(finish, 60);
+    return;
   }
-  setTimeout(()=>{ ghost.style.transition = 'opacity .25s ease'; ghost.style.opacity='0'; }, totalMs);
-  setTimeout(()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); }, totalMs+260);
+  // Same double-rAF + forced reflow reliability pattern as flyGhostCard() — see its own comment.
+  void ghost.offsetHeight;
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      ghost.style.transition = `transform ${DURATION}ms cubic-bezier(.3,.62,.4,1), opacity ${DURATION}ms ease`;
+      const t = `translate3d(${dx}px, ${dy}px, 0) scale(${sw},${sh})`;
+      ghost.style.webkitTransform = t;
+      ghost.style.transform = t;
+    });
+  });
+  ghost.addEventListener('transitionend', (e)=>{
+    if(e.propertyName && e.propertyName.indexOf('transform')===-1) return;
+    finish();
+  }, {once:true});
+  setTimeout(finish, DURATION+200);
 }
 
 // Compares a player's hand/discard-pile BEFORE and AFTER a single action (a plain
@@ -1979,7 +2013,7 @@ function finishTurnAction(){
   // auto-advance shortly after, unless human might still want to declare finished
   const myActual = seatFor(0);
   if(!S.isHuman[S.turn]){
-    setTimeout(advanceTurn, 900);
+    setTimeout(advanceTurn, 400);
   }
 }
 function advanceTurn(){
@@ -2004,7 +2038,9 @@ function maybeBotTurn(){
   if(isOnline && !isHost) return;
   if(S.phase!=='playing') return;
   if(S.isHuman[S.turn]) return;
-  setTimeout(()=>botTakeTurn(S.turn), 700);
+  // ~400ms — the "handoff" pause before a bot even starts thinking, down from 700ms per the
+  // "turn transition delay ~400ms max" pacing ask.
+  setTimeout(()=>botTakeTurn(S.turn), 400);
 }
 // Card shown face-up in a pile slot while a bot's turn is "thinking" — set during phase 1
 // of botTakeTurn, read by renderAll()/pile rendering, cleared once phase 2 resolves it.
@@ -2061,15 +2097,16 @@ function botTakeTurn(p){
       S.turnActed = true;
       renderAll();
       if(isOnline && isHost) pushStateToFirebase();
-      setTimeout(advanceTurn, 900);
+      setTimeout(advanceTurn, 400);
       return;
     }
     // Reveal it face-up in the pile slot it came from, and pause before resolving.
     botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
     renderAll();
-    // 3200ms — extended again from 2000ms: "much clearer now" but still needed more dwell time
-    // to comfortably read and process which card a bot revealed before it moves on.
-    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 3200);
+    // 1300ms — cut way back down from 3200ms: "way too long... makes the game feel sluggish and
+    // stalled". Kept comfortably inside the requested 1.2-1.5s window — enough to read a single
+    // revealed card, not long enough to feel like a stall.
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 1300);
   } catch(err){
     console.error('botTakeTurn (phase 1) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
@@ -2077,26 +2114,25 @@ function botTakeTurn(p){
     botRevealedDraw = null;
     try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
     if(isOnline && isHost) pushStateToFirebase();
-    setTimeout(advanceTurn, 900);
+    setTimeout(advanceTurn, 400);
   }
 }
 function botResolveTurn(p, ctx){
   // Same S.phase!=='playing' guard as botTakeTurn() above, for the SAME reason: this is the
-  // chained setTimeout(...,1600) fired from phase 1 (see botTakeTurn), and if the round ended
-  // during that 1.6s pause, this call must be a no-op too — otherwise it still applies the
-  // swap/discard mutation and renderAll()'s below, overwriting the round-end reveal.
+  // chained setTimeout(...) fired from phase 1 (see botTakeTurn), and if the round ended during
+  // that pause, this call must be a no-op too — otherwise it still applies the swap/discard
+  // mutation and renderAll()'s below, overwriting the round-end reveal.
   if(S===null || S.turn!==p || S.phase!=='playing'){ botRevealedDraw = null; return; }
-  // Anim plan is filled in during the try block and consumed just after renderAll(), so the
-  // ghost flies over the already-updated table (same pattern as the human player's own moves).
-  let animPlan = null;
   try{
     const { drawn, worst: w0, rankCounts } = ctx;
     const hand = S.hands[p];
     const top = botRevealedDraw ? botRevealedDraw.source : null;
     const useOpen = top==='open';
-    botRevealedDraw = null;
-    // Capture the source rect (closed or open pile) and target slot rect while the
-    // revealed-card render is still on screen, right before mutating state.
+    // botRevealedDraw is deliberately NOT cleared here (unlike the old version) — it stays set,
+    // so the pile keeps showing the revealed card face-up for the ENTIRE flight below (the
+    // ghost is visually leaving FROM that same revealed spot). It only gets cleared once the
+    // flight genuinely finishes, in finalize() further down — see that function's own comment
+    // for why the real state mutation is deferred there at all.
     const closedEl = document.getElementById('pile-closed');
     const openEl = document.getElementById('pile-open');
     const disp = layoutSlotFor(displayFor(p));
@@ -2131,57 +2167,65 @@ function botResolveTurn(p, ctx){
     const improves = graduating || (w.idx>=0 && (matched || cardValue(drawn.rank) < w.val));
     const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
     const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
-    if(improves){
-      const old = hand[w.idx];
-      hand[w.idx] = drawn;
-      S.discardPile.push(old);
-      rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
-      rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
-      // The card was already revealed face-up above, so both legs of the animation fly
-      // it visibly: the drawn card into the hand slot, the discarded card out to the pile.
-      animPlan = {
-        incoming: {card: drawn, fromRect: sourceRect, toRect: slotRect},
-        outgoing: {card: old, fromRect: slotRect, toRect: openEl ? openEl.getBoundingClientRect() : null}
-      };
-    } else {
-      S.discardPile.push(drawn);
-      const toRect = openEl ? openEl.getBoundingClientRect() : null;
-      animPlan = {outgoing: {card: drawn, fromRect: sourceRect, toRect}};
-    }
-    S.turnActed = true;
+    const openRectNow = openEl ? openEl.getBoundingClientRect() : null;
 
-    // Graduation is a SWAP-LOCATION rule, not a hand-quality heuristic: per the game's own rule
-    // (see useDrawnOnSlot()'s identical isTopSlot && !S.graduated[myActual] gate for the human
-    // player), a player only ever locks into the top row by actually placing a drawn card into
-    // one of ITS three slots (index<=2) — never by discarding a drawn card straight to the pile
-    // without swapping, and never by swapping into a BOTTOM-row slot instead. The bot's ONLY path
-    // to a top-row index here is the deliberate "graduating" choice made above (an excellent
-    // drawn card + not yet graduated), so this condition is really just confirming that choice
-    // actually went through — a pure discard or an ordinary bottom-row swap can never
-    // accidentally satisfy w.idx<=2.
-    if(improves && w.idx<=2 && !S.graduated[p]){
-      S.graduated[p] = true;
-    }
-
-    // finish heuristic
-    if(S.finishCaller===-1){
-      const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
-      if(total<=4 && S.graduated[p]){
-        doDeclareFinished(p);
+    // finalize(): the actual hand/discard-pile mutation, graduation/finish-declaration checks,
+    // re-render, and turn-advance — ALL deferred until after the flight animation(s) below have
+    // genuinely finished (flyGhostCard's onComplete fires from a real transitionend, not a
+    // guessed timer — see its own comment). Per the explicit requirement that the real card
+    // state must only change once the animation callback confirms it actually played: while the
+    // flight is in progress, S.hands[p] and S.discardPile are still untouched, so anything that
+    // renders in between (there shouldn't be anything, since this is a synchronous local bot
+    // turn with nothing else running concurrently) would still see the pre-swap state.
+    const finalize = ()=>{
+      botRevealedDraw = null;
+      if(improves){
+        const old = hand[w.idx];
+        hand[w.idx] = drawn;
+        S.discardPile.push(old);
+        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
+        rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+      } else {
+        S.discardPile.push(drawn);
       }
-    }
-    renderAll();
-    if(animPlan){
-      // Re-query the destination elements AFTER renderAll() — renderPlayerGrid() clears and
-      // rebuilds gridEl's children on every call (innerHTML=''), so the slotEl/openEl captured
-      // earlier in this function are now stale, detached nodes; passing them as toEl to
-      // flyGhostCard would silently no-op the landing highlight (classList calls on a detached
-      // element do nothing visible) rather than error, so this is easy to miss without a real
-      // browser check. Freshly reading them here is small and cheap next to the animation itself.
-      const freshGridEl = document.getElementById('pg-'+disp);
-      const freshOpenEl = document.getElementById('pile-open');
-      if(animPlan.incoming) flyGhostCard(animPlan.incoming.card, animPlan.incoming.fromRect, animPlan.incoming.toRect, freshGridEl ? freshGridEl.children[w.idx] : null);
-      if(animPlan.outgoing) flyGhostCard(animPlan.outgoing.card, animPlan.outgoing.fromRect, animPlan.outgoing.toRect, freshOpenEl);
+      S.turnActed = true;
+      // Graduation is a SWAP-LOCATION rule, not a hand-quality heuristic: per the game's own
+      // rule (see useDrawnOnSlot()'s identical isTopSlot && !S.graduated[myActual] gate for the
+      // human player), a player only ever locks into the top row by actually placing a drawn
+      // card into one of ITS three slots (index<=2) — never by discarding a drawn card straight
+      // to the pile without swapping, and never by swapping into a BOTTOM-row slot instead. The
+      // bot's ONLY path to a top-row index here is the deliberate "graduating" choice made
+      // above, so this condition is really just confirming that choice actually went through.
+      if(improves && w.idx<=2 && !S.graduated[p]){
+        S.graduated[p] = true;
+      }
+      if(S.finishCaller===-1){
+        const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
+        if(total<=4 && S.graduated[p]){
+          doDeclareFinished(p);
+        }
+      }
+      renderAll();
+      if(isOnline && isHost) pushStateToFirebase();
+      // ~400ms turn-transition delay (down from 900ms) — the flight animation itself already
+      // gives the swap its own visual weight; stacking a long pause on TOP of that on every
+      // single turn was what actually made the whole game feel stalled, on top of (separately)
+      // the reveal-dwell time below.
+      setTimeout(advanceTurn, 400);
+    };
+
+    if(improves){
+      const old = hand[w.idx]; // pre-swap value — S.hands[p] itself is untouched until finalize()
+      let pending = 2;
+      const oneLegDone = ()=>{ if(--pending<=0) finalize(); };
+      // Both legs fly in parallel — the drawn card into its new slot, the bumped card out to
+      // the discard pile — exactly like a hand physically swapping two cards at once, matching
+      // the "Draw Pile -> Target Slot ... and Discarded Slot -> Discard Pile" spec. finalize()
+      // only runs once BOTH flights have genuinely completed.
+      flyGhostCard(drawn, sourceRect, slotRect, slotEl, oneLegDone);
+      flyGhostCard(old, slotRect, openRectNow, openEl, oneLegDone);
+    } else {
+      flyGhostCard(drawn, sourceRect, openRectNow, openEl, finalize);
     }
   } catch(err){
     // A bot AI bug should never be able to freeze the whole game — log it, tell the
@@ -2192,9 +2236,9 @@ function botResolveTurn(p, ctx){
     S.turnActed = true;
     botRevealedDraw = null;
     try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
+    if(isOnline && isHost) pushStateToFirebase();
+    setTimeout(advanceTurn, 400);
   }
-  if(isOnline && isHost) pushStateToFirebase();
-  setTimeout(advanceTurn, 900);
 }
 
 /* ============================= SCORING ============================= */
@@ -2521,8 +2565,19 @@ function renderAll(){
       nameEl.classList.remove('magnify-target');
       nameEl.onclick = null;
     }
-    nameEl.classList.toggle('active', S.phase==='playing' && S.turn===actual);
+    const isActiveTurn = S.phase==='playing' && S.turn===actual;
+    nameEl.classList.toggle('active', isActiveTurn);
     nameEl.classList.toggle('declared-finish', declared);
+    // Highlight the WHOLE player panel (name + 6-card board), not just the name text — a border
+    // pulse on a 13px-font badge is easy to miss on a real phone; the full board glowing is not.
+    // Dim every OTHER player's panel at the same time so the active one reads as obviously
+    // singled-out rather than just "also lit up a bit" — the two together (glow here, dim
+    // everywhere else) are what make whose turn it is unambiguous at a glance, not either alone.
+    const wrapEl = document.getElementById('pw-'+slot);
+    if(wrapEl){
+      wrapEl.classList.toggle('turn-active', isActiveTurn);
+      wrapEl.classList.toggle('turn-inactive', S.phase==='playing' && !isActiveTurn);
+    }
     renderPlayerGrid(slot, actual);
   }
   if(roundEnded) magnifyHintPulsed = true;
