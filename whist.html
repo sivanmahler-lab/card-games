@@ -1574,6 +1574,19 @@ function isSavableSinglePlayerGame(){
 // nothing across a reload and get freshly reset on restore instead.
 function saveGame(){
   if(!isSavableSinglePlayerGame()) return;
+  // Skip the save entirely while a trick is mid-resolution (S.resolvingTrick — set the instant
+  // the 4th card lands, cleared ~700ms later in finishTrick() once tricksWon/leader/currentTrick
+  // have all actually been updated together — see resolveTrick()'s own comment). Previously this
+  // window was only handled by EXCLUDING resolvingTrick itself from the saved payload (still done
+  // below) — which avoided saving a corrupted BOOLEAN, but didn't stop saving the rest of the
+  // state mid-transition: S.currentTrick with a already-resolved-looking 4 cards, tricksWon/
+  // leader not yet updated for it, exactly the kind of half-applied snapshot resumeSavedGame()
+  // then has to guess how to continue from. Waiting the ~700ms for finishTrick() to actually
+  // finish and call renderTable() (which re-triggers this same saveGame()) means every save that
+  // does go through captures a single, fully-settled state — either "trick in progress, <4
+  // cards" or "trick just cleared, tricksWon/leader updated, next trick not yet started" — never
+  // the moment in between.
+  if(S.resolvingTrick) return;
   try{
     const { genId, turnSig, turnSigTime, resolvingTrick, ...persisted } = S;
     localStorage.setItem(SAVED_GAME_KEY, JSON.stringify({ savedAt: Date.now(), state: persisted }));
@@ -1622,6 +1635,21 @@ function resumeSavedGame(saved){
     else if(S.phase==='playing'){
       if(S.currentTrick.length===4) resolveTrick();
       else advancePlaying();
+    } else if(S.phase==='round-end' || S.hands.every(h=>!h || h.length===0)){
+      // The round-end MODAL itself isn't part of S — it's a plain DOM overlay showRoundEndModal()
+      // builds on demand — so a save taken while it was open (S.phase==='round-end', per
+      // finishRound() now setting that for every game mode, not just online — see its own
+      // comment) restores the TABLE underneath (empty hands, final trick counts) but leaves the
+      // player looking at a blank, unresponsive table with no results in sight and nothing left
+      // to legally do, since every hand is empty. S.hands.every(...empty) is kept as a second,
+      // independent way to reach this same branch — a save from before this fix shipped (or any
+      // other path that ever leaves S.phase stale while every hand is genuinely empty) still
+      // gets the results screen instead of a dead end. S.roundEndData (also now always set —
+      // same comment) carries this round's own results; roundHistory's own last entry is the
+      // fallback for an even older save that predates roundEndData existing at all.
+      const results = (S.roundEndData && S.roundEndData.results)
+        || (S.roundHistory && S.roundHistory.length ? S.roundHistory[S.roundHistory.length-1].results : null);
+      if(results) showRoundEndModal(results);
     }
   } catch(e){ console.error('Resume re-drive failed', e); }
 }
@@ -3138,11 +3166,18 @@ function finishRound(){
   });
   // Mark phase so the round-end screen syncs to every online client, not just the host: the
   // client's gameState listener only shows the round-end modal when it sees phase==='round-end'
-  // plus a roundEndData payload (see startOnlineClientGame). Previously neither was ever set,
-  // so only the host — who calls showRoundEndModal() directly below — ever saw the results.
+  // plus a roundEndData payload (see startOnlineClientGame). Previously neither was ever set for
+  // LOCAL (vs-computer) games either — S.phase there just stayed 'playing' with every hand
+  // empty, which is exactly the ambiguous, easy-to-misdiagnose state resumeSavedGame() used to
+  // have to guess its way out of (see its own comment). S.phase/roundEndData are now set
+  // unconditionally, for every game mode; only the actual Firebase push below stays online+host-
+  // only, since a local game has no one else to sync to. startRound() (whenever this round-end
+  // screen is actually dismissed and the next round begins) always explicitly overwrites S.phase
+  // to 'trump-bidding' regardless of what it was before, so setting it here for local games too
+  // is safe — nothing downstream depends on it staying 'playing' through this window.
+  S.phase = 'round-end';
+  S.roundEndData = { results, totalsAfter: S.totals.slice() };
   if(isOnline && isHost){
-    S.phase = 'round-end';
-    S.roundEndData = { results, totalsAfter: S.totals.slice() };
     pushStateToFirebase();
   }
   showRoundEndModal(results);
@@ -3994,9 +4029,31 @@ const SplashScreen = {
     const status = document.getElementById('splash-status');
     if(status) status.textContent = 'מוכן!';
     const el = document.getElementById('splash-screen');
-    if(!el) return;
+    if(!el){
+      // No splash element to wait on (shouldn't normally happen) — still need to fire whatever
+      // was waiting on the splash actually being gone.
+      showResumeGamePrompt();
+      return;
+    }
     el.classList.add('fade-out');
-    setTimeout(()=>{ el.remove(); }, 550);
+    setTimeout(()=>{
+      el.remove();
+      // Fired here — only once the splash element is actually gone from the DOM — instead of on
+      // window 'load' (see the removed listener at the bottom of this file for why): #splash-
+      // screen sits at z-index:5000, #resume-modal (a .modal-bg) at z-index:800. 'load' fires as
+      // soon as resources finish loading, which on any reasonably fast connection is WELL before
+      // this 2000ms+550ms splash timeline completes — so the resume prompt was opening (its
+      // "show" class genuinely applied, genuinely in the DOM) but sitting completely hidden
+      // behind the still-opaque splash for two-plus seconds, then appearing to "suddenly" pop in
+      // the instant the splash finally cleared. That's not just a cosmetic delay: a player who
+      // taps anywhere on the screen during those 2+ seconds — entirely reasonably, since nothing
+      // visible has happened yet — is tapping blind on top of a resume prompt they can't see,
+      // with no guarantee what (if anything) is under their tap once the splash does clear.
+      // Calling this only after the splash element is actually removed guarantees the prompt is
+      // the first thing the player can actually see and interact with, not just the first thing
+      // that happened to be technically present in the DOM.
+      showResumeGamePrompt();
+    }, 550);
   }
 };
 SplashScreen.start();
@@ -4069,7 +4126,10 @@ new MutationObserver(refreshTopbarStacking).observe(document.body, {
 refreshTopbarStacking();
 
 window.addEventListener('load', applyRoomDeepLink);
-window.addEventListener('load', showResumeGamePrompt);
+// showResumeGamePrompt() is no longer triggered from 'load' — see SplashScreen.finish()'s own
+// comment for why: 'load' fires well before the splash screen (z-index:5000, ~2.5s total
+// lifetime) has actually left the DOM, which left the resume prompt (z-index:800) opening
+// completely hidden underneath it. It now fires once the splash is genuinely gone instead.
 // The lobby's "חוקים" (rules) button links here as whist.html?rules=1 so a player can read the
 // rules before ever entering a game mode — openInstructions() itself doesn't depend on any game
 // state, so it's safe to fire straight from a query param on load like this.
