@@ -1224,6 +1224,10 @@ function freshState(){
     turnInTrick:0,
     trumpBroken:false,
     trickHistory:[],
+    // See startRound()'s own comment on playerVoids — defaulted here too so any code that reads
+    // it before the very first startRound() call (shouldn't normally happen, phase is 'idle'
+    // until then) finds a well-formed grid rather than undefined.
+    playerVoids:[[false,false,false,false],[false,false,false,false],[false,false,false,false],[false,false,false,false]],
     revealedHuman:-1,
     roundType:null,
     trumpSuit:null,
@@ -1804,6 +1808,12 @@ function startRound(){
   S.currentTrick=[];
   S.trumpBroken=false;
   S.trickHistory=[];
+  // playerVoids[p][s]===true means player p has, at some point THIS round, failed to follow
+  // suit s when it was led — i.e. is known for certain to hold no more cards of suit s. Reset
+  // fresh every round (a void from a previous round obviously says nothing about this one,
+  // since hands are completely redealt) — see playCard()'s own comment for where this gets set,
+  // and botPlay()'s for how it's actually used in choosing what to lead.
+  S.playerVoids = [[false,false,false,false],[false,false,false,false],[false,false,false,false],[false,false,false,false]];
   S.roundType=null;
   S.revealedHuman=-1;
   S.roundEndData=null;
@@ -2914,6 +2924,20 @@ function playCard(p, c){
     return;
   }
   hand.splice(idx,1);
+  // Void tracking: if a trick is already in progress (there's a led suit to compare against)
+  // and this card does NOT match it, this player has just proven — with total certainty — that
+  // they hold no more cards of the led suit. legalCardsFor() above already guarantees this only
+  // happens when the player genuinely couldn't follow (holding none of that suit), never a
+  // choice to duck a suit they actually have, so this is a hard fact, not a guess. Recorded
+  // here rather than in resolveTrick() so it's already up to date for anyone who plays LATER in
+  // this same trick, not just future tricks.
+  if(S.currentTrick.length>0){
+    const ledSuit = S.currentTrick[0].card.suit;
+    if(c.suit!==ledSuit){
+      if(!S.playerVoids) S.playerVoids=[[false,false,false,false],[false,false,false,false],[false,false,false,false],[false,false,false,false]];
+      S.playerVoids[p][ledSuit] = true;
+    }
+  }
   S.currentTrick.push({player:p, card:c});
   if(c.suit===S.trumpSuit) S.trumpBroken=true;
   hideControlPanel();
@@ -2934,6 +2958,29 @@ function botPlay(p){
   if(!S.hands[p] || S.hands[p].length===0) return;
   const legal = legalCardsFor(p);
   if(legal.length===0) return;
+  if(!S.playerVoids) S.playerVoids=[[false,false,false,false],[false,false,false,false],[false,false,false,false],[false,false,false,false]];
+
+  // ---- Shared void/trump-counting helpers (used by both the opening-lead and follow-suit
+  // branches below) ----
+  // True if ANY player other than p has, at some point this round, proven for certain (see
+  // playCard()'s own comment on exactly when this gets set — it's only ever set when a player
+  // genuinely couldn't follow suit, never a choice) that they hold no more cards of the given
+  // suit. Used to steer leads away from suits that would just hand an opponent a free ruff, and
+  // toward suits a specific target (a zero-bidder) is known to still have.
+  const anyOtherVoidIn = (suit)=> [0,1,2,3].some(pl=> pl!==p && S.playerVoids[pl][suit]);
+  // Cards already known to be gone this round — completed tricks PLUS whatever's already been
+  // played into the current trick-in-progress (there's nothing in this one yet at this point in
+  // the function, since we only reach here for an EMPTY currentTrick, but keeping the concat
+  // here rather than duplicating this line in both branches keeps them consistent).
+  const playedCards = S.trickHistory.flatMap(h=>h.cards.map(pc=>pc.card)).concat(S.currentTrick.map(pc=>pc.card));
+  const trumpsPlayed = playedCards.filter(c=>c.suit===S.trumpSuit).length;
+  const myTrumpCount = S.hands[p].filter(c=>c.suit===S.trumpSuit).length;
+  // Trumps that exist somewhere OTHER than this bot's own hand and haven't been played yet — the
+  // ones an opponent could still use to ruff a non-trump lead out from under it. Zero means every
+  // trump in the deck is either already played or sitting in this bot's own hand — i.e. nobody
+  // left can possibly ruff anything, "all trumps drawn" from this bot's point of view.
+  const trumpsUnaccountedFor = Math.max(0, 13 - myTrumpCount - trumpsPlayed);
+
   let choice;
   if(S.currentTrick.length===0){
     // Opening the trick — this is where UP and UNDER strategy genuinely diverge, not just a
@@ -2953,9 +3000,6 @@ function botPlay(p){
     const iAmZero = (S.bids[p]===0);
     const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0) : [];
     const earlyInRound = S.trickHistory.length < 8;
-    // Cards already known to be gone this round (from completed tricks), used to tell
-    // whether a King etc. is now the effective top of its suit.
-    const playedCards = S.trickHistory.flatMap(h=>h.cards.map(pc=>pc.card));
     // Whether this specific bot's persona "reliably notices" that a suit's top card has
     // already fallen (see js/ai/bot-persona.js knowsSuitTopIsGone). ויקטוריה's near-perfect
     // countingAccuracy means she almost always uses this correctly; ארתור's lower accuracy
@@ -2967,29 +3011,89 @@ function botPlay(p){
       const objective = suitTopIsGoneObjective(suit, aboveRank);
       return window.BotPersona ? window.BotPersona.knowsSuitTopIsGone(objective, S.names[p]) : objective;
     };
-    if(S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
-      choice = sorted[0];
-    } else if(S.roundType==='UP' && needMore){
-      // Look for a genuinely safe winner to lead: an Ace, or (failing that) a King whose
-      // Ace has already fallen — in either case this card is essentially guaranteed to win
-      // the trick right now.
+
+    // ---- Trump-drawing strategy: the trump-caller with a genuinely long trump suit (4+) who
+    // still needs tricks, once trump is broken, gets more total value from stripping everyone
+    // else's trumps FIRST — leading high trumps — than from cashing a side-suit winner right
+    // now: every trump this bot leads that an opponent must follow (or, having none, simply
+    // loses the ability to ever ruff again) is one less trump that can later jump in and steal a
+    // side-suit Ace/King this hand is also holding. Scoped to the caller specifically (the one
+    // player whose whole bid was built around that trump length in the first place — see
+    // botTrumpBid()) rather than any long-trump hand, since a non-caller holding length in
+    // someone ELSE's chosen trump suit is a much murkier case the rest of this function's
+    // heuristics already cover reasonably. Only while trumpsUnaccountedFor>0 — once every trump
+    // is already drawn or in this hand, there's nothing left to strip.
+    const isCallerWithLongTrump = (p===S.trumpBid.player) && myTrumpCount>=4;
+    if(isCallerWithLongTrump && needMore && S.trumpBroken && trumpsUnaccountedFor>0){
+      const myTrumps = sorted.filter(c=>c.suit===S.trumpSuit);
+      if(myTrumps.length>0) choice = myTrumps[myTrumps.length-1]; // highest trump in hand
+    }
+
+    if(!choice && S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
+      // Zero-bid hunter, opening lead: rather than just any low non-trump card, prefer a suit
+      // a zero-bidder is NOT already known to be void in. Leading their known void does nothing
+      // to pressure them — they simply discard whatever they like from a suit they're free of
+      // anyway; leading a suit they still hold forces them to actually follow suit and risk
+      // winning a trick they bid they wouldn't. Falls back to the plain lowest-card approach if
+      // every non-trump suit is already a known void for every target (or void status is simply
+      // still unknown this early), same as the original behavior.
+      const nonTrumpSorted = sorted.filter(c=>c.suit!==S.trumpSuit);
+      const pressuring = nonTrumpSorted.find(c=> !zeroTargets.every(zt=>S.playerVoids[zt][c.suit]));
+      choice = pressuring || nonTrumpSorted[0] || sorted[0];
+    }
+
+    if(!choice && S.roundType==='UP' && needMore){
+      // Look for a genuinely safe winner to lead: an Ace; a King whose Ace has already fallen;
+      // or — top-of-sequence — a King with its own Queen still sitting right behind it in hand,
+      // even if the Ace hasn't fallen yet. That King forces the Ace out immediately rather than
+      // waiting on it, which promotes the Queen into a winner for a later trick — a real
+      // "lead top of a sequence" play, not just "happens to already be safe".
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
-      const safeLead = nonTrump.find(c=>c.rank===14)
+      const kqSequenceLead = nonTrump.find(c=> c.rank===13 && nonTrump.some(o=>o.suit===c.suit && o.rank===12));
+      let safeLead = nonTrump.find(c=>c.rank===14)
         || nonTrump.find(c=>c.rank===13 && suitTopIsGone(c.suit,13))
+        || kqSequenceLead
         || sorted.find(c=>c.suit===S.trumpSuit && c.rank===14)
         || sorted.find(c=>c.suit===S.trumpSuit && c.rank===13 && suitTopIsGone(c.suit,13));
+      // Void-avoidance: don't lead a non-trump suit an opponent is already known void in, unless
+      // it's already the single safest lead there is (an outright Ace — nothing beats that
+      // regardless of who ruffs where). A void opponent sitting anywhere behind this lead can
+      // simply trump it away instead of following, turning an intended "certain trick" into a
+      // wasted card — but only matters while trumps are still meaningfully out there
+      // (trumpsUnaccountedFor>0); once they're all drawn or accounted for, a void just means
+      // that opponent has nothing at all to say about the suit.
+      if(safeLead && safeLead.suit!==S.trumpSuit && safeLead.rank!==14 && trumpsUnaccountedFor>0 && anyOtherVoidIn(safeLead.suit)){
+        const alt = nonTrump.find(c=> c.rank===14 || !anyOtherVoidIn(c.suit));
+        safeLead = alt || safeLead;
+      }
       choice = safeLead || (nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1]);
-    } else if(S.roundType==='UNDER' && !iAmZero){
-      // Duck the lead with a low non-trump card whenever this bot doesn't urgently need
-      // more tricks itself — passing the lead around is the whole point in an UNDER round.
+    }
+
+    if(!choice && S.roundType==='UNDER' && !iAmZero){
+      // Duck the lead whenever this bot doesn't urgently need more tricks itself — passing the
+      // lead around is the whole point in an UNDER round. The duck card is now specifically the
+      // LOWEST card of the LONGEST non-trump suit, not just whatever the single lowest non-trump
+      // card in hand happens to be — leading from length is safer over the rest of the round (a
+      // short suit runs out fast and forces an awkward lead later once it's gone), and it's
+      // exactly what a human deliberately passing the lead would actually choose.
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
-      choice = needMore ? (nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1]) : sorted[0];
-    } else if(needMore){
+      if(needMore){
+        choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
+      } else {
+        const bySuitLen = {};
+        nonTrump.forEach(c=>{ bySuitLen[c.suit]=(bySuitLen[c.suit]||0)+1; });
+        let longestSuit=null, longestLen=-1;
+        Object.keys(bySuitLen).forEach(s=>{ if(bySuitLen[s]>longestLen){ longestLen=bySuitLen[s]; longestSuit=+s; } });
+        const fromLongestSuit = longestSuit!==null ? nonTrump.filter(c=>c.suit===longestSuit).sort((a,b)=>a.rank-b.rank)[0] : null;
+        choice = fromLongestSuit || sorted[0];
+      }
+    }
+
+    if(!choice && needMore){
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
       choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
-    } else {
-      choice = sorted[0];
     }
+    if(!choice) choice = sorted[0];
   } else {
     const ledSuit = S.currentTrick[0].card.suit;
     let winning = S.currentTrick[0];
@@ -3006,6 +3110,13 @@ function botPlay(p){
       }).sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
       choice = winners.length>0 ? winners[0] : legal.slice().sort((a,b)=>a.rank-b.rank)[0];
     } else {
+      // Ducking, including the zero-bid hunter's "leave it in their lap": among cards that
+      // don't beat the current winner, always take the LOWEST one available — this already
+      // covers "duck low below the zero-bidder's card if safe" exactly, with no extra special-
+      // casing needed for who currently holds the trick: whether the current winning card
+      // belongs to a zero-bidder, another bot, or the human, a bot that doesn't need this trick
+      // never has any reason to spend more of a losing card than it has to, and never risks
+      // accidentally overtaking a zero-bidder's card by playing a needlessly high loser.
       let losers = legal.filter(c=>{
         if(c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) return false;
         if(c.suit===winning.card.suit && c.rank>winning.card.rank) return false;
