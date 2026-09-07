@@ -1653,7 +1653,20 @@ function resumeSavedGame(saved){
       // fallback for an even older save that predates roundEndData existing at all.
       const results = (S.roundEndData && S.roundEndData.results)
         || (S.roundHistory && S.roundHistory.length ? S.roundHistory[S.roundHistory.length-1].results : null);
-      if(results) showRoundEndModal(results);
+      if(results){
+        showRoundEndModal(results);
+      } else {
+        // Genuine last resort: hands are empty but NEITHER roundEndData nor a matching
+        // roundHistory entry exists — meaning finishRound() for this round was, somehow, never
+        // actually called at all (a real corrupted/incomplete state, not just an old save
+        // format). Calling finishRound() here is safe ONLY in this specific branch, precisely
+        // BECAUSE there's no existing roundEndData/roundHistory entry to prove it already ran —
+        // finishRound() adds this round's points into S.totals, so calling it a SECOND time for
+        // a round that already scored (the far more common case, handled above by reusing the
+        // existing results instead) would silently double-count that round's score. Never call
+        // finishRound() here if results were found above.
+        try{ finishRound(); } catch(e2){ console.error('Fallback finishRound() on resume failed', e2); }
+      }
     }
   } catch(e){ console.error('Resume re-drive failed', e); }
 }
@@ -1928,6 +1941,21 @@ function renderOwnFan(fan, actual){
   if(n===0){
     const hint = document.getElementById('card-confirm-hint');
     if(hint) hint.classList.remove('show');
+    // Actually clear the fan's DOM, not just the bookkeeping below — this branch used to return
+    // immediately without ever touching fan's children at all, which is exactly what left a
+    // "ghost" card behind: the normal reconciliation loop further down (existingByKey / "remove
+    // elements for cards that are no longer in hand") is what tears down a just-played card's
+    // DOM node, and that whole loop lives in the n>0 path this branch skips entirely. The very
+    // last card of a hand — most visibly when it's ALSO the 4th card completing a trick, e.g.
+    // the human's final card of the round — goes through exactly this n===0 branch the instant
+    // it's played (S.hands[actual] is already spliced down to length 0 by playCard() before this
+    // renders), so without this, that one card's element stayed sitting in the fan, fully
+    // visible, even though the data model already correctly shows an empty hand — while the SAME
+    // card is simultaneously, correctly, also being drawn in the trick area and animated toward
+    // the trick's winner. Reproduced directly: right after playing a hand's last card, the fan
+    // still had 2 DOM children (the played card's own element plus its leftover hit-overlay)
+    // despite S.hands[actual].length already being 0.
+    fan.innerHTML = '';
     fan.dataset.ownFanSig = '';
     fan.dataset.ownFanHandSig = '';
     // Reset the fresh-deal marker too — the next hand dealt (a new round) must be detected as a
@@ -2460,6 +2488,18 @@ function suitSafeTricks(cardsOfSuit, isTrump){
     // with), so count them at a high-but-not-certain rate.
     const extraTrump = Math.max(0, sorted.length - 3);
     safe += extraTrump*0.55;
+    // A genuinely LONG trump suit (5+ cards total) is worth dramatically more than that linear
+    // per-card rate alone suggests — this isn't just "one more card that's probably a trick",
+    // it's the point where opponents (across 3 other hands splitting the remaining 8 or fewer
+    // trumps) are quite likely to run out of trump entirely before this hand does, at which
+    // point EVERY remaining trump card here becomes a near-certain trick regardless of rank —
+    // even a bare 5-6 card trump suit with no honors at all is a genuinely strong hand for that
+    // reason alone. Modeled as an escalating step-bonus (not just a steeper linear rate) because
+    // the effect compounds: a 7-card trump suit isn't merely "2 cards better than 5", it's
+    // dramatically more likely to fully exhaust everyone else's trump supply outright.
+    if(sorted.length>=5){
+      safe += 0.5 + (sorted.length-5)*0.4;
+    }
   }
   return safe;
 }
@@ -2796,17 +2836,39 @@ function botDeclare(p){
       v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     }
   } else {
-    // Rule 2, last bidder: the trickiest seat. Needs to weigh three things at once:
-    //  (a) if someone already bid zero and the total would land UNDER anyway, that zero
-    //      bidder is about to have a much harder time — nothing this bot can do about
-    //      that, it's just context, not a reason to change its own bid.
-    //  (b) same "every suit only has low cards" zero-bid consideration as rule 2.
-    //  (c) look at the running total so far — if it's meaningfully below 13, lean toward
-    //      pushing the total closer to 13 (an UNDER game favors most bidders and is the
-    //      "expected" outcome most rounds), unless this hand genuinely can't support it.
+    // Rule 2, last bidder: the trickiest seat — this bid is the one that actually DECIDES
+    // whether the whole round lands UP or UNDER, since the other three bids are already fixed.
+    // Needs to weigh:
+    //  (a) if someone already bid zero, that zero-bidder's own eventual reward depends on
+    //      which way THIS bid tips the round (see finishRound()'s own scoring: a made zero bid
+    //      pays 50 in an UNDER round but only 20 in an UP one) — real context, but not
+    //      something this bot can or should chase on someone else's behalf.
+    //  (b) same "every suit only has low cards" zero-bid consideration as rule 2 — and the
+    //      exact same 50-vs-20 payout gap applies to THIS bot's own zero bid too.
+    //  (c) Dealer Advantage: when the other three bids already sum to 11 or 12 — one or two
+    //      shy of 13 — this bid sits right on the UP/UNDER knife's edge, and hedging toward a
+    //      wishy-washy near-13 total serves this hand worse than committing decisively to
+    //      whichever side its own cards actually support (see the branch below for exactly how).
     const declaredSoFar = S.declareOrder.slice(0,3).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
     if(takeZeroBid){
       v = 0;
+    } else if(declaredSoFar===11 || declaredSoFar===12){
+      // Right on the knife's edge — commit fully to whichever side this hand's own cards
+      // genuinely support, rather than splitting the difference:
+      //  - A hand honestly worth MEANINGFULLY more than "just enough to stay under 13" should
+      //    bid that honest number and let the round land UP. Artificially suppressing the bid
+      //    just to preserve UNDER would set this bot up to take more tricks than its own
+      //    (deliberately lowballed) bid — and a bid that ends up short of what's actually won is
+      //    penalized the same -10*|bid-won| regardless of round type (see the non-zero pts
+      //    formula below), so protecting THIS bot's own bidding accuracy matters more than the
+      //    round-type label ever does for a non-zero bid.
+      //  - Otherwise (the hand doesn't clearly support more than that), commit fully to staying
+      //    under — bid the UNDER-preserving total outright rather than a hedge between it and
+      //    the honest baseline.
+      const neededFor13 = 13 - declaredSoFar;
+      const baseline = Math.max(0, Math.min(13, Math.round(est)));
+      v = (baseline > neededFor13 + 1) ? baseline : Math.max(0, Math.min(baseline, neededFor13));
+      v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     } else {
       const baseline = Math.max(0, Math.min(13, Math.round(est)));
       const neededFor13 = 13 - declaredSoFar;
