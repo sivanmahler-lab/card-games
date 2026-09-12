@@ -1630,8 +1630,37 @@ function resumeSavedGame(saved){
     document.getElementById('badge-'+disp).classList.remove('me');
   }
   updateRoomBadge();
-  document.getElementById('pill-round').textContent = 'סיבוב '+S.roundNum;
-  document.getElementById('pill-round').className = 'pill round';
+  // Restore the trump-suit and round-type (UP/UNDER) pills from the resumed S state — these are
+  // normally only ever SET, once each, at the exact moment trump-bidding concludes
+  // (finishTrumpBidding()) and trick-bidding concludes (advanceTrickBidding()); nothing re-derives
+  // them from S on every render the way the rest of the table does. A freshly loaded page starts
+  // with both hidden/blank (see startRound()'s own reset), and resuming mid-round jumps straight
+  // into 'playing'/'trick-bidding' — past both of those one-time trigger points — without ever
+  // passing through the code that would populate them. The DATA (S.trumpSuit, S.roundType) comes
+  // back correctly; only these three DOM elements were left stuck at their fresh-page-load
+  // default, silently showing neither the trump suit nor whether the round is UP or UNDER for the
+  // rest of that round — exactly what read as "not clear what's trump, or whether this is an UP
+  // or UNDER round" after resuming.
+  const pillTrump = document.getElementById('pill-trump');
+  const tbTrump = document.getElementById('tb-trump');
+  if(S.trumpSuit!==null && S.trumpSuit!==undefined){
+    const winnerName = (S.trumpBid && S.names[S.trumpBid.player]) || '';
+    pillTrump.style.display='inline-block';
+    pillTrump.textContent = SUITS[S.trumpSuit].sym+(winnerName?' ('+winnerName+')':'');
+    tbTrump.style.display='inline-block';
+    tbTrump.textContent = SUITS[S.trumpSuit].sym+' שליט';
+  } else {
+    pillTrump.style.display='none';
+    tbTrump.style.display='none';
+  }
+  const roundPill = document.getElementById('pill-round');
+  if(S.roundType){
+    roundPill.textContent = 'סיבוב '+S.roundNum+' — '+(S.roundType==='UP' ? 'UP ⬆' : 'UNDER ⬇');
+    roundPill.className = 'pill round '+(S.roundType==='UP'?'up':'under');
+  } else {
+    roundPill.textContent = 'סיבוב '+S.roundNum;
+    roundPill.className = 'pill round';
+  }
   renderTable();
   try{
     if(S.phase==='trump-bidding') advanceTrumpBidding();
