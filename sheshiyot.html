@@ -2192,25 +2192,19 @@ function botResolveTurn(p, ctx){
     const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
     const openRectNow = openEl ? openEl.getBoundingClientRect() : null;
 
-    // finalize(): the actual hand/discard-pile mutation, graduation/finish-declaration checks,
-    // re-render, and turn-advance — ALL deferred until after the flight animation(s) below have
-    // genuinely finished (flyGhostCard's onComplete fires from a real transitionend, not a
-    // guessed timer — see its own comment). Per the explicit requirement that the real card
-    // state must only change once the animation callback confirms it actually played: while the
-    // flight is in progress, S.hands[p] and S.discardPile are still untouched, so anything that
-    // renders in between (there shouldn't be anything, since this is a synchronous local bot
-    // turn with nothing else running concurrently) would still see the pre-swap state.
+    // finalize(): the actual hand mutation, graduation/finish-declaration checks, re-render
+    // (closing the drawn-card overlay and updating the destination slot's real face-up value),
+    // and turn-advance — reached only once BOTH legs of the swap have played out IN SEQUENCE
+    // (see below): first the departing card's own complete flight to the discard pile, and only
+    // once THAT has genuinely finished, the incoming card's flight into its slot. This is a
+    // deliberate structural choice, not just "wait for animations before rendering" — running
+    // both flights in parallel (the previous version) is a real, correct card-flight animation
+    // on its own, but a same-instant "old card leaves, new card arrives" reads as one blurred
+    // event rather than two distinct, followable beats: a human physically swapping two cards
+    // does one, then the other, not both at once. Sequencing them is what actually makes a swap
+    // legible as "this card left, THEN this card arrived" instead of just a faster flash.
     const finalize = ()=>{
       botRevealedDraw = null;
-      if(improves){
-        const old = hand[w.idx];
-        hand[w.idx] = drawn;
-        S.discardPile.push(old);
-        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
-        rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
-      } else {
-        S.discardPile.push(drawn);
-      }
       S.turnActed = true;
       // Graduation is a SWAP-LOCATION rule, not a hand-quality heuristic: per the game's own
       // rule (see useDrawnOnSlot()'s identical isTopSlot && !S.graduated[myActual] gate for the
@@ -2238,17 +2232,37 @@ function botResolveTurn(p, ctx){
     };
 
     if(improves){
-      const old = hand[w.idx]; // pre-swap value — S.hands[p] itself is untouched until finalize()
-      let pending = 2;
-      const oneLegDone = ()=>{ if(--pending<=0) finalize(); };
-      // Both legs fly in parallel — the drawn card into its new slot, the bumped card out to
-      // the discard pile — exactly like a hand physically swapping two cards at once, matching
-      // the "Draw Pile -> Target Slot ... and Discarded Slot -> Discard Pile" spec. finalize()
-      // only runs once BOTH flights have genuinely completed.
-      flyGhostCard(drawn, sourceRect, slotRect, slotEl, oneLegDone);
-      flyGhostCard(old, slotRect, openRectNow, openEl, oneLegDone);
+      const old = hand[w.idx]; // pre-swap value — S.hands[p] itself is untouched until its own beat below
+      // BEAT 1 — depart: the card currently sitting in the target slot flies out to the discard
+      // pile FIRST, on its own, before anything else moves or changes. The discard-pile mutation
+      // (S.discardPile.push) happens the instant this flight's own motion genuinely completes —
+      // not before (nothing to show yet) and not deferred all the way to the end either (this
+      // beat is already visually finished, so the board should already reflect it) — then a
+      // direct, targeted update of just the open pile's own face (not a full renderAll(), which
+      // would also touch the still-mid-swap hand slot before beat 2 has even started) shows the
+      // departed card actually sitting on the discard pile before beat 2 begins.
+      flyGhostCard(old, slotRect, openRectNow, openEl, ()=>{
+        S.discardPile.push(old);
+        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
+        const openElNow = document.getElementById('pile-open');
+        if(openElNow) revealPileFace(openElNow, old);
+        // BEAT 2 — arrive: only now does the drawn card fly into the slot it's actually replacing
+        // (which the player can already see is empty/departed, since beat 1 finished first).
+        // hand[w.idx] itself isn't written until THIS flight also finishes, in finalize() —
+        // matching "only after the final animation callback is hit should the DOM update the
+        // final face-up value and close the overlay" exactly: nothing about the destination
+        // slot's own face changes until both beats are done.
+        flyGhostCard(drawn, sourceRect, slotRect, slotEl, ()=>{
+          hand[w.idx] = drawn;
+          rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+          finalize();
+        });
+      });
     } else {
-      flyGhostCard(drawn, sourceRect, openRectNow, openEl, finalize);
+      flyGhostCard(drawn, sourceRect, openRectNow, openEl, ()=>{
+        S.discardPile.push(drawn);
+        finalize();
+      });
     }
   } catch(err){
     // A bot AI bug should never be able to freeze the whole game — log it, tell the
@@ -2492,6 +2506,59 @@ function showRoundEndModal(){
 }
 
 /* ============================= RENDER ============================= */
+// Plays the SAME .pcell.face flipReveal keyframe (see its own CSS comment) that already fires
+// correctly for hand-grid cards and the ghost-flight overlay — but pile-closed/pile-open are
+// PERSISTENT elements (renderAll() mutates their innerHTML in place every call, it never
+// recreates them), and per that CSS comment the animation only plays "on a freshly-created
+// element". Toggling the 'face' class onto an element that already exists in the DOM does NOT
+// restart a CSS animation on its own — which is exactly why the pile reveal used to just
+// instantly swap from 🎴 to the drawn card's face with no motion at all, even though the flip
+// mechanism itself was already built and working everywhere else. The standard fix: explicitly
+// remove the class, force a reflow (void el.offsetWidth — reading a layout property flushes
+// pending style changes, which is what actually resets the animation's internal state), then add
+// the class back so the browser treats it as a new run. Guarded by a signature (the specific
+// card, or '' for face-down) so this only replays when the face ACTUALLY changes — not on every
+// one of renderAll()'s frequent, often no-op-for-this-cell calls (a Firebase tick, the
+// visibility-resume repaint, etc.), which would otherwise flip the same already-revealed card
+// over and over on every unrelated re-render.
+//
+// ALSO drives .pile.face-pop (see its own CSS comment) the exact same remove+reflow+re-add way,
+// for the same reason — this used to piggyback on the 'drawn' class already being added right
+// after this function returns, which happened to work ONCE (drawn wasn't present yet on the very
+// first reveal, so adding it was a genuine change) but silently did nothing for every OTHER case:
+// a second consecutive reveal while 'drawn' was already sitting there from the first one (adding
+// an already-present class is a no-op), and — far more commonly during real play — the open/
+// discard pile, which never gets 'drawn' added AT ALL (that class means "you're holding this as a
+// pending decision", which the open pile's ordinary top-card display never is) and therefore had
+// ZERO pop animation on every single discard, from every player, for the entire game — the single
+// most frequent visible change on the whole board.
+//
+// Promoted to top-level (was previously nested inside renderAll() itself) — it never actually
+// depended on anything local to renderAll(), only the global SUITS_INFO/rankLabel/symHTML helpers
+// already used elsewhere in this file, so this was just an accident of where it happened to be
+// written rather than a real scoping need. botResolveTurn()'s own sequential swap animation (see
+// its own comment on why the two legs are chained rather than parallel) needs to call this
+// directly, right when the depart-flight finishes, to put the departed card's real face onto the
+// open pile immediately — not wait for the NEXT full renderAll(), which wouldn't happen until the
+// arrive-flight (the swap's second beat) has also finished, by which point the open pile would be
+// showing nothing at all for the entire arrive-flight instead of the card that just landed there.
+function revealPileFace(el, card){
+  const sig = card ? (card.suit+card.rank) : '';
+  if(el.dataset.faceSig === sig) return;
+  el.dataset.faceSig = sig;
+  el.classList.remove('face','face-pop');
+  void el.offsetWidth;
+  if(card){
+    const info = SUITS_INFO[card.suit];
+    el.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
+    el.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
+    el.classList.add('face', 'face-pop', info.color);
+  } else {
+    el.innerHTML = '🎴';
+    el.style.color = '';
+    el.classList.remove('red','black');
+  }
+}
 function renderAll(){
   if(!S) return;
   const myActual = seatFor(0);
@@ -2608,49 +2675,8 @@ function renderAll(){
   // piles
   const closedEl = document.getElementById('pile-closed');
   const openEl = document.getElementById('pile-open');
-  // Plays the SAME .pcell.face flipReveal keyframe (see its own CSS comment) that already
-  // fires correctly for hand-grid cards and the ghost-flight overlay — but pile-closed/pile-
-  // open are PERSISTENT elements (renderAll() mutates their innerHTML in place every call, it
-  // never recreates them), and per that CSS comment the animation only plays "on a freshly-
-  // created element". Toggling the 'face' class onto an element that already exists in the DOM
-  // does NOT restart a CSS animation on its own — which is exactly why the pile reveal used to
-  // just instantly swap from 🎴 to the drawn card's face with no motion at all, even though the
-  // flip mechanism itself was already built and working everywhere else. The standard fix:
-  // explicitly remove the class, force a reflow (void el.offsetWidth — reading a layout
-  // property flushes pending style changes, which is what actually resets the animation's
-  // internal state), then add the class back so the browser treats it as a new run. Guarded by
-  // a signature (the specific card, or '' for face-down) so this only replays when the face
-  // ACTUALLY changes — not on every one of renderAll()'s frequent, often no-op-for-this-cell
-  // calls (a Firebase tick, the visibility-resume repaint, etc.), which would otherwise flip
-  // the same already-revealed card over and over on every unrelated re-render.
-  //
-  // ALSO drives .pile.face-pop (see its own CSS comment) the exact same remove+reflow+re-add
-  // way, for the same reason — this used to piggyback on the 'drawn' class already being added
-  // right after this function returns, which happened to work ONCE (drawn wasn't present yet on
-  // the very first reveal, so adding it was a genuine change) but silently did nothing for every
-  // OTHER case: a second consecutive reveal while 'drawn' was already sitting there from the
-  // first one (adding an already-present class is a no-op), and — far more commonly during real
-  // play — the open/discard pile, which never gets 'drawn' added AT ALL (that class means
-  // "you're holding this as a pending decision", which the open pile's ordinary top-card display
-  // never is) and therefore had ZERO pop animation on every single discard, from every player,
-  // for the entire game — the single most frequent visible change on the whole board.
-  function revealPileFace(el, card){
-    const sig = card ? (card.suit+card.rank) : '';
-    if(el.dataset.faceSig === sig) return;
-    el.dataset.faceSig = sig;
-    el.classList.remove('face','face-pop');
-    void el.offsetWidth;
-    if(card){
-      const info = SUITS_INFO[card.suit];
-      el.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
-      el.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
-      el.classList.add('face', 'face-pop', info.color);
-    } else {
-      el.innerHTML = '🎴';
-      el.style.color = '';
-      el.classList.remove('red','black');
-    }
-  }
+  // revealPileFace() itself is now defined at top level, right before this function — see its
+  // own comment for why (botResolveTurn()'s sequential swap animation needs to call it directly).
   if(pendingDraw){
     // Show the drawn card face-up in place of the closed-pile back — this is the
     // player's own private decision, so it's only ever populated on their own screen.
