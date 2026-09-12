@@ -1492,6 +1492,27 @@ function buildRoundState(names, isHuman, matchHistory, roundNum, starter, active
     if(!isHuman[p]) S.peeked[p] = true;
   }
   S.drawPile = deck;
+  // Deliberately empty, not S.drawPile.pop() — the discard pile used to open with its first
+  // card the INSTANT this function ran, which is also the instant the 'peek' phase itself
+  // begins, before any player has even looked at their own two peekable cards yet. A pile
+  // nobody can legally draw from or discard onto during peek (the "קח קלף"/pile taps are gated
+  // on S.phase==='playing' throughout this file) has no business already showing a face-up
+  // card — see openInitialDiscard()'s own comment for where this actually gets populated
+  // instead, once peek genuinely ends.
+  S.discardPile = [];
+}
+// Turns over the draw pile's own top card to start the discard pile face-up — called exactly
+// once, at the single moment the 'peek' phase actually ends and true play begins (every
+// player has peeked; see both call sites: startFromPeek()'s own local-game branch and
+// applyHostAction()'s 'peek' handler for the online equivalent), never during buildRoundState()
+// itself (see its own comment on S.discardPile there for why that was wrong). Guarded by
+// S.discardPile.length===0 so it's a safe no-op if anything were ever to call it more than
+// once for the same round — the "exactly once" guarantee comes from BOTH call sites only
+// running this at all once allPeeked() first becomes true, but the guard costs nothing and
+// removes any doubt.
+function openInitialDiscard(){
+  if(S.discardPile.length>0) return;
+  if(S.drawPile.length===0) return;
   S.discardPile = [S.drawPile.pop()];
 }
 // Number of seats actually in play this match.
@@ -1598,6 +1619,7 @@ function startFromPeek(){
   if(allPeeked()){
     S.phase='playing';
     S.turn = S.starter;
+    openInitialDiscard();
   }
   renderAll();
   maybeBotTurn();
@@ -3498,7 +3520,7 @@ function applyHostAction(act){
   if(act.type==='peek'){
     if(S.peeked[p]) return;
     S.peeked[p]=true;
-    if(allPeeked()){ S.phase='playing'; S.turn=S.starter; }
+    if(allPeeked()){ S.phase='playing'; S.turn=S.starter; openInitialDiscard(); }
     renderAll(); pushStateToFirebase();
     return;
   }
