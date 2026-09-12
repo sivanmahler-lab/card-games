@@ -756,6 +756,17 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 .pile.closed:hover{transform:translateY(-2px);}
 .pile.closed.disabled{cursor:default;opacity:.5;}
 .pile.open{background:linear-gradient(160deg, rgba(255,255,255,.6) 0%, transparent 30%), #fdfaf1;color:#222;border:1px solid rgba(0,0,0,.2);cursor:pointer;}
+/* The white background/border above are hardcoded onto .pile.open ITSELF, not onto any card
+   content inside it — so even with the slot's innerHTML correctly cleared to '' for a genuinely
+   empty discard pile (see revealPileFace()'s and renderAll()'s own "genuinely empty" branches),
+   the empty DIV still rendered as a solid blank white card-shaped rectangle sitting on the felt,
+   which is exactly the "ghost card" reported: a static card outline visible before the first
+   card is ever dealt to the pile, with the real first card then drawn ON TOP of it once
+   openInitialDiscard() actually runs. .empty strips the card-like background/border down to
+   nothing (plain transparent felt) so an empty pile slot looks like empty felt, not an empty
+   card — the fix belongs at the container level because the container itself is what was
+   visible, independent of whatever was or wasn't inside it. */
+.pile.open.empty{background:transparent;border:none;cursor:default;box-shadow:none;}
 .pile.open:hover{transform:translateY(-2px);}
 .pile.open.disabled{cursor:default;opacity:.6;}
 .pile .r{position:absolute;top:3px;right:4px;font-size:11px;font-weight:800;line-height:1;}
@@ -1252,7 +1263,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
         <div id="my-turn-banner">🎯 תורך לשחק!</div>
         <div style="display:flex;gap:18px;align-items:flex-start;">
           <div class="pile closed" id="pile-closed" onclick="onDrawClosed()">🎴</div>
-          <div class="pile open" id="pile-open" onclick="onTakeOpen()"></div>
+          <div class="pile open empty" id="pile-open" onclick="onTakeOpen()"></div>
         </div>
       </div>
       <div id="reveal-results-overlay">
@@ -2575,6 +2586,14 @@ function revealPileFace(el, card){
     el.innerHTML = `<div class="r">${rankLabel(card.rank)}</div>${symHTML(card.suit)}`;
     el.style.color = info.color==='red' ? '#c0272d' : '#1a1a1a';
     el.classList.add('face', 'face-pop', info.color);
+    // 'empty' only ever matters for .pile.open (see its own CSS comment) — removing it
+    // unconditionally here is a harmless no-op on the closed pile (which never has that class in
+    // the first place), and is the one place that's guaranteed to run for EVERY caller that ever
+    // shows a real card on the open pile, including botResolveTurn()'s own direct call at the
+    // moment its depart-flight finishes — a call site that (before this fix lived inside this
+    // shared function rather than only alongside the OTHER, "genuinely empty" branch elsewhere)
+    // would otherwise have left a stale 'empty' class in place while a real card was showing.
+    el.classList.remove('empty');
   } else {
     el.innerHTML = '🎴';
     el.style.color = '';
@@ -2731,19 +2750,25 @@ function renderAll(){
     // A bot took the open pile's top card — keep showing that same card face-up in the
     // open-pile slot during the pause (it hasn't gone anywhere yet from the viewer's
     // perspective), instead of jumping straight to whatever's now underneath it.
+    openEl.classList.remove('empty');
     revealPileFace(openEl, botRevealedDraw.card);
   } else {
     const top = S.discardPile[S.discardPile.length-1];
     if(top){
+      openEl.classList.remove('empty');
       revealPileFace(openEl, top);
     } else {
       // Genuinely empty discard pile — not "a card, hidden" (revealPileFace's null case shows
       // a 🎴 back, appropriate for the closed draw pile which always has cards underneath it),
       // so this bypasses the helper entirely and clears the slot instead of flipping to a back.
+      // 'empty' (see its own CSS comment) is what actually removes the card-shaped white
+      // background/border from the SLOT ITSELF — clearing innerHTML alone left a blank white
+      // card-outline visible on the felt before the first card was ever dealt to this pile.
       openEl.dataset.faceSig = '';
       openEl.innerHTML = '';
       openEl.style.color = '';
       openEl.classList.remove('face','red','black');
+      openEl.classList.add('empty');
     }
   }
   if(pendingDraw){
