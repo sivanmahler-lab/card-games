@@ -782,16 +782,22 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    silently not replay the pop at all, since adding an already-present class is a no-op. */
 .pile.face-pop{animation:pileDrawPop .55s var(--spring);}
 @keyframes pileDrawPop{
-  /* Amplitude roughly doubled and duration extended (.4s->.55s) from the original — 6-10px of
-     vertical travel and a .85-1.08 scale range on a 58x82px card turned out to be genuinely
-     imperceptible in practice (confirmed by frame-stepping an actual recording: the "before" and
-     "after" frames were indistinguishable from an instant swap, even though the animation was
-     verified to be technically running via computed style). A card popping up clear of its own
-     footprint and back is what actually reads as "something just landed here" at a glance,
-     instead of only being detectable by someone already staring at the exact pixel. */
-  0%{transform:translateY(14px) scale(.7) rotate(-3deg);}
-  55%{transform:translateY(-22px) scale(1.16) rotate(2deg);}
-  100%{transform:translateY(0) scale(1) rotate(0);}
+  /* translateY REMOVED from this keyframe — this used to swing the card ±14-22px vertically
+     (on top of a .7-1.16 scale range) to make the reveal genuinely noticeable after an earlier
+     version proved imperceptible on real video (see the .55s-duration comment above this rule).
+     That fixed the "can't see it happened at all" complaint, but overshot into a NEW one:
+     measuring the pile's own on-screen position mid-animation (getBoundingClientRect() sampled a
+     few hundred ms after a draw) showed it visiting several different Y coordinates before
+     settling back — which is exactly this keyframe's OWN intentional vertical travel, working as
+     designed, but reading as "the discard pile is jittering/relocating" rather than "a card is
+     popping in place". A reveal pop and a layout jitter look identical to anything measuring
+     position without also checking WHY it moved — the fix isn't to remove the pop (that
+     reintroduces the original invisible-reveal problem), it's to keep all the same
+     attention-grabbing scale+rotate punch while dropping the one axis (vertical position) that
+     reads as "this element relocated" instead of "this element popped". */
+  0%{transform:scale(.7) rotate(-3deg);}
+  55%{transform:scale(1.16) rotate(2deg);}
+  100%{transform:scale(1) rotate(0);}
 }
 @media (prefers-reduced-motion: reduce){
   .pile.drawn{animation:none;}
@@ -805,14 +811,31 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
    at the bottom (.pgrid-wrap.pos-0.my-turn). Both are toggled from the same myTurnNow check in
    renderAll() so they always appear/disappear in lockstep. */
 #my-turn-banner{
-  display:none;
+  /* visibility:hidden (not display:none) — this is what actually fixes the jitter: display:none
+     removes the element from the flex column it sits in above the piles (see the HTML comment on
+     this element for that layout), so every time this toggled off (the instant a draw actually
+     happens — see renderAll()'s own myTurnNow toggle), the piles row physically slid UP to fill
+     the space, then back down again the next time it's genuinely this player's turn to draw —
+     directly reproduced and measured: the open pile's own on-screen position visibly differed
+     across 4 distinct spots through a single draw-then-decide cycle before this fix, always
+     settling back to its original position once the cycle completed. visibility:hidden keeps the
+     element's layout box (and therefore its height + margin-bottom) permanently reserved whether
+     or not it's actually shown, so nothing below it ever needs to move when it appears/disappears
+     — only opacity/visibility change, which never affects layout. */
+  visibility:hidden;
+  opacity:0;
   background:linear-gradient(160deg,var(--gold-bright),var(--gold));
   color:#241a05;font-weight:800;font-size:14px;
   padding:7px 18px;border-radius:20px;margin-bottom:10px;
   box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 16px rgba(240,216,150,.5);
-  white-space:nowrap;animation:myTurnPop .4s var(--spring), myTurnGlow 1.6s ease-in-out infinite .4s;
+  white-space:nowrap;
+  transition:opacity .15s ease;
 }
-#my-turn-banner.show{display:block;}
+#my-turn-banner.show{
+  visibility:visible;
+  opacity:1;
+  animation:myTurnPop .4s var(--spring), myTurnGlow 1.6s ease-in-out infinite .4s;
+}
 @keyframes myTurnPop{
   0%{opacity:0;transform:scale(.7) translateY(8px);}
   60%{opacity:1;transform:scale(1.06) translateY(-2px);}
@@ -832,7 +855,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   50%{box-shadow:0 0 0 3px var(--gold-bright), 0 0 22px 6px rgba(240,216,150,.7);}
 }
 @media (prefers-reduced-motion: reduce){
-  #my-turn-banner{animation:none;}
+  #my-turn-banner.show{animation:none;}
   .pgrid-wrap.pos-0.my-turn .pgrid-inner{animation:none;box-shadow:0 0 0 3px var(--gold-bright);}
 }
 .pile.closed.drawn{background:#fdfaf1;color:#222;cursor:default;box-shadow:0 0 0 3px var(--gold-bright);}
