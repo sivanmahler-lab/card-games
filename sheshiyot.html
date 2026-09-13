@@ -1378,7 +1378,19 @@ const SUIT_PATH = {
   h: '<path d="M0,3.2 C0,-1 -4.6,-1 -4.6,2 C-4.6,5 0,8.4 0,10.5 C0,8.4 4.6,5 4.6,2 C4.6,-1 0,-1 0,3.2 Z"/>',
   s: '<path d="M0,-6.5 C3.4,-3 5.2,-0.6 5.2,2.2 A3.4,3.4 0 0 1 0.6,5.4 A2.2,2.2 0 0 0 2.8,7.6 H-2.8 A2.2,2.2 0 0 0 -0.6,5.4 A3.4,3.4 0 0 1 -5.2,2.2 C-5.2,-0.6 -3.4,-3 0,-6.5 Z"/>',
   d: '<path d="M0,-6.6 L4.6,0 L0,6.6 L-4.6,0 Z"/>',
-  c: '<path d="M0,-2 A2.7,2.7 0 1 1 2.4,2.1 A2.7,2.7 0 1 1 0.6,-1.4 A2.7,2.7 0 1 1 -2.4,2.1 A2.7,2.7 0 1 1 -0.6,-1.4 C-1,0.5 -1.6,2.4 -3,5.2 H3 C1.6,2.4 1,0.5 0,-2 Z"/>',
+  // Was a single <path> using four overlapping elliptical arcs (A2.7,2.7...) meant to trace out
+  // three fused lobes in one continuous outline — the arc sweep-flags on that path didn't
+  // actually produce three separate rounded bumps; the arcs partially canceled and merged into
+  // an amorphous rounded mass with no real lobe separation ("a single, solid, blurry blob" —
+  // confirmed directly: rendered standalone at both the actual in-game card size and much
+  // larger, it never looked like a club at any size, not just as a video/animation artifact).
+  // Rebuilt as three actual, genuinely circular <circle> elements (radius 2.9, arranged in the
+  // classic two-up/one-down club triangle) plus a separate trapezoid <path> for the stem —
+  // circles are the one shape SVG can render with zero ambiguity about their geometry, which is
+  // exactly what a correct club needs: three unmistakably round, evenly-sized lobes, not an
+  // approximation stitched from arcs. Verified by rendering standalone (both isolated and next
+  // to the other three suits at matching scale) before applying here.
+  c: '<circle cx="-2.4" cy="-1.9" r="2.9"/><circle cx="2.4" cy="-1.9" r="2.9"/><circle cx="0" cy="1.6" r="2.9"/><path d="M-0.9,3.1 L0.9,3.1 L1.9,6.6 L-1.9,6.6 Z"/>',
 };
 // Returns the <div class="sym"> markup for a suit, as an inline vector icon instead of a plain
 // unicode character. viewBox is centered on the path data's own origin (an 18x18 box, -9..9 on
