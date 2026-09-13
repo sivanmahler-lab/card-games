@@ -1716,7 +1716,7 @@ function flyGhostCard(card, fromRect, toRect, toEl, onComplete){
     toEl.classList.add('land-highlight');
     setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
   };
-  const DURATION = 450; // matches the "Draw Pile -> Target Slot over 450ms" spec exactly
+  const DURATION = 350; // matches the exact 350ms flight-duration spec given for this pacing
   let finished = false;
   // finish() is the single place that fires the landing cue AND hands control back to the
   // caller (onComplete) — called from whichever of {transitionend, timeout backstop, reduced-
@@ -1802,7 +1802,7 @@ function flyGhostBack(fromRect, toRect, toEl, onComplete){
   const sw = fromRect.width ? (toRect.width / fromRect.width) : 1;
   const sh = fromRect.height ? (toRect.height / fromRect.height) : 1;
   const cleanup = ()=>{ if(ghost.parentNode) ghost.parentNode.removeChild(ghost); };
-  const DURATION = 450;
+  const DURATION = 350; // matched to flyGhostCard's own updated 350ms spec, so a face-down flight never looks faster or slower than a face-up one
   let finished = false;
   const finish = ()=>{
     if(finished) return;
@@ -2159,10 +2159,10 @@ function botTakeTurn(p){
     // Reveal it face-up in the pile slot it came from, and pause before resolving.
     botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
     renderAll();
-    // 1300ms — cut way back down from 3200ms: "way too long... makes the game feel sluggish and
-    // stalled". Kept comfortably inside the requested 1.2-1.5s window — enough to read a single
-    // revealed card, not long enough to feel like a stall.
-    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 1300);
+    // 800ms "thinking" delay — matches the exact spec given for this pacing: long enough to
+    // register that a card was just revealed, short enough to keep the bot's decision reading as
+    // deliberate rather than stalled.
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 800);
   } catch(err){
     console.error('botTakeTurn (phase 1) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
