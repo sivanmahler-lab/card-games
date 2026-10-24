@@ -2,7 +2,9 @@
 // lobby and both games' vs-computer/local modes still open after the first visit, even
 // with no connection. Online multiplayer still needs a live network for Firebase either
 // way, so this deliberately does NOT try to cache or intercept anything Firebase-related.
-const CACHE_NAME = 'card-games-v1';
+// Bump this number whenever a deploy must not be served from an old cache: the activate handler
+// below deletes every cache whose name differs from this one.
+const CACHE_NAME = 'card-games-v2';
 const APP_SHELL = [
   './index.html',
   './whist.html',
