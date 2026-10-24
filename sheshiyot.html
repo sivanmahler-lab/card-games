@@ -1345,7 +1345,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
     <p><b>תור:</b> שולפים קלף מהקופה הסגורה (אפשר לבחור שלא להשתמש בו — לזרוק לקופה הפתוחה) או לוקחים את הקלף העליון בקופה הפתוחה (חובה להשתמש בו). אם משתמשים — מחליפים עם קלף באחת מהשורות הפעילות שלכם (בהתחלה: השורה התחתונה בלבד).</p>
     <p><b>מעבר שורה:</b> ברגע שמחליפים קלף בשורה העליונה (שלא ראיתם מעולם), עוברים לשחק איתה מכאן והלאה — ואי אפשר לחזור לשורה התחתונה.</p>
     <p><b>סיום:</b> כשחושבים שיש לכם הכי מעט נקודות, מכריזים "סיימתי!" (רק בתורכם, אחרי שביצעתם פעולה). לכל שאר השחקנים יש תור אחרון אחד, ואז סופרים נקודות.</p>
-    <p><b>ניקוד סופי:</b> מי שהכריז ויש לו 0 נקודות מקבל בונוס של 10-. מי שאין לו 0 ולמישהו אחר יש פחות נקודות ממנו — אותו שחקן מקבל קנס של 10+.</p>
+    <p><b>ניקוד סופי:</b> מי שהכריז ויש לו 0 נקודות מקבל בונוס של 10-. מי שהכריז ואין לו 0, ולמישהו אחר יש פחות נקודות ממנו — המכריז מקבל קנס של 10+ על מספר הנקודות שלו.</p>
     <button class="tb-btn close-btn" onclick="document.getElementById('instr-modal').classList.remove('show')">סגור</button>
   </div>
 </div>
@@ -2363,15 +2363,13 @@ function endRound(){
       // Everyone else is scored on their own raw hand only — no penalty for anyone.
       final[caller] = raw[caller]-10;
     } else {
-      // Caller declared "finished" without reaching 0 — a failed declaration. The
-      // penalty applies ONLY if someone else beat them (strictly fewer points): each
-      // such player gets +10 added to their own raw score. Anyone who did NOT beat the
-      // caller (including the caller) just keeps their plain raw score, no penalty.
-      for(let p=0;p<4;p++){
-        if(p===caller) continue;
-        if(S.active && !S.active[p]) continue;
-        if(raw[p] < raw[caller]) final[p] = raw[p]+10;
-      }
+      // Caller declared "finished" without reaching 0. If ANY other active player ended with
+      // strictly fewer points, the declaration failed: the CALLER is penalized (own points
+      // plus 10). Everyone else — including the players who beat them — keeps their plain
+      // raw score. If nobody beat the caller, the caller keeps their raw score too.
+      const someoneBeatCaller = [0,1,2,3].some(p=>
+        p!==caller && (!S.active || S.active[p]) && raw[p] < raw[caller]);
+      if(someoneBeatCaller) final[caller] = raw[caller]+10;
     }
   }
   if(!S.matchHistory) S.matchHistory = [];
