@@ -1319,7 +1319,11 @@ document.addEventListener('visibilitychange', ()=>{
       if(S.phase==='trump-bidding') advanceTrumpBidding();
       else if(S.phase==='trick-bidding') advanceTrickBidding();
       else if(S.phase==='playing'){
-        if(S.currentTrick.length===4) resolveTrick();
+        // genId++ above cancelled the pending finishRound() timer. If the tab was hidden right
+        // after the last trick, every hand is empty, nothing is on the table and S.phase is still
+        // 'playing' (finishRound() sets 'round-end') — so nothing would ever finish the round.
+        if(S.currentTrick.length===0 && S.hands.every(h=>!h || h.length===0)) finishRound();
+        else if(S.currentTrick.length===4) resolveTrick();
         else advancePlaying();
       }
     } catch(e){ console.error('Resume re-drive failed', e); }
@@ -1665,7 +1669,13 @@ function resumeSavedGame(saved){
   try{
     if(S.phase==='trump-bidding') advanceTrumpBidding();
     else if(S.phase==='trick-bidding') advanceTrickBidding();
-    else if(S.phase==='playing'){
+    else if(S.phase==='playing' && !(S.currentTrick.length===0 && S.hands.every(h=>!h || h.length===0))){
+      // NOTE the extra condition above: a save can land in the window between the LAST trick
+      // being counted (finishTrick() -> renderTable() -> saveGame()) and finishRound() actually
+      // running 700ms later. That save is S.phase==='playing' with every hand empty and nothing
+      // on the table — advancePlaying() has no card to play and no one to hand the turn to, so
+      // the game froze there forever on resume. That exact state now falls through to the
+      // round-end branch below instead.
       if(S.currentTrick.length===4) resolveTrick();
       else advancePlaying();
     } else if(S.phase==='round-end' || S.hands.every(h=>!h || h.length===0)){
@@ -1680,8 +1690,12 @@ function resumeSavedGame(saved){
       // gets the results screen instead of a dead end. S.roundEndData (also now always set —
       // same comment) carries this round's own results; roundHistory's own last entry is the
       // fallback for an even older save that predates roundEndData existing at all.
+      // roundHistory's last entry is only a valid fallback when this round was ALREADY scored
+      // (phase 'round-end'). In the phase==='playing' + empty-hands case, finishRound() never
+      // ran for this round, so the last history entry belongs to the PREVIOUS round — using it
+      // would show the wrong results and skip scoring this round entirely.
       const results = (S.roundEndData && S.roundEndData.results)
-        || (S.roundHistory && S.roundHistory.length ? S.roundHistory[S.roundHistory.length-1].results : null);
+        || (S.phase==='round-end' && S.roundHistory && S.roundHistory.length ? S.roundHistory[S.roundHistory.length-1].results : null);
       if(results){
         showRoundEndModal(results);
       } else {
@@ -3382,6 +3396,10 @@ function finishRound(){
   if(isOnline && isHost){
     pushStateToFirebase();
   }
+  // Persist the scored state right away (saveGame() itself ignores online games). Without this
+  // the newest save was still the pre-scoring one from the last trick, so leaving at the
+  // results screen and resuming could re-run or skip this round's scoring.
+  saveGame();
   showRoundEndModal(results);
 }
 function showRoundEndModal(results){
