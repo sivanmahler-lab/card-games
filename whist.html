@@ -3656,7 +3656,10 @@ function sendAdminAlert(text){
     // a plain Image object (a classic "beacon" trick): the browser issues the GET the instant
     // .src is set and never cares about the response (even a 404 image load is a successful GET
     // as far as ntfy is concerned), so this fires reliably in the background with zero UI impact.
-    const url = `https://ntfy.sh/sivan-cards-live/publish?message=${encodeURIComponent(text)}&title=${encodeURIComponent('Card Game Alert')}`;
+    // The topic name IS the only access control on ntfy.sh (anyone who knows it can read and post),
+    // and this file is public, so it is not a real secret — which is why the room CODE is no longer
+    // included in the alert text below: even if the topic leaks, it can't be used to join rooms.
+    const url = `https://ntfy.sh/sivan-cards-67549ce235af08763a04/publish?message=${encodeURIComponent(text)}&title=${encodeURIComponent('Card Game Alert')}`;
     const img = new Image();
     img.src = url;
   } catch (e){
@@ -3714,7 +3717,7 @@ async function createRoom(){
     roomRef = roomRefNow;
     showWaitingScreen();
 
-    sendAdminAlert(`🎴 וויסט - ${myName} יצר/ה חדר חדש (קוד: ${code})`);
+    sendAdminAlert(`🎴 וויסט - ${myName} יצר/ה חדר חדש`);
   } catch(e){
     console.error('createRoom error', e);
     showToast('שגיאה ביצירת חדר: '+e.message);
@@ -3762,7 +3765,7 @@ async function joinRoom(){
     roomRef = roomRefNow;
     showWaitingScreen();
 
-    sendAdminAlert(`👥 וויסט - ${myName} הצטרף/ה לחדר ${code}`);
+    sendAdminAlert(`👥 וויסט - ${myName} הצטרף/ה לחדר`);
   } catch(e){
     console.error('joinRoom error', e);
     showToast('שגיאה בהצטרפות: '+e.message);
