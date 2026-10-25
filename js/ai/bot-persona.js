@@ -39,18 +39,18 @@
 export const BOT_PERSONAS = Object.freeze({
   "צ'רצ'יל": Object.freeze({
     archetype: 'conservative',
-    riskTolerance: 0.75,       // demands more safety margin before counting a card "safe"
-    bidShading: -0.5,          // nudges final bids slightly under the raw estimate
+    riskTolerance: 0.9,        // demands a bit more safety margin before counting a card "safe"
+    bidShading: -0.3,          // nudges final bids slightly under the raw estimate
     riskAversionToZero: 1.3,   // more willing to bid zero on a borderline-weak hand
-    countingAccuracy: 0.85,    // reliably tracks which high cards have already fallen
+    countingAccuracy: 0.97,    // reliably tracks which high cards have already fallen
     speechStyle: 'understated',
   }),
   'ארתור': Object.freeze({
     archetype: 'aggressive',
-    riskTolerance: 1.25,       // counts cards as "safe" more readily — plays on nerve
-    bidShading: 0.75,          // nudges final bids slightly over the raw estimate
+    riskTolerance: 1.1,        // counts cards as "safe" a little more readily — plays on nerve
+    bidShading: 0.4,           // nudges final bids slightly over the raw estimate
     riskAversionToZero: 0.6,   // very reluctant to ever bid zero
-    countingAccuracy: 0.55,    // plays more "by feel" — less reliably tracks fallen cards
+    countingAccuracy: 0.9,     // slightly less careful card tracking than the others
     speechStyle: 'boastful',
   }),
   'ויקטוריה': Object.freeze({
@@ -58,7 +58,7 @@ export const BOT_PERSONAS = Object.freeze({
     riskTolerance: 1.0,        // neutral — her edge comes from information, not risk appetite
     bidShading: 0,             // bids exactly what she calculates, no directional lean
     riskAversionToZero: 1.0,   // neutral
-    countingAccuracy: 0.98,    // almost never misjudges which cards have already fallen
+    countingAccuracy: 0.99,    // almost never misjudges which cards have already fallen
     speechStyle: 'analytical',
   }),
 });
@@ -71,7 +71,7 @@ const NEUTRAL_PERSONA = Object.freeze({
   riskTolerance: 1.0,
   bidShading: 0,
   riskAversionToZero: 1.0,
-  countingAccuracy: 0.8,
+  countingAccuracy: 0.95,
   speechStyle: 'neutral',
 });
 
