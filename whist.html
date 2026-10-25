@@ -238,6 +238,8 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   .tb-btn{transition:background .15s ease;}
   .tb-btn:active{transform:none;}
 }
+.sb-short{display:none;}
+@media(max-width:400px){.sb-full{display:none;}.sb-short{display:inline;}}
 .rematch-tb-short{display:none;}
 @media(max-width:480px){
   .rematch-tb-full{display:none;}
@@ -806,6 +808,7 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
 <g transform="rotate(54.00 100 150)"><rect x="90.0" y="58" width="20" height="36" rx="3" fill="#8a1f2b" stroke="#f0d896" stroke-width="0.75"/><circle cx="100" cy="76.0" r="3.2" fill="#f0d896" opacity="0.85"/></g></svg> וויסט <span class="tb-trump" id="tb-trump" style="display:none;"></span><span class="tb-room" id="tb-room" style="display:none;" onclick="copyRoomCode()" title="לחץ להעתקת קוד החדר"></span></div>
     <div class="tb-btns">
       <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חדש באותו חדר</span><span class="rematch-tb-short">משחק חדש</span></button>
+      <button class="tb-btn" onclick="openScoreboard()" title="מציג את לוח התוצאות בכל שלב במשחק">🏆 <span class="sb-full">לוח תוצאות</span><span class="sb-short">תוצאות</span></button>
       <button class="tb-btn" onclick="openInstructions()">הוראות</button>
       <button class="tb-btn" onclick="goHub()">לובי</button>
     </div>
@@ -996,6 +999,11 @@ button{font-family:'Heebo',sans-serif;cursor:pointer;}
   <!-- round end -->
   <div class="modal-bg" id="round-end-modal">
     <div class="round-end-card" id="round-end-content"></div>
+  </div>
+
+  <!-- scoreboard (view-only, openable at any time from the top bar) -->
+  <div class="modal-bg" id="scoreboard-modal">
+    <div class="round-end-card" id="scoreboard-content"></div>
   </div>
 
   <!-- resume saved game -->
@@ -3402,7 +3410,7 @@ function finishRound(){
   saveGame();
   showRoundEndModal(results);
 }
-function showRoundEndModal(results){
+function whistScoreHTML(results){
   // Cumulative match history: one entry per finished round (not just this one).
   const history = S.roundHistory && S.roundHistory.length ? S.roundHistory : [{
     roundNum: S.roundNum, roundType: S.roundType, trumpSuit: S.trumpSuit, names: S.names.slice(), results
@@ -3443,16 +3451,19 @@ function showRoundEndModal(results){
     <span class="rr-player-name">${name}</span>
     <span class="rr-totals-score">${S.totals[i]}</span>
   </div>`).join('');
-  const isHostOrLocal = !isOnline || isHost;
-  document.getElementById('round-end-content').innerHTML = `
-    <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
-    <div class="rr-scroll-wrap" id="re-scroll-wrap">
+  return `<div class="rr-scroll-wrap" id="re-scroll-wrap">
       ${roundsHtml}
       <div class="rr-round-block rr-totals-block">
         <div class="rr-round-head"><span>סה"כ נקודות במשחק</span></div>
         ${totalsRows}
       </div>
-    </div>
+    </div>`;
+}
+function showRoundEndModal(results){
+  const isHostOrLocal = !isOnline || isHost;
+  document.getElementById('round-end-content').innerHTML = `
+    <h3 style="color:var(--gold-bright);margin-bottom:10px;">סיום סיבוב ${S.roundNum}</h3>
+    ${whistScoreHTML(results)}
     ${isHostOrLocal
       ? `<button class="btn-primary" onclick="closeRoundEnd(); nextRound();">סיבוב הבא</button>
          <button class="btn-secondary" onclick="closeRoundEnd(); goLobby();">חזרה ללובי</button>`
@@ -3461,6 +3472,18 @@ function showRoundEndModal(results){
   `;
   document.getElementById('round-end-modal').classList.add('show');
 }
+// View-only scoreboard, available at any time from the top bar (no next-round buttons here).
+function openScoreboard(){
+  if(!S || !S.totals){ showToast && showToast('לוח התוצאות יופיע ברגע שהמשחק יתחיל'); return; }
+  const hasRounds = S.roundHistory && S.roundHistory.length;
+  document.getElementById('scoreboard-content').innerHTML = `
+    <h3 style="color:var(--gold-bright);margin-bottom:10px;">🏆 לוח תוצאות</h3>
+    ${hasRounds ? whistScoreHTML(null) : '<p style="color:rgba(250,244,230,.7);margin:14px 0;">עדיין לא הסתיים אף סיבוב. הניקוד יופיע כאן אחרי הסיבוב הראשון.</p>'}
+    <button class="btn-primary" onclick="closeScoreboard()">סגירה</button>
+  `;
+  document.getElementById('scoreboard-modal').classList.add('show');
+}
+function closeScoreboard(){ document.getElementById('scoreboard-modal').classList.remove('show'); }
 function closeRoundEnd(){ document.getElementById('round-end-modal').classList.remove('show'); }
 function nextRound(){
   S.roundNum++;
