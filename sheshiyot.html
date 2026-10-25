@@ -219,6 +219,10 @@ button{font-family:'Heebo',sans-serif;}
   .tb-btn{padding:6px 6px;font-size:11px;}
   .rematch-tb-btn{padding:6px 6px;}
   .brand{font-size:14px;gap:5px;}
+  /* Real phones use wider fonts than the fallback ones, which pushed "לובי" off-screen:
+     show just the cards icon for the brand on phones and let the buttons use the room. */
+  .brand-text{display:none;}
+  .tb-btns{flex-shrink:1;min-width:0;}
 }
 
 .screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;}
@@ -1081,7 +1085,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   <div class="brand"><svg viewBox="0 0 40 34" aria-hidden="true" style="width:26px;height:auto;">
         <rect x="2" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(-8 12 17)"/>
         <rect x="18" y="4" width="20" height="26" rx="3" fill="#faf4e6" stroke="#211a10" stroke-width="1.5" transform="rotate(8 28 17)"/>
-      </svg> שישיות</div>
+      </svg><span class="brand-text"> שישיות</span></div>
   <div class="tb-btns">
     <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="לשעת חירום בלבד: מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חדש באותו חדר</span><span class="rematch-tb-short">משחק חדש</span></button>
     <button class="tb-btn" onclick="openScoreboard()" title="מציג את לוח התוצאות בכל שלב במשחק">🏆 <span class="sb-full">לוח תוצאות</span><span class="sb-short">תוצאות</span></button>
