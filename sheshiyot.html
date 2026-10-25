@@ -2132,6 +2132,69 @@ let botRevealedDraw = null; // {source:'closed'|'open', card}
 // between real players here) can see exactly what the bot drew before it moves anywhere.
 // Phase 2 (botResolveTurn) applies the actual swap/discard decision after the pause and
 // animates the card flying to its real destination.
+// ---- Smarter bot decisions -------------------------------------------------------------------
+// Everything below is evaluated with the game's own computeRawScore() on the bot's full 6-card
+// hand, so pairs/triples (worth 0), kings (0) and aces (1) are all valued exactly as scored.
+function botRawIf(hand, idx, card){
+  const h = hand.slice(); h[idx] = card; return computeRawScore(h);
+}
+// Best place to put `card` for seat p: returns {idx, gain, graduating}. gain = how many points the
+// hand improves by (0 or less means "don't swap, just discard it"). Moving into the top row locks
+// the bottom row for good, so it is only chosen when the top-row gain is clearly better than the
+// best bottom-row gain (or on the last turn of the round, when locking costs nothing).
+function botBestPlacement(p, card){
+  const hand = S.hands[p];
+  const base = computeRawScore(hand);
+  const lastChance = S.finishCaller!==-1;
+  const topRow = [0,1,2], bottomRow = [3,4,5];
+  const activeRow = S.graduated[p] ? topRow : bottomRow;
+  let bestActive = {idx:-1, gain:0};
+  for(const i of activeRow){
+    const g = base - botRawIf(hand, i, card);
+    if(g>bestActive.gain) bestActive = {idx:i, gain:g};
+  }
+  if(!S.graduated[p]){
+    let bestTop = {idx:-1, gain:0};
+    for(const i of topRow){
+      const g = base - botRawIf(hand, i, card);
+      if(g>bestTop.gain) bestTop = {idx:i, gain:g};
+    }
+    const need = lastChance ? 1 : 3;
+    if(bestTop.idx>=0 && bestTop.gain>=need && bestTop.gain-(lastChance?0:2) > bestActive.gain){
+      return {idx:bestTop.idx, gain:bestTop.gain, graduating:true};
+    }
+  }
+  return {idx:bestActive.idx, gain:bestActive.gain, graduating:false};
+}
+// Average gain from a blind draw, using the ranks that can still be somewhere unseen (all 8 copies
+// of each rank minus the bot's own cards and the open pile). A blind card can always be discarded,
+// so negative outcomes count as 0.
+function botExpectedClosedGain(p){
+  const counts = {};
+  for(let r=1;r<=13;r++) counts[r]=8;
+  S.hands[p].forEach(c=>{ counts[c.rank]--; });
+  S.discardPile.forEach(c=>{ counts[c.rank]--; });
+  let total=0, exp=0;
+  for(let r=1;r<=13;r++){
+    const n = Math.max(0, counts[r]);
+    if(!n) continue;
+    total += n;
+    exp += n * Math.max(0, botBestPlacement(p, {rank:r, suit:'h'}).gain);
+  }
+  return total ? exp/total : 0;
+}
+// When to call "סיימתי": a hand this low is very likely to be the lowest at the table, and calling
+// early stops everyone else from improving. A bit more willing as the round drags on.
+let __botTurnCounter = {ref:null, n:0};
+function botTurnsThisRound(){
+  if(__botTurnCounter.ref!==S){ __botTurnCounter = {ref:S, n:0}; }
+  return __botTurnCounter.n;
+}
+function botDeclareThreshold(p){
+  if(typeof window!=='undefined' && typeof window.__botT==='number') return window.__botT;
+  const n = botTurnsThisRound();
+  return n>=24 ? 6 : 4;
+}
 function botTakeTurn(p){
   // S.phase!=='playing' is the missing guard that let an in-flight bot turn keep running after
   // the round already ended: maybeBotTurn() only stops SCHEDULING new bot turns once phase
@@ -2161,8 +2224,10 @@ function botTakeTurn(p){
     const top = S.discardPile[S.discardPile.length-1];
     let useOpen = false;
     if(top){
-      const topMatchesHand = rankCounts[top.rank]>=1;
-      if(cardValue(top.rank) < w.val || topMatchesHand) useOpen = true;
+      // Take the open card only if what it does for the hand beats what a blind draw is worth on
+      // average.
+      const gainTop = botBestPlacement(p, top).gain;
+      if(gainTop>0 && gainTop>=botExpectedClosedGain(p)) useOpen = true;
     }
     let drawn;
     if(useOpen && top){
@@ -2218,33 +2283,13 @@ function botResolveTurn(p, ctx){
     const disp = layoutSlotFor(displayFor(p));
     const gridEl = document.getElementById('pg-'+disp);
     const sourceRect = (useOpen ? openEl : closedEl) ? (useOpen ? openEl : closedEl).getBoundingClientRect() : null;
-    const matched = rankCounts[drawn.rank]>=1;
-
-    // A real, deliberate "should I graduate?" decision — mirroring the human player's own free
-    // choice to voluntarily swap a drawn card into an unseen top-row slot (see the instructions:
-    // "ברגע שמחליפים קלף בשורה העליונה (שלא ראיתם מעולם), עוברים לשחק איתה"). botTakeTurn()'s own
-    // worstSlot() never even looks at slots 0-2 pre-graduation (activeRow is [3,4,5] there), so
-    // without this the bot could NEVER graduate at all — worse than the bug being fixed, since
-    // graduating is how a bot ever gets down to a strong 3-card hand (see the finish-heuristic's
-    // own `total<=4 && S.graduated[p]` gate further below, which implicitly assumes graduating is
-    // achievable). The bot only considers this when the drawn card is genuinely excellent enough
-    // to justify the risk of blindly locking in an unseen slot forever: an Ace (value 1, the best
-    // possible single card) or a card that completes a matched set (rankCounts[drawn.rank]>=1,
-    // value 0) — never a merely "better than my worst bottom card" swap, which stays a normal
-    // bottom-row replacement via w0 below. Slot choice among the three top slots is random (the
-    // bot has never seen any of them, exactly like the human hasn't) rather than picking a
-    // specific index, since there is no information to prefer one over another.
-    let w = w0;
-    let graduating = false;
-    if(!S.graduated[p] && (cardValue(drawn.rank)<=1 || matched)){
-      const topIdx = [0,1,2][Math.floor(Math.random()*3)];
-      w = {idx: topIdx, val: cardValue(hand[topIdx].rank)};
-      graduating = true;
-    }
-    // Once a top-row slot has been deliberately chosen above, the swap always happens (that
-    // choice already established the drawn card is worth locking in for good) — otherwise fall
-    // back to the ordinary "does this beat my worst bottom-row card" comparison against w0.
-    const improves = graduating || (w.idx>=0 && (matched || cardValue(drawn.rank) < w.val));
+    // Pick the placement that lowers the real score the most (see botBestPlacement above), instead
+    // of the old "replace the worst card of the active row" rule.
+    const pl = botBestPlacement(p, drawn);
+    const w = {idx: pl.idx, val: pl.idx>=0 ? cardValue(hand[pl.idx].rank) : 0};
+    const graduating = pl.graduating;
+    const improves = pl.idx>=0 && pl.gain>0;
+    botTurnsThisRound(); __botTurnCounter.n++;
     const slotEl = gridEl && gridEl.children[w.idx] ? gridEl.children[w.idx] : null;
     const slotRect = slotEl ? slotEl.getBoundingClientRect() : null;
     const openRectNow = openEl ? openEl.getBoundingClientRect() : null;
@@ -2274,8 +2319,8 @@ function botResolveTurn(p, ctx){
         S.graduated[p] = true;
       }
       if(S.finishCaller===-1){
-        const total = hand.reduce((sum,c)=>{ return sum + (rankCounts[c.rank]>=2?0:cardValue(c.rank)); },0);
-        if(total<=4 && S.graduated[p]){
+        const total = computeRawScore(hand);
+        if(total<=botDeclareThreshold(p)){
           doDeclareFinished(p);
         }
       }
