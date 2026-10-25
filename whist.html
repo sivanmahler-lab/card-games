@@ -3093,6 +3093,15 @@ function botPlay(p){
   // trump in the deck is either already played or sitting in this bot's own hand — i.e. nobody
   // left can possibly ruff anything, "all trumps drawn" from this bot's point of view.
   const trumpsUnaccountedFor = Math.max(0, 13 - myTrumpCount - trumpsPlayed);
+  // Perfect card memory for the bot: every card that has been played this round plus the cards in
+  // its own hand. unseenHigher(c) = how many cards of c's suit, higher than c, are still sitting in
+  // OTHER players' hands. 0 means c is the "master" of its suit right now (nothing can beat it
+  // except a ruff). This drives both "cash a sure winner" leads and "dump the card most likely to
+  // win a trick I don't want" discards.
+  const seenCards = new Set(playedCards.map(c=>c.suit*100+c.rank));
+  S.hands[p].forEach(c=>seenCards.add(c.suit*100+c.rank));
+  const unseenHigher = (c)=>{ let n=0; for(let r=c.rank+1;r<=14;r++){ if(!seenCards.has(c.suit*100+r)) n++; } return n; };
+  const isTrumpCard = (c)=> c.suit===S.trumpSuit ? 1 : 0;
 
   let choice;
   if(S.currentTrick.length===0){
@@ -3111,7 +3120,7 @@ function botPlay(p){
     const needMore = S.tricksWon[p] < S.bids[p];
     const sorted = legal.slice().sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
     const iAmZero = (S.bids[p]===0);
-    const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0) : [];
+    const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0 && S.tricksWon[pl]===0) : [];
     const earlyInRound = S.trickHistory.length < 8;
     // Whether this specific bot's persona "reliably notices" that a suit's top card has
     // already fallen (see js/ai/bot-persona.js knowsSuitTopIsGone). ויקטוריה's near-perfect
@@ -3142,7 +3151,27 @@ function botPlay(p){
       if(myTrumps.length>0) choice = myTrumps[myTrumps.length-1]; // highest trump in hand
     }
 
-    if(!choice && S.roundType==='UNDER' && zeroTargets.length>0 && earlyInRound && !iAmZero){
+    // Needs more tricks: cash a card that cannot be beaten (the master of its suit), preferring the
+    // longest suit, before anything riskier. Unless a ruff is a real danger (an opponent is known to
+    // be void while trumps are still out there).
+    if(!choice && needMore){
+      const masterNT = sorted.filter(c=>c.suit!==S.trumpSuit && unseenHigher(c)===0
+        && !(trumpsUnaccountedFor>0 && anyOtherVoidIn(c.suit)));
+      if(masterNT.length>0){
+        const suitLen = (su)=> S.hands[p].filter(c=>c.suit===su).length;
+        masterNT.sort((a,b)=> suitLen(b.suit)-suitLen(a.suit));
+        choice = masterNT[0];
+      } else if(S.trumpBroken){
+        const masterT = sorted.filter(c=>c.suit===S.trumpSuit && unseenHigher(c)===0);
+        if(masterT.length>0) choice = masterT[0];
+      }
+    }
+
+    // UNDER round (a surplus of tricks): everyone who doesn't need more tricks tries to pass the
+    // lead around and squeeze the zero-bidder into winning one. Done for the WHOLE round (not just
+    // the first 8 tricks) for as long as the zero-bidder has not yet taken a trick, and only by
+    // bots that don't still need tricks themselves.
+    if(!choice && S.roundType==='UNDER' && zeroTargets.length>0 && !needMore && !iAmZero){
       // Zero-bid hunter, opening lead: rather than just any low non-trump card, prefer a suit
       // a zero-bidder is NOT already known to be void in. Leading their known void does nothing
       // to pressure them — they simply discard whatever they like from a suit they're free of
@@ -3206,7 +3235,11 @@ function botPlay(p){
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
       choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
     }
-    if(!choice) choice = sorted[0];
+    if(!choice){
+      // Don't want (or can't use) this trick: lead the card least likely to win — non-trump first,
+      // and within that the one with the most unseen higher cards above it.
+      choice = sorted.slice().sort((a,b)=> (isTrumpCard(a)-isTrumpCard(b)) || (unseenHigher(b)-unseenHigher(a)) || (a.rank-b.rank))[0];
+    }
   } else {
     const ledSuit = S.currentTrick[0].card.suit;
     let winning = S.currentTrick[0];
@@ -3215,27 +3248,41 @@ function botPlay(p){
       else if(pc.card.suit===winning.card.suit && pc.card.rank>winning.card.rank) winning=pc;
     }
     const needMore = S.tricksWon[p] < S.bids[p];
+    const beats = (c)=> (c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit)
+      || (c.suit===winning.card.suit && c.rank>winning.card.rank);
+    const winners = legal.filter(beats).sort((a,b)=> (isTrumpCard(a)-isTrumpCard(b)) || (a.rank-b.rank));
+    const losers = legal.filter(c=>!beats(c));
+    const after = 3 - S.currentTrick.length;  // players still to act after me
+    const remaining = [0,1,2,3].filter(pl=>pl!==p && !S.currentTrick.some(pc=>pc.player===pl));
     if(needMore){
-      let winners = legal.filter(c=>{
-        if(c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) return true;
-        if(c.suit===winning.card.suit && c.rank>winning.card.rank) return true;
-        return false;
-      }).sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
-      choice = winners.length>0 ? winners[0] : legal.slice().sort((a,b)=>a.rank-b.rank)[0];
+      if(winners.length>0){
+        // Win as cheaply as possible — but if someone still to play can quite likely beat that cheap
+        // card, spend a card that can't be beaten instead of throwing the cheap one away.
+        choice = winners[0];
+        if(after>0 && winners.length>1){
+          const h = unseenHigher(choice);
+          const risk = h===0 ? 0 : 1-Math.pow(1-after/3, h);
+          if(risk>0.45){
+            const ruffDanger = (c)=> c.suit!==S.trumpSuit && trumpsUnaccountedFor>0 && remaining.some(r=>S.playerVoids[r][ledSuit]);
+            const safe = winners.find(c=> unseenHigher(c)===0 && !ruffDanger(c));
+            if(safe) choice = safe;
+          }
+        }
+      } else {
+        // Can't win this one: throw away the card least likely to win anything later.
+        choice = legal.slice().sort((a,b)=> (isTrumpCard(a)-isTrumpCard(b)) || (unseenHigher(b)-unseenHigher(a)) || (a.rank-b.rank))[0];
+      }
     } else {
-      // Ducking, including the zero-bid hunter's "leave it in their lap": among cards that
-      // don't beat the current winner, always take the LOWEST one available — this already
-      // covers "duck low below the zero-bidder's card if safe" exactly, with no extra special-
-      // casing needed for who currently holds the trick: whether the current winning card
-      // belongs to a zero-bidder, another bot, or the human, a bot that doesn't need this trick
-      // never has any reason to spend more of a losing card than it has to, and never risks
-      // accidentally overtaking a zero-bidder's card by playing a needlessly high loser.
-      let losers = legal.filter(c=>{
-        if(c.suit===S.trumpSuit && winning.card.suit!==S.trumpSuit) return false;
-        if(c.suit===winning.card.suit && c.rank>winning.card.rank) return false;
-        return true;
-      }).sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
-      choice = losers.length>0 ? losers[0] : legal.slice().sort((a,b)=>a.rank-b.rank)[0];
+      // Don't want this trick. Any card that loses to the current winner is safe to play, so use
+      // this chance to dump the card that is MOST likely to win a trick I don't want later (a high
+      // card, or a trump) — not the lowest one, which is what used to cause surprise extra tricks.
+      if(losers.length>0){
+        const danger = (c)=> unseenHigher(c) - (c.suit===S.trumpSuit ? 4 : 0);
+        choice = losers.slice().sort((a,b)=> (danger(a)-danger(b)) || (b.rank-a.rank))[0];
+      } else {
+        // Forced to win: do it with the cheapest card.
+        choice = legal.slice().sort((a,b)=> (isTrumpCard(a)-isTrumpCard(b)) || (a.rank-b.rank))[0];
+      }
     }
   }
   playCard(p, choice);
