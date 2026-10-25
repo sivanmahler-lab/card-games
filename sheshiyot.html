@@ -207,11 +207,18 @@ button{font-family:'Heebo',sans-serif;}
 /* The rematch button's label is long ("משחק חדש באותו חדר") — fine next to "הוראות"/"לובי"
    on a wide screen, but the three buttons together would overflow the fixed 52px top bar on a
    narrow phone. Swap to a shorter label there instead of letting it wrap/overflow. */
+.sb-short{display:none;}
+@media(max-width:400px){.sb-full{display:none;}.sb-short{display:inline;}}
 .rematch-tb-short{display:none;}
 @media(max-width:480px){
   .rematch-tb-full{display:none;}
   .rematch-tb-short{display:inline;}
   .rematch-tb-btn{padding:7px 9px;}
+  /* Four top-bar buttons now (incl. "לוח תוצאות") — tighten them so all stay on screen on a phone. */
+  .tb-btns{gap:3px;}
+  .tb-btn{padding:6px 6px;font-size:11px;}
+  .rematch-tb-btn{padding:6px 6px;}
+  .brand{font-size:14px;gap:5px;}
 }
 
 .screen{position:absolute;inset:0;top:52px;display:none;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;}
@@ -1077,6 +1084,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
       </svg> שישיות</div>
   <div class="tb-btns">
     <button class="tb-btn rematch-tb-btn" onclick="newGame()" title="לשעת חירום בלבד: מאתחל את המשחק (חלוקה חדשה, ניקוד מאופס) באותו החדר, עם אותם שחקנים — בלי לצאת ובלי להזמין מחדש">🔄 <span class="rematch-tb-full">משחק חדש באותו חדר</span><span class="rematch-tb-short">משחק חדש</span></button>
+    <button class="tb-btn" onclick="openScoreboard()" title="מציג את לוח התוצאות בכל שלב במשחק">🏆 <span class="sb-full">לוח תוצאות</span><span class="sb-short">תוצאות</span></button>
     <button class="tb-btn" onclick="openInstructions()">הוראות</button>
     <button class="tb-btn" onclick="goHub()">לובי</button>
   </div>
@@ -2492,7 +2500,11 @@ function renderRpCarouselOnly(){
   renderRpCarousel(activeSeats);
 }
 
-function showRoundEndModal(){
+function openScoreboard(){
+  if(!S || !S.names){ showToast('לוח התוצאות יופיע ברגע שהמשחק יתחיל'); return; }
+  showRoundEndModal(true);
+}
+function showRoundEndModal(viewOnly){
   const history = S.matchHistory || [];
   const activeSeats = [0,1,2,3].filter(p => !S.active || S.active[p]);
   const totals = [0,0,0,0];
@@ -2525,7 +2537,8 @@ function showRoundEndModal(){
 
   const box = document.getElementById('round-end-content');
   box.innerHTML = `
-    <h2>🏆 טבלת דירוג — סוף סבב ${S.roundNum||1}</h2>
+    <h2>${viewOnly ? '🏆 לוח תוצאות' : '🏆 טבלת דירוג — סוף סבב '+(S.roundNum||1)}</h2>
+    ${viewOnly && !history.length ? '<p style="color:rgba(250,244,230,.7);margin:10px 0;">עדיין לא הסתיים אף סבב. הניקוד יופיע כאן אחרי הסבב הראשון.</p>' : ''}
     <div class="rp-standings">${standingsHTML}</div>
     <div class="rp-rounds-wrap">
       <table class="score-table">
@@ -2537,13 +2550,16 @@ function showRoundEndModal(){
       <div id="rp-carousel-content"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-      <button class="btn-primary" onclick="onClickNextRound()">סבב נוסף ◀</button>
-      <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); goHub();">סיום וחזרה ללובי</button>
+      ${viewOnly
+        ? `<button class="btn-primary" onclick="document.getElementById('results-panel').classList.remove('show')">סגירה</button>`
+        : `<button class="btn-primary" onclick="onClickNextRound()">סבב נוסף ◀</button>
+      <button class="btn-secondary" onclick="document.getElementById('results-panel').classList.remove('show'); goHub();">סיום וחזרה ללובי</button>`}
     </div>
   `;
   rpCarouselSeat = ranked[0];
   renderRpCarousel(activeSeats);
   document.getElementById('results-panel').classList.add('show');
+  if(viewOnly) return;
   resultsShownThisRound = true;
   renderAll();
 }
