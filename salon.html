@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15131F">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{color-scheme:light;padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>משחקי סלון</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Secular+One&family=Heebo:wght@400;500;700&display=swap">
+<style>
+/* Layout: one phone in the middle of the living room. Home is three solid colour panels, one per game; each game is a single focused column. */
+:root{
+  --bg:#F1EFF7; --surface:#FFFFFF; --ink:#1E1B3A; --muted:#645F82; --line:#D8D4EA;
+  --alias:#0B7285; --who:#C2255C; --psy:#5F3DC4;
+  --on:#FFFFFF; --good:#2B8A3E; --bad:#C92A2A;
+  --display:'Secular One','Heebo',system-ui,sans-serif; --body:'Heebo',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15131F; --surface:#211E31; --ink:#F1EFFA; --muted:#A9A4C4; --line:#38344F;
+    --alias:#3BC9DB; --who:#F06595; --psy:#9775FA; --on:#15131F; --good:#69DB7C; --bad:#FF8787; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15131F; --surface:#211E31; --ink:#F1EFFA; --muted:#A9A4C4; --line:#38344F;
+  --alias:#3BC9DB; --who:#F06595; --psy:#9775FA; --on:#15131F; --good:#69DB7C; --bad:#FF8787; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.45;direction:rtl;
+  padding-block:16px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#app{max-width:560px;margin:0 auto}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--c,var(--ink));outline-offset:2px}
+h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;text-wrap:balance}
+h1{font-size:clamp(2.4rem,11vw,3.4rem);line-height:1.05}
+h2{font-size:1.6rem;line-height:1.15}
+h3{font-size:1.05rem;color:var(--muted);font-family:var(--body);font-weight:500}
+p{margin:0}
+
+/* home */
+.hero{padding:20px 0 24px;display:grid;gap:8px}
+.hero p{color:var(--muted)}
+.games{display:grid;gap:14px}
+.panel{display:grid;gap:6px;text-align:right;width:100%;padding:20px 20px 18px;border-radius:22px;background:var(--c);color:var(--on)}
+.panel b{font-family:var(--display);font-weight:400;font-size:2rem;line-height:1.1}
+.panel span{font-size:1rem;opacity:.95}
+.panel small{font-size:.85rem;opacity:.85;letter-spacing:.02em}
+.panel:active{transform:scale(.99)}
+.foot{margin-top:22px;color:var(--muted);font-size:.9rem}
+
+/* shared */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.ghost{padding:8px 14px;border-radius:999px;border:1.5px solid var(--line);font-size:.95rem}
+.bar-title{font-family:var(--display);font-size:1.3rem;color:var(--c)}
+.sec{display:grid;gap:10px;margin-top:22px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);min-height:44px}
+.chip[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:var(--on);font-weight:700}
+.primary{display:block;width:100%;min-height:58px;margin-top:26px;border-radius:16px;background:var(--c);color:var(--on);font-family:var(--display);font-size:1.4rem}
+.secondary{display:block;width:100%;min-height:50px;margin-top:10px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface)}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:46px;height:46px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);font-size:1.4rem;line-height:1}
+.stepper output{font-family:var(--display);font-size:1.8rem;min-width:2ch;text-align:center}
+input[type=text]{width:100%;min-height:48px;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;direction:rtl}
+.names{display:grid;gap:8px}
+.score{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.score div{flex:1 1 90px;padding:10px 12px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line);display:grid;gap:2px}
+.score div.now{border-color:var(--c);background:var(--c);color:var(--on)}
+.score b{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;font-variant-numeric:tabular-nums}
+.score span{font-size:.85rem;opacity:.9;overflow-wrap:anywhere}
+.center{text-align:center;display:grid;gap:12px;justify-items:center;padding:28px 0 6px}
+.center h2{font-size:2rem}
+.center p{color:var(--muted);max-width:34ch}
+.lead{font-family:var(--display);font-size:1.15rem;color:var(--c)}
+
+/* play */
+.play{display:grid;grid-template-rows:auto 1fr auto;gap:18px;min-height:calc(100dvh - 130px)}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.clock{font-family:var(--display);font-size:3rem;line-height:1;font-variant-numeric:tabular-nums;color:var(--c)}
+.clock.low{color:var(--bad)}
+.tally{color:var(--muted)}
+.tally b{color:var(--ink);font-variant-numeric:tabular-nums}
+.stagebox{display:grid;align-content:center;justify-items:center;gap:12px;text-align:center;padding:10px 0}
+.tag{font-size:.85rem;letter-spacing:.06em;color:var(--muted)}
+.word{font-family:var(--display);font-size:clamp(2.6rem,15vw,5.2rem);line-height:1.08;text-wrap:balance;overflow-wrap:anywhere;animation:pop .18s ease-out}
+@keyframes pop{from{transform:scale(.94);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.word{animation:none}.panel:active{transform:none}}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{min-height:84px;border-radius:20px;font-family:var(--display);font-size:1.7rem}
+.btn.ok{background:var(--good);color:var(--on)}
+.btn.skip{background:var(--surface);border:2px solid var(--line)}
+.count{font-family:var(--display);font-size:8rem;line-height:1;color:var(--c)}
+
+/* review */
+.rev{display:grid;gap:8px;margin-top:14px}
+.rev button{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line);text-align:right;min-height:50px}
+.rev .w{overflow-wrap:anywhere}
+.rev .m{font-weight:700;white-space:nowrap}
+.rev .y .m{color:var(--good)}
+.rev .n .m{color:var(--bad)}
+.rev .n .w{text-decoration:line-through;opacity:.65}
+.delta{font-family:var(--display);font-size:2.4rem;color:var(--c)}
+
+/* psychologist */
+.card{padding:22px 20px;border-radius:20px;background:var(--surface);border:1.5px solid var(--line);display:grid;gap:10px}
+.rule{font-family:var(--display);font-size:1.7rem;line-height:1.25;text-wrap:balance}
+ol.steps{margin:14px 0 0;padding:0 24px 0 0;display:grid;gap:10px}
+ol.steps li::marker{font-family:var(--display);color:var(--c)}
+.primary:disabled{opacity:.5;cursor:default}
+.turn{display:flex;align-items:baseline;gap:10px;margin-top:12px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line)}
+.turn b{font-family:var(--display);font-weight:400;font-size:1.5rem}
+.turn.me{background:var(--c);border-color:var(--c);color:var(--on)}
+.turn.me .tag{color:var(--on)}
+.pgrid{display:grid;gap:10px;margin-top:6px}
+.pcard{padding:14px 16px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line);display:grid;gap:4px}
+.pcard.mine{border-style:dashed}
+.pcard.ok{border-color:var(--good)}
+.pword{font-family:var(--display);font-size:clamp(1.7rem,9vw,2.6rem);line-height:1.1;overflow-wrap:anywhere}
+.pcard.none .pword{font-family:var(--body);font-size:1rem;color:var(--muted)}
+.qs{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.qs li{padding:12px 16px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line)}
+</style>
+</head>
+<body>
+
+<div id="app" lang="he" dir="rtl"></div>
+
+<script>
+'use strict';
+/* ---------- content ---------- */
+const ALIAS_WORDS=['שולחן','מקרר','בלון','מצלמה','חתול','דג','אוטובוס','חוף הים','גשם','שוקולד','אוהל','מטריה','גיטרה','בריכה','שעון','עוגת יום הולדת','מחשב','כדורגל','ספר','פלאפל','שוק','הר','קפה','מראה','מסיבה','שמש','חלון','רופא','אופניים','חמסין','חומוס','ים המלח','כנרת','תל אביב','ירושלים','טיול שנתי','שיעורי בית','חופש גדול','סבלנות','הפתעה','ריב','סוד','חלום','שכן','מעלית','מזגן','שלט רחוק','וייז','וואטסאפ','קבוצת הורים','פקק','תור בקופת חולים','חתונה','בר מצווה','שבת','ליל הסדר','סוכה','חנוכייה','סופגנייה','משלוח מנות','מנגל','פיקניק','שמיכה','כרית','מברשת שיניים','מטאטא','סיר לחץ','פטיש','מסמר','מספריים','דבק','חוט ומחט','מחברת','עיפרון','מחק','תיק','נעליים','כובע','משקפיים','שרשרת','טבעת','ארנק','מפתחות','אוזניות','מטען','פנס','אש','קרח','שלג','רוח','ענן','קשת בענן','ברק','מדבר','יער','נחל','מפל','מערה','גשר','מנהרה','רכבת','מטוס','ספינה','אופנוע','קורקינט','תחנה','נמל תעופה','מלון','שק שינה','מדורה','מזוודה','דרכון','מפה','מצפן','אוצר','פיראט','מכשפה','ליצן','קוסם','רובוט','חייזר','דינוזאור','דרקון','נסיכה','גיבור על','לנחור','להתמתח','לרקוד','להתחבא','לברוח','להתעטש','פלפל חריף','שקשוקה','אבטיח','גלידה','פופקורן','מטבח','סלון','מרפסת','גג','מרתף'];
+
+const WHO={
+  'חיות':['פיל','ג׳ירפה','פינגווין','תנין','קנגורו','דולפין','צב','עטלף','יען','נחש','זברה','אריה','קוף','לטאה','דבורה','תרנגול','גמל','ינשוף','סרטן','נמלה','חמור','פרפר'],
+  'ישראלים מפורסמים':['דוד בן-גוריון','גולדה מאיר','אפרים קישון','שלמה ארצי','גל גדות','אריק איינשטיין','נעמי שמר','עידן רייכל','אילן רמון','שרית חדד','יהורם גאון','ארז טל','דנה אינטרנשיונל','אסתר רדא','יגאל אלון','רחל המשוררת'],
+  'דמויות מסרטים וסדרות':['הארי פוטר','שרק','אלזה','באטמן','ספיידרמן','סימבה','פיקאצ׳ו','מיקי מאוס','בובספוג','הומר סימפסון','דורי','וודי','מולאן','אלאדין','פינוקיו','סנדרלה','סופרמן','מר ביין'],
+  'מקצועות':['טייס','שף','שוטר','גננת','נהג מונית','כבאי','אדריכל','מורה','חייל','מלצר','נגר','ספר','שופט','רופא שיניים','מהנדס','צלם','אסטרונאוט','ספן','מפעיל מנוף','סוכן נסיעות'],
+  'אוכל ישראלי':['פלאפל','שקשוקה','סביח','חומוס','קובה','בורקס','מלאווח','ג׳חנון','סופגנייה','חלה','שווארמה','סחלב','לאפה','מג׳דרה','קוגל','גפילטע פיש','עראיס','שניצל'],
+  'מקומות בארץ':['ים המלח','מצדה','אילת','חיפה','באר שבע','ראש הנקרה','הכותל','נמל יפו','שוק הכרמל','קיסריה','צפת','טבריה','מכתש רמון','עין גדי','הגולן','נחל חרמון','דימונה','שדרות רוטשילד']
+};
+
+const RULES=[
+  'כל אחד עונה על האדם שיושב מימינו, כאילו הוא עצמו.',
+  'כל אחד עונה על האדם שיושב משמאלו, כאילו הוא עצמו.',
+  'כולם עונים כאילו הם אדם אחד מהחדר. מחליטים בלי לגלות מי.',
+  'כולם עונים כאילו הם חיה אחת שמחליטים עליה ביחד.',
+  'כל תשובה חייבת להתחיל באות האחרונה של התשובה הקודמת.',
+  'עונים תמיד את ההפך מהאמת.',
+  'עונים רק במילה אחת. מותר לבחור איזו.',
+  'עונים כאילו השאלה נשאלה על ההורים שלכם.',
+  'מי שעונה מחקה את הדרך שבה הוא חושב שהפסיכולוג היה עונה.',
+  'אם מספר האותיות בשם הפרטי שלכם זוגי עונים כן, אם אי-זוגי עונים לא.',
+  'כולם עונים כאילו הם ילד בן 5.',
+  'כולם עונים כאילו הם סבא או סבתא שלהם.',
+  'כולם עונים כאילו הם אותה עיר, אחת שמחליטים עליה.',
+  'מי ששואלים אותו עונה כאילו הוא האדם שיושב מולו.',
+  'התשובה היא תמיד שם של אדם מהחדר, זה שהכי מתאים לשאלה.',
+  'כולם עונים על עצמם בגיל 10.',
+  'כל תשובה חייבת לכלול צבע.',
+  'כולם עונים כאילו הם אותו חפץ בבית, אחד שמחליטים עליו.',
+  'כל אחד עונה כאילו הוא החבר הכי טוב שלו, ומספר עליו.',
+  'עונים תמיד על שאלה אחרת: על זאת שנשאלה לפני האחרונה.'
+];
+const QUESTIONS=['מה אכלת לארוחת בוקר?','איפה היית רוצה לגור?','מה הסרט האהוב עליך?','איזו מכונית אתה נוהג?','מה אתה עושה בסופי שבוע?','ממה אתה מפחד?','מה הצבע האהוב עליך?','מה המקצוע שלך?','מה קנית לאחרונה?','מה תעשה אם תזכה בלוטו?','איך נראה הבוקר שלך?','מה הדבר הראשון שאתה עושה בחופשה?','מי האדם שהכי מצחיק אותך?','איזה ריח אתה הכי אוהב?','מה היית מבשל לאורחים?','איזה בעל חיים אתה?','מה תפקיד הבית שלך בבית?','איפה היית היום בצהריים?','מה השיר שנתקע לך בראש?','מה אתה לוקח לאי בודד?'];
+
+/* ---------- helpers ---------- */
+const $app=document.getElementById('app');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+let screen='home',timer=null,wake=null;
+const stopTimer=()=>{clearInterval(timer);timer=null;};
+const keepAwake=async()=>{try{wake=await navigator.wakeLock.request('screen');}catch(e){}};
+const release=()=>{try{if(wake)wake.release();}catch(e){}wake=null;};
+const beep=()=>{try{const C=window.AudioContext||window.webkitAudioContext;const c=new C();const o=c.createOscillator();const g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=660;g.gain.value=.2;o.start();setTimeout(()=>{o.stop();c.close();},400);}catch(e){}};
+const runTimer=(sec,onTick,onEnd)=>{stopTimer();const end=Date.now()+sec*1000;const t=()=>{const left=Math.max(0,Math.ceil((end-Date.now())/1000));onTick(left);if(left<=0){stopTimer();onEnd();}};timer=setInterval(t,250);t();};
+const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+const chip=(act,v,label,on)=>`<button class="chip" data-act="${act}" data-v="${v}" aria-pressed="${on}">${label}</button>`;
+const bar=(title)=>`<div class="bar"><button class="ghost" data-act="home">→ הבית</button><span class="bar-title">${title}</span></div>`;
+const wrap=(cls,color,inner)=>`<section style="--c:var(--${color})" class="${cls}">${inner}</section>`;
+const IN_SITE=!(window.claude&&window.claude.use);
+const nWords=ALIAS_WORDS.length, nWho=Object.values(WHO).reduce((s,a)=>s+a.length,0);
+
+/* ---------- state ---------- */
+const A={teams:[],time:60,target:30,penalty:false,stage:'setup',turn:0,played:0,deck:[],word:'',log:[]};
+function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function newCode(){return String(1000+Math.floor(Math.random()*9000));}
+const W={cats:new Set(Object.keys(WHO)),time:60,names:'',players:[],stage:'setup',turn:0,round:1,deck:[],word:'',cat:'',log:[],totals:{},
+  mode:'one',m:{name:lsGet('salon_name'),code:lsGet('salon_code')||newCode(),cat:'all',R:null,checked:false}};
+const P={deck:[],rule:'',stage:'intro',qs:[],n:0};
+
+/* ---------- render ---------- */
+function render(){
+  stopTimerIfIdle();
+  if(screen==='home')$app.innerHTML=home();
+  else if(screen==='alias')$app.innerHTML=aliasView();
+  else if(screen==='who')$app.innerHTML=whoView();
+  else if(screen==='psy')$app.innerHTML=psyView();
+  window.scrollTo(0,0);
+}
+function stopTimerIfIdle(){ if(!(screen==='alias'&&A.stage==='play')&&!(screen==='who'&&(W.stage==='play'||W.stage==='count')))stopTimer(); }
+
+function home(){
+  return `${IN_SITE?'<a class="ghost" href="index.html" style="display:inline-block;text-decoration:none;color:inherit">→ ללובי</a>':''}<header class="hero"><h1>משחקי סלון</h1><p>טלפון אחד באמצע החדר, וכולם מסביב.</p></header>
+  <div class="games">
+    <button class="panel" style="--c:var(--alias)" data-act="open" data-game="alias"><b>אליאס</b><span>מסבירים מילה בלי להגיד אותה. הקבוצה מנחשת לפני שהזמן נגמר.</span><small>2–4 קבוצות · טיימר · ניקוד</small></button>
+    <button class="panel" style="--c:var(--who)" data-act="open" data-game="who"><b>מי אני</b><span>הקבוצה נותנת רמזים, אחד מנחש. חיות, מקצועות, אוכל, ישראלים ועוד.</span><small>שישה נושאים · טלפון אחד או כל אחד בטלפון שלו</small></button>
+    <button class="panel" style="--c:var(--psy)" data-act="open" data-game="psy"><b>הפסיכולוג</b><span>אחד יוצא מהחדר, כולם מסכימים על חוק סודי, והוא צריך לגלות אותו מהתשובות.</span><small>20 חוקים · שאלות לדוגמה</small></button>
+  </div>
+  <p class="foot">${nWords} מילים לאליאס · ${nWho} פריטים ל"מי אני"</p>`;
+}
+
+/* ===== Alias ===== */
+function aliasInit(){A.teams=[{name:'קבוצה 1',score:0},{name:'קבוצה 2',score:0}];A.stage='setup';A.turn=0;A.played=0;}
+function aliasDraw(){if(!A.deck.length)A.deck=shuffle(ALIAS_WORDS);return A.deck.pop();}
+function scoreRow(now){return `<div class="score">${A.teams.map((t,i)=>`<div class="${i===now?'now':''}"><b>${t.score}</b><span>${esc(t.name)}</span></div>`).join('')}</div>`;}
+function aliasView(){
+  const B=bar('אליאס');
+  if(A.stage==='setup'){
+    return wrap('','alias',`${B}
+    <div class="sec"><h3>כמה קבוצות</h3><div class="stepper"><button data-act="a-teams" data-v="-1" aria-label="פחות">−</button><output>${A.teams.length}</output><button data-act="a-teams" data-v="1" aria-label="עוד">+</button></div>
+    <div class="names">${A.teams.map((t,i)=>`<input type="text" id="team${i}" data-team="${i}" value="${esc(t.name)}" aria-label="שם קבוצה ${i+1}" maxlength="20">`).join('')}</div></div>
+    <div class="sec"><h3>שניות לתור</h3><div class="chips">${[30,45,60,90].map(v=>chip('a-time',v,v,A.time===v)).join('')}</div></div>
+    <div class="sec"><h3>נקודות לניצחון</h3><div class="chips">${[15,30,50].map(v=>chip('a-target',v,v,A.target===v)).join('')}</div></div>
+    <div class="sec"><h3>דילוג על מילה</h3><div class="chips">${chip('a-pen','0','בלי עונש',!A.penalty)}${chip('a-pen','1','מוריד נקודה',A.penalty)}</div></div>
+    <button class="primary" data-act="a-start">מתחילים</button>`);
+  }
+  if(A.stage==='ready'){
+    return wrap('','alias',`${B}${scoreRow(A.turn)}
+    <div class="center"><span class="lead">התור של</span><h2>${esc(A.teams[A.turn].name)}</h2>
+    <p>מי שמסביר מחזיק את הטלפון ורואה את המילה. אסור להגיד אותה, או חלק ממנה.</p></div>
+    <button class="primary" data-act="a-go">מוכנים, שעון רץ</button>`);
+  }
+  if(A.stage==='play'){
+    return wrap('play','alias',`<div class="top"><div class="clock" id="clock">${A.time}</div><div class="tally">נוחשו <b id="tally">0</b></div></div>
+    <div class="stagebox"><span class="tag">${esc(A.teams[A.turn].name)}</span><div class="word" id="word">${esc(A.word)}</div></div>
+    <div class="pair"><button class="btn ok" data-act="a-ok">נוחש</button><button class="btn skip" data-act="a-skip">דלג</button></div>`);
+  }
+  if(A.stage==='review'){
+    const d=aliasDelta();
+    return wrap('','alias',`${B}<div class="center"><span class="lead">${esc(A.teams[A.turn].name)}</span><div class="delta">${d>0?'+':''}${d}</div><p>לחצו על מילה כדי לתקן אם טעיתם.</p></div>
+    <div class="rev">${A.log.map((x,i)=>`<button class="${x.ok?'y':'n'}" data-act="a-flip" data-i="${i}"><span class="w">${esc(x.w)}</span><span class="m">${x.ok?'נוחש':(x.timeout?'נגמר הזמן':'דולג')}</span></button>`).join('')}</div>
+    <button class="primary" data-act="a-done">אישור וממשיכים</button>`);
+  }
+  const rank=A.teams.slice().sort((a,b)=>b.score-a.score);
+  return wrap('','alias',`${B}<div class="center"><span class="lead">ניצחה</span><h2>${esc(rank[0].name)}</h2><p>${rank[0].score} נקודות</p></div>${scoreRow(-1)}
+  <button class="primary" data-act="a-again">משחק חדש</button><button class="secondary" data-act="home">חזרה לבית</button>`);
+}
+function aliasDelta(){return A.log.reduce((s,x)=>s+(x.ok?1:(A.penalty&&!x.timeout?-1:0)),0);}
+function aliasTurn(){
+  A.stage='play';A.log=[];A.word=aliasDraw();render();keepAwake();
+  runTimer(A.time,left=>{setText('clock',left);const c=document.getElementById('clock');if(c)c.classList.toggle('low',left<=10);},()=>{
+    beep();A.log.push({w:A.word,ok:false,timeout:true});release();A.stage='review';render();});
+}
+function aliasNext(w,ok){A.log.push({w:A.word,ok});A.word=aliasDraw();setText('word',A.word);const el=document.getElementById('word');if(el){el.style.animation='none';void el.offsetWidth;el.style.animation='';}setText('tally',A.log.filter(x=>x.ok).length);}
+
+/* ===== Who am I ===== */
+function whoInit(){W.stage='setup';W.turn=0;W.round=1;W.totals={};}
+function whoDraw(){if(!W.deck.length)W.deck=shuffle(whoPool());return W.deck.pop();}
+function whoPool(){const out=[];for(const k of W.cats)for(const w of WHO[k])out.push({w,c:k});return out;}
+function whoName(){return W.players.length?W.players[W.turn%W.players.length]:'סיבוב '+W.round;}
+function whoView(){
+  const B=bar('מי אני');
+  const modeSec=`<div class="sec"><h3>איך משחקים</h3><div class="chips">${chip('w-mode','one','טלפון אחד באמצע',W.mode==='one')}${chip('w-mode','multi','כל אחד בטלפון שלו',W.mode==='multi')}</div></div>`;
+  if(W.mode==='multi'){if(W.stage==='room')return multiRoom(B);if(W.stage==='setup')return multiSetup(B,modeSec);}
+  if(W.stage==='setup'){
+    return wrap('','who',`${B}${modeSec}
+    <div class="sec"><h3>נושאים</h3><div class="chips">${Object.keys(WHO).map(k=>chip('w-cat',esc(k),esc(k),W.cats.has(k))).join('')}</div></div>
+    <div class="sec"><h3>שניות לתור</h3><div class="chips">${[45,60,90].map(v=>chip('w-time',v,v,W.time===v)).join('')}</div></div>
+    <div class="sec"><h3>שמות השחקנים, מופרדים בפסיק</h3><input type="text" id="wnames" value="${esc(W.names)}" placeholder="אפשר גם בלי" aria-label="שמות השחקנים"></div>
+    <button class="primary" data-act="w-start">מתחילים</button>`);
+  }
+  if(W.stage==='ready'){
+    return wrap('','who',`${B}
+    <div class="center"><span class="lead">${W.players.length?'התור של':'מוכנים?'}</span><h2>${esc(whoName())}</h2>
+    <p>מחזיקים את הטלפון מול הפנים, והמסך פונה אל כל השאר. הם נותנים רמזים, ומישהו מהם לוחץ נכון או דלג.</p></div>
+    <button class="primary" data-act="w-go">מתחילים לספור</button>`);
+  }
+  if(W.stage==='count'){
+    return wrap('play','who',`<div class="top"><span class="tag">${esc(whoName())}</span></div><div class="stagebox"><div class="count" id="count">3</div></div><div></div>`);
+  }
+  if(W.stage==='play'){
+    return wrap('play','who',`<div class="top"><div class="clock" id="clock">${W.time}</div><div class="tally">נכון <b id="tally">0</b></div></div>
+    <div class="stagebox"><span class="tag" id="cat">${esc(W.cat)}</span><div class="word" id="word">${esc(W.word)}</div></div>
+    <div class="pair"><button class="btn ok" data-act="w-ok">נכון</button><button class="btn skip" data-act="w-skip">דלג</button></div>`);
+  }
+  const n=W.log.filter(x=>x.ok).length;
+  const ranking=W.players.length?`<div class="sec"><h3>טבלה</h3><div class="score">${W.players.slice().sort((a,b)=>(W.totals[b]||0)-(W.totals[a]||0)).map(p=>`<div><b>${W.totals[p]||0}</b><span>${esc(p)}</span></div>`).join('')}</div></div>`:'';
+  return wrap('','who',`${B}<div class="center"><span class="lead">${esc(whoName())}</span><div class="delta">${n}</div><p>${n===1?'ניחוש אחד':'ניחושים נכונים'}</p></div>
+  <div class="rev">${W.log.map(x=>`<div class="${x.ok?'y':'n'}" style="display:flex;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line)"><span class="w">${esc(x.w)}</span><span class="m">${x.ok?'נכון':'דולג'}</span></div>`).join('')}</div>
+  ${ranking}<button class="primary" data-act="w-next">התור הבא</button><button class="secondary" data-act="home">סיימנו</button>`);
+}
+function whoPlay(){
+  W.stage='play';W.log=[];const d=whoDraw();W.word=d.w;W.cat=d.c;render();keepAwake();
+  runTimer(W.time,left=>{setText('clock',left);const c=document.getElementById('clock');if(c)c.classList.toggle('low',left<=10);},()=>{
+    beep();W.log.push({w:W.word,ok:false});release();
+    if(W.players.length){const p=whoName();W.totals[p]=(W.totals[p]||0)+W.log.filter(x=>x.ok).length;}
+    W.stage='review';render();});
+}
+function whoNextWord(ok){W.log.push({w:W.word,ok});const d=whoDraw();W.word=d.w;W.cat=d.c;setText('word',W.word);setText('cat',W.cat);setText('tally',W.log.filter(x=>x.ok).length);const el=document.getElementById('word');if(el){el.style.animation='none';void el.offsetWidth;el.style.animation='';}}
+
+/* ----- Who am I, every player on their own phone ----- */
+function roomPeers(){const R=W.m.R;if(!R)return [];return R.peers().filter(p=>p.kind==='viewer'&&p.presence&&p.presence.code===W.m.code);}
+function multiSetup(B,modeSec){
+  const R=W.m.R;
+  const note=R?'':`<p class="tag" style="margin-top:12px">${W.m.checked?(IN_SITE?'אין חיבור לשרת המשחקים. בדקו את האינטרנט ורעננו את הדף.':'המצב הזה עובד רק כשכולם פותחים את הדף דרך Claude, עם משתמש שקיבל גישה אליו. כרגע אין חיבור.'):'בודק חיבור...'}</p>`;
+  return wrap('','who',`${B}${modeSec}
+  <div class="sec"><h3>השם שלכם</h3><input type="text" id="mname" value="${esc(W.m.name)}" maxlength="16" aria-label="השם שלכם"></div>
+  <div class="sec"><h3>קוד חדר. כולם מקלידים את אותו קוד</h3><input type="text" id="mcode" inputmode="numeric" value="${esc(W.m.code)}" maxlength="6" aria-label="קוד חדר"><button class="secondary" style="margin-top:0" data-act="m-newcode">קוד חדש</button></div>
+  <button class="primary" data-act="m-enter" ${R?'':'disabled'}>כניסה לחדר</button>${note}`);
+}
+function multiRoom(B){
+  const R=W.m.R,ps=roomPeers().slice().sort((a,b)=>a.peer<b.peer?-1:1);
+  const me=ps.find(p=>p.isMe&&p.sameTab);
+  const myCard=me&&me.presence.card,guessed=!!(me&&me.presence.guessed);
+  /* turn = whoever has a card, has not guessed yet, and has played the fewest turns; ties go in a fixed order */
+  const elig=ps.filter(p=>p.presence.card&&!p.presence.guessed);
+  const cur=elig.length?elig.slice().sort((a,b)=>((a.presence.done||0)-(b.presence.done||0))||(a.peer<b.peer?-1:1))[0]:null;
+  const myTurn=!!(cur&&me&&cur.peer===me.peer);
+  const anyCards=ps.some(p=>p.presence.card);
+  const banner=cur?`<div class="turn${myTurn?' me':''}"><span class="tag">התור של</span><b>${esc(cur.presence.name||'שחקן')}${myTurn?' (אני)':''}</b></div>`
+    :`<div class="turn"><span class="tag">${anyCards?'כולם ניחשו. אפשר להתחיל סיבוב חדש.':'כל אחד לוחץ על תנו לי דמות, וכשיש דמויות המשחק מתחיל.'}</span></div>`;
+  const cards=ps.map(p=>{
+    const mine=p.isMe&&p.sameTab,pr=p.presence,name=esc(pr.name||'שחקן')+(mine?' (אני)':'')+(pr.guessed?' ✓':'');
+    const card=pr.card?esc(pr.card):'';
+    const body=mine?(myCard?(guessed?card:'?'):'עוד אין דמות'):(card||'עוד אין דמות');
+    const none=mine?!myCard:!card;
+    return `<div class="pcard${mine?' mine':''}${none?' none':''}${pr.guessed?' ok':''}"><span class="tag">${name}</span><div class="pword">${body}</div></div>`;
+  }).join('');
+  const cats=['all'].concat(Object.keys(WHO));
+  const ctl=!myCard?`<button class="primary" data-act="m-draw">תנו לי דמות</button>`
+    :(!guessed?(myTurn?`<button class="primary" data-act="m-pass">סיימתי תור</button><button class="secondary" data-act="m-reveal">ניחשתי נכון</button>`
+      :`<p class="tag" style="margin-top:18px">מחכים לתור שלכם.</p>`)+`<button class="secondary" data-act="m-draw">דמות אחרת</button>`
+    :`<button class="primary" data-act="m-new">סיבוב חדש</button>`);
+  return wrap('','who',`${B}
+  <div class="top"><span class="lead">חדר ${esc(W.m.code)}</span><span class="tag">${R&&R.connected()?ps.length+' שחקנים':'מתחבר...'}</span></div>
+  ${R&&R.error?`<p class="tag" style="margin-top:10px;color:var(--bad)">${R.error==='PERMISSION_DENIED'?'השרת לא מאפשר לשמור את המשחק הזה (הרשאות Firebase).':'יש בעיה בחיבור לשרת. נסו לרענן.'}</p>`:''}
+  ${banner}
+  <div class="pgrid">${cards||'<p class="tag">אף אחד עדיין לא נכנס.</p>'}</div>
+  <p class="tag" style="margin-top:10px">הדמות שלכם מוצגת אצל כולם חוץ מאצלכם. בתור שלכם שואלים או מנחשים, ואז התור עובר לשחקן הבא.</p>
+  <div class="sec"><h3>נושא לדמות שלי</h3><div class="chips">${cats.map(k=>chip('m-cat',esc(k),k==='all'?'הכל':esc(k),W.m.cat===k)).join('')}</div></div>
+  ${ctl}<button class="secondary" data-act="m-leave">יציאה מהחדר</button>`);
+}
+function multiDraw(){
+  const R=W.m.R;if(!R)return;
+  const used=new Set(roomPeers().map(p=>p.presence.card).filter(Boolean));
+  const keys=W.m.cat==='all'?Object.keys(WHO):[W.m.cat];
+  let pool=[];for(const k of keys)for(const w of WHO[k])if(!used.has(w))pool.push({w,c:k});
+  if(!pool.length)for(const k of keys)for(const w of WHO[k])pool.push({w,c:k});
+  const pick=pool[Math.floor(Math.random()*pool.length)];
+  const patch={card:pick.w,cat:pick.c,guessed:false};
+  const mine=roomPeers().find(p=>p.isMe&&p.sameTab);
+  if(!(mine&&mine.presence.card)){
+    /* joining the rotation: start level with the others so nobody gets several turns in a row */
+    const others=roomPeers().filter(p=>!(p.isMe&&p.sameTab)&&p.presence.card&&!p.presence.guessed);
+    patch.done=others.length?Math.min(...others.map(p=>p.presence.done||0)):0;
+  }
+  R.presence(patch).catch(()=>{});
+}
+function multiPass(){
+  const R=W.m.R;if(!R)return;
+  const mine=roomPeers().find(p=>p.isMe&&p.sameTab);
+  R.presence({done:((mine&&mine.presence.done)||0)+1}).catch(()=>{});
+}
+function leaveRoom(){
+  if(W.m.R&&W.stage==='room'){W.m.R.presence({code:null,name:null,card:null,cat:null,guessed:null}).catch(()=>{});W.stage='setup';}
+}
+
+/* ===== Psychologist ===== */
+function psyInit(){P.stage='intro';P.n=0;if(!P.deck.length)P.deck=shuffle(RULES);}
+function psyDraw(){if(!P.deck.length)P.deck=shuffle(RULES);P.rule=P.deck.pop();}
+function psyQs(){P.qs=shuffle(QUESTIONS).slice(0,3);}
+function psyView(){
+  const B=bar('הפסיכולוג');
+  if(P.stage==='intro'){
+    return wrap('','psy',`${B}<div class="sec"><h3>איך משחקים</h3>
+    <ol class="steps"><li>מי שמשחק את הפסיכולוג יוצא מהחדר.</li><li>מי שנשארו מגלים כאן חוק סודי.</li><li>הפסיכולוג חוזר ושואל שאלות. כל אחד עונה לפי החוק.</li><li>הפסיכולוג מנחש מה החוק. אם הצליח, מחליפים תפקידים.</li></ol></div>
+    <button class="primary" data-act="p-ask">מוכנים, מישהו יוצא</button>`);
+  }
+  if(P.stage==='ask'){
+    return wrap('','psy',`${B}<div class="center"><span class="lead">לפני שממשיכים</span><h2>הפסיכולוג מחוץ לחדר?</h2><p>שהוא לא יציץ. החוק יופיע במסך הבא.</p></div>
+    <button class="primary" data-act="p-show">הצג את החוק</button>`);
+  }
+  if(P.stage==='rule'){
+    return wrap('','psy',`${B}<div class="card"><span class="lead">החוק של הסיבוב</span><div class="rule">${esc(P.rule)}</div></div>
+    <button class="primary" data-act="p-hide">הבנו, מסתירים</button><button class="secondary" data-act="p-redraw">חוק אחר</button>`);
+  }
+  if(P.stage==='hidden'){
+    return wrap('','psy',`${B}<div class="center"><span class="lead">החוק מוסתר</span><h2>קוראים לפסיכולוג</h2><p>כולם זוכרים את החוק? אפשר להמשיך.</p></div>
+    <button class="primary" data-act="p-play">הפסיכולוג חזר</button>`);
+  }
+  if(P.stage==='play'){
+    return wrap('','psy',`${B}<div class="sec" style="margin-top:0"><h3>שאלות לדוגמה</h3><ul class="qs">${P.qs.map(q=>`<li>${esc(q)}</li>`).join('')}</ul><button class="secondary" style="margin-top:0" data-act="p-q">שאלות אחרות</button></div>
+    <div class="sec"><h3>שאלות שנשאלו</h3><div class="stepper"><button data-act="p-n" data-v="-1" aria-label="פחות">−</button><output>${P.n}</output><button data-act="p-n" data-v="1" aria-label="עוד">+</button></div></div>
+    <button class="primary" data-act="p-reveal">חושפים את החוק</button>`);
+  }
+  return wrap('','psy',`${B}<div class="card"><span class="lead">החוק היה</span><div class="rule">${esc(P.rule)}</div><p>${P.n?`הפסיכולוג שאל ${P.n} שאלות.`:''}</p></div>
+  <button class="primary" data-act="p-new">סיבוב חדש</button><button class="secondary" data-act="home">חזרה לבית</button>`);
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b)act(b.dataset.act,b.dataset);});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.team!==undefined)A.teams[+t.dataset.team].name=t.value;else if(t.id==='wnames')W.names=t.value;else if(t.id==='mname')W.m.name=t.value;else if(t.id==='mcode')W.m.code=t.value.trim();});
+
+function act(a,d){
+  switch(a){
+    case 'home':stopTimer();release();leaveRoom();screen='home';break;
+    case 'open':screen=d.game;if(screen==='alias')aliasInit();if(screen==='who')whoInit();if(screen==='psy')psyInit();break;
+    /* alias */
+    case 'a-teams':{const n=Math.min(4,Math.max(2,A.teams.length+(+d.v)));while(A.teams.length<n)A.teams.push({name:'קבוצה '+(A.teams.length+1),score:0});A.teams.length=n;break;}
+    case 'a-time':A.time=+d.v;break;
+    case 'a-target':A.target=+d.v;break;
+    case 'a-pen':A.penalty=d.v==='1';break;
+    case 'a-start':A.teams.forEach((t,i)=>{t.name=(t.name||'').trim()||('קבוצה '+(i+1));t.score=0;});A.deck=shuffle(ALIAS_WORDS);A.turn=0;A.played=0;A.stage='ready';break;
+    case 'a-go':aliasTurn();return;
+    case 'a-ok':aliasNext(0,true);return;
+    case 'a-skip':aliasNext(0,false);return;
+    case 'a-flip':{const x=A.log[+d.i];x.ok=!x.ok;if(x.ok)x.timeout=false;break;}
+    case 'a-done':{A.teams[A.turn].score+=aliasDelta();A.turn=(A.turn+1)%A.teams.length;A.played++;
+      if(A.played%A.teams.length===0){const top=Math.max(...A.teams.map(t=>t.score));A.stage=(top>=A.target&&A.teams.filter(t=>t.score===top).length===1)?'end':'ready';}else A.stage='ready';break;}
+    case 'a-again':aliasInit();break;
+    /* who */
+    case 'w-cat':{if(W.cats.has(d.v)){if(W.cats.size>1)W.cats.delete(d.v);}else W.cats.add(d.v);break;}
+    case 'w-time':W.time=+d.v;break;
+    case 'w-start':W.players=W.names.split(/[,،\n]/).map(s=>s.trim()).filter(Boolean).slice(0,12);W.totals={};W.turn=0;W.round=1;W.deck=shuffle(whoPool());W.stage='ready';break;
+    case 'w-go':{W.stage='count';render();runTimer(3,left=>setText('count',left||'קדימה'),()=>whoPlay());return;}
+    case 'w-ok':whoNextWord(true);return;
+    case 'w-skip':whoNextWord(false);return;
+    case 'w-next':W.turn++;W.round++;W.stage='ready';break;
+    case 'w-mode':W.mode=d.v;W.stage='setup';break;
+    case 'm-cat':W.m.cat=d.v;break;
+    case 'm-newcode':W.m.code=newCode();break;
+    case 'm-enter':{const nm=(W.m.name||'').trim(),cd=(W.m.code||'').trim();
+      if(!W.m.R||!nm||!/^[0-9]{3,6}$/.test(cd))break;
+      W.m.name=nm;W.m.code=cd;lsSet('salon_name',nm);lsSet('salon_code',cd);
+      W.m.R.presence({code:cd,name:nm,card:null,cat:null,guessed:false}).catch(()=>{});W.stage='room';break;}
+    case 'm-draw':multiDraw();break;
+    case 'm-pass':multiPass();break;
+    case 'm-reveal':if(W.m.R)W.m.R.presence({guessed:true}).catch(()=>{});break;
+    case 'm-new':if(W.m.R)W.m.R.presence({card:null,cat:null,guessed:false}).catch(()=>{});break;
+    case 'm-leave':leaveRoom();break;
+    /* psy */
+    case 'p-ask':P.stage='ask';break;
+    case 'p-show':psyDraw();P.stage='rule';break;
+    case 'p-redraw':psyDraw();break;
+    case 'p-hide':P.stage='hidden';break;
+    case 'p-play':P.n=0;psyQs();P.stage='play';break;
+    case 'p-q':psyQs();break;
+    case 'p-n':P.n=Math.max(0,P.n+(+d.v));break;
+    case 'p-reveal':P.stage='reveal';break;
+    case 'p-new':P.stage='ask';break;
+  }
+  render();
+}
+render();
+
+/* ---------- shared rooms on the card-games site: Firebase, same project the card games use ---------- */
+const FB_CONFIG={apiKey:"AIzaSyDPyCNI4MQMgb1kfvEaQFK5Ss86bq8t_4A",authDomain:"whist-45d5e.firebaseapp.com",databaseURL:"https://whist-45d5e-default-rtdb.europe-west1.firebasedatabase.app",projectId:"whist-45d5e",storageBucket:"whist-45d5e.firebasestorage.app",messagingSenderId:"415893241295",appId:"1:415893241295:web:937158fd82c89283e8e6ba"};
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('load failed'));document.head.appendChild(s);});}
+async function loadFirebase(){
+  await loadScript('https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js');
+  await loadScript('https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js');
+  return window.firebase;
+}
+/* Same small interface as the Claude room (peers, presence, onPeers, onConnection, connected), so the game code is identical in both places. */
+function buildTransport(fb){
+  const db=fb.initializeApp(FB_CONFIG,'salon-app').database();
+  const myId='p'+Math.random().toString(36).slice(2,10);
+  let code=null,roomRef=null,myRef=null,onVal=null,mine={},remote={},conn=false;
+  const peerL=new Set(),connL=new Set();
+  const notify=()=>{const ch={peers:T.peers(),joined:[],left:[],updated:[]};peerL.forEach(f=>f(ch));};
+  const fail=e=>{T.error=(e&&e.code)||'error';notify();};
+  const write=()=>{if(myRef)myRef.set(Object.assign({},mine)).catch(fail);};
+  const detach=()=>{
+    if(roomRef&&onVal)roomRef.off('value',onVal);onVal=null;
+    if(myRef){myRef.onDisconnect().cancel();myRef.remove().catch(()=>{});}
+    code=null;roomRef=null;myRef=null;remote={};
+  };
+  const join=c=>{
+    detach();code=c;
+    roomRef=db.ref('salon/rooms/'+c+'/players');myRef=roomRef.child(myId);
+    onVal=snap=>{remote=snap.val()||{};notify();};
+    roomRef.on('value',onVal,fail);
+    if(conn)myRef.onDisconnect().remove();
+    write();
+  };
+  const T={error:'',
+    connected:()=>conn,
+    peers(){
+      if(!code)return [];
+      const all=Object.assign({},remote,{[myId]:mine});
+      return Object.keys(all).sort().map(id=>({peer:id,isMe:id===myId,sameTab:id===myId,kind:'viewer',guest:false,by:null,presence:Object.freeze(Object.assign({},all[id])),updatedAt:0}));
+    },
+    onPeers(fn){peerL.add(fn);return()=>peerL.delete(fn);},
+    onConnection(fn){connL.add(fn);fn(conn);return()=>connL.delete(fn);},
+    presence(patch){
+      for(const k of Object.keys(patch)){if(patch[k]===null)delete mine[k];else mine[k]=patch[k];}
+      if(typeof patch.code==='string'&&patch.code!==code)join(patch.code);
+      else if(patch.code===null)detach();
+      else write();
+      notify();
+      return Promise.resolve();
+    }
+  };
+  /* firebase drops the connection when a phone sleeps; when it is back, put this player back in the room */
+  db.ref('.info/connected').on('value',s=>{
+    conn=!!s.val();
+    if(conn&&myRef){myRef.onDisconnect().remove();write();}
+    connL.forEach(f=>f(conn));
+  });
+  return T;
+}
+
+/* live room: Claude's room inside Claude, Firebase on the site; the page works without either */
+(function(){
+  const live=()=>{if(screen==='who'&&W.mode==='multi'&&W.stage==='room'){const y=window.scrollY;render();window.scrollTo(0,y);}};
+  const attach=r=>{
+    W.m.checked=true;
+    if(r){W.m.R=r;r.onPeers(live,()=>{});r.onConnection(live,()=>{});}
+    if(screen==='who'&&W.mode==='multi'&&W.stage==='setup')render();
+  };
+  if(window.claude&&window.claude.use)window.claude.use('room').then(attach).catch(()=>attach(null));
+  else loadFirebase().then(fb=>attach(buildTransport(fb))).catch(()=>attach(null));
+})();
+</script>
+</body>
+</html>
