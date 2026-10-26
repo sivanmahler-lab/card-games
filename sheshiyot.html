@@ -55,6 +55,22 @@
 @media (prefers-reduced-motion: reduce){
   .land-highlight{animation:none;}
 }
+/* Bot-turn readability (added after "can't tell which card the bot threw or where it went"):
+   - .land-highlight.long: a longer, stronger glow + solid gold outline on the slot a bot's card
+     just landed in / left from, so the destination stays obvious after the (tiny) flying card is gone.
+   - .target-ring: shown BEFORE a card moves, on the slot it is about to leave or enter.
+   - .pile.bot-reveal: the card a bot just drew is shown big in the middle for a moment.
+   - #bot-caption: one short line saying what the bot is doing, right under the piles. */
+.land-highlight.long{animation:pulseGlow .6s ease-in-out 3;outline:3px solid var(--gold-bright);outline-offset:2px;}
+.target-ring{outline:3px solid var(--gold-bright);outline-offset:2px;animation:pulseGlow .5s ease-in-out infinite;}
+.pile.bot-reveal{transform:scale(1.5)!important;z-index:6;box-shadow:0 0 0 3px var(--gold-bright),0 8px 22px rgba(0,0,0,.55);}
+#bot-caption{position:fixed;z-index:100001;pointer-events:none;left:0;right:0;text-align:center;opacity:0;transition:opacity .2s ease;}
+#bot-caption span{display:inline-block;background:rgba(0,0,0,.78);color:var(--gold-bright);border:1px solid rgba(240,216,150,.5);
+  padding:7px 14px;border-radius:16px;font-size:14px;font-weight:700;max-width:92vw;}
+#bot-caption.show{opacity:1;}
+@media (prefers-reduced-motion: reduce){
+  .land-highlight.long,.target-ring{animation:none;}
+}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;margin:0;}
 /* The game table background: the same sheshiyot-pc/mobile.jpg photo used on the splash screen
@@ -1247,6 +1263,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
 <div class="screen" id="screen-game">
   <div class="game-header">
     <div class="pill status" id="pill-status">מכינים משחק...</div>
+    <button class="pill" id="speed-btn" onclick="cycleAnimSpeed()" style="padding:6px 10px;" aria-label="מהירות האנימציה">⏱ רגיל</button>
   </div>
   <div id="final-round-banner"></div>
   <!-- One-shot, hard-to-miss announcement the moment ANY player (human or bot) declares
@@ -1678,6 +1695,70 @@ function finishCallerName(){
   return (hasFinishCaller() && S.names && S.names[fc]) ? S.names[fc] : 'שחקן';
 }
 
+/* ============================= BOT-TURN PACING ============================= */
+// Animation speed the player can pick with the ⏱ button next to the status line. Only affects the
+// bots' turns (the reveal pause, the pre-move highlight, the flight itself, the pause after).
+// 'normal' is the new default (clearly slower than the old fixed ~0.35s flights), 'fast' is close
+// to the old pacing, 'slow' gives even more time. Stored per device; falls back silently.
+const SPEED_MODES = { fast:{f:0.45,label:'מהיר'}, normal:{f:1,label:'רגיל'}, slow:{f:1.7,label:'איטי'} };
+let animMode = 'normal';
+try{ const m = localStorage.getItem('sheshiyot_anim_speed'); if(m && SPEED_MODES[m]) animMode = m; }catch(e){}
+function animF(){ return SPEED_MODES[animMode].f; }
+function updateSpeedBtn(){
+  const b = document.getElementById('speed-btn');
+  if(b) b.textContent = '⏱ ' + SPEED_MODES[animMode].label;
+}
+function cycleAnimSpeed(){
+  const order = ['normal','slow','fast'];
+  animMode = order[(order.indexOf(animMode)+1) % order.length];
+  try{ localStorage.setItem('sheshiyot_anim_speed', animMode); }catch(e){}
+  updateSpeedBtn();
+  showToast('מהירות האנימציה: ' + SPEED_MODES[animMode].label, 1400);
+}
+document.addEventListener('DOMContentLoaded', updateSpeedBtn);
+updateSpeedBtn();
+// One short line right under the piles that says what the bot is doing ("ארתור · זורק: J♣").
+let _botCapTimer = null;
+function showBotCaption(text, ms){
+  let el = document.getElementById('bot-caption');
+  if(!el){
+    el = document.createElement('div'); el.id = 'bot-caption';
+    el.innerHTML = '<span></span>';
+    document.body.appendChild(el);
+  }
+  el.firstChild.textContent = text;
+  const pc = document.getElementById('pile-closed');
+  const r = pc ? pc.getBoundingClientRect() : null;
+  el.style.top = (r ? Math.round(r.bottom + 22) : 360) + 'px';
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(_botCapTimer);
+  if(ms) _botCapTimer = setTimeout(hideBotCaption, ms);
+}
+function hideBotCaption(){
+  const el = document.getElementById('bot-caption');
+  if(el) el.classList.remove('show');
+}
+// wrapped in a left-to-right isolate so "Q♠" doesn't get flipped to "♠Q" inside Hebrew text
+function cardText(c){ return '\u2066' + rankLabel(c.rank) + SUITS_INFO[c.suit].sym + '\u2069'; }
+// Gold ring on a slot/pile BEFORE a card leaves or enters it, so the eye is already there.
+function ringTarget(el, ms){
+  if(!el) return;
+  el.classList.add('target-ring');
+  setTimeout(()=>el.classList.remove('target-ring'), ms);
+}
+function endBotReveal(){
+  ['pile-closed','pile-open'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && el.classList.contains('bot-reveal')){
+      el.style.transition = 'none';
+      el.classList.remove('bot-reveal');
+      void el.offsetWidth;
+      el.style.transition = '';
+    }
+  });
+}
+
 /* ============================= FLY ANIMATION ============================= */
 // A short-lived cloned "ghost" card that visually flies from one element's position to
 // another's, then fades out and removes itself. Purely cosmetic — the real state change
@@ -1689,7 +1770,7 @@ function finishCallerName(){
 // @keyframes animation (not a single transition) specifically so the arc's midpoint can exist at
 // all — a plain start->end transition can only ever interpolate a straight line between two
 // transforms, it has no way to pass through a third point along the way.
-function flyGhostCard(card, fromRect, toRect, toEl, onComplete){
+function flyGhostCard(card, fromRect, toRect, toEl, onComplete, opts){
   if(!fromRect || !toRect){ if(onComplete) onComplete(); return; }
   // The keyframes below are generated per-call and applied via an inline style.animation, which
   // a CSS prefers-reduced-motion media query can't override without !important fighting inline
@@ -1735,12 +1816,13 @@ function flyGhostCard(card, fromRect, toRect, toEl, onComplete){
   // don't pass it keep working exactly as before, just without this extra cue).
   const landHighlight = ()=>{
     if(!toEl) return;
-    toEl.classList.remove('land-highlight');
+    toEl.classList.remove('land-highlight','long');
     void toEl.offsetWidth;
     toEl.classList.add('land-highlight');
-    setTimeout(()=>toEl.classList.remove('land-highlight'), 1000);
+    if(opts && opts.slow) toEl.classList.add('long');
+    setTimeout(()=>toEl.classList.remove('land-highlight','long'), (opts && opts.slow) ? 2000 : 1000);
   };
-  const DURATION = 350; // matches the exact 350ms flight-duration spec given for this pacing
+  const DURATION = (opts && opts.duration) || 350; // 350ms by default; bot turns pass a slower duration
   let finished = false;
   // finish() is the single place that fires the landing cue AND hands control back to the
   // caller (onComplete) — called from whichever of {transitionend, timeout backstop, reduced-
@@ -1782,6 +1864,33 @@ function flyGhostCard(card, fromRect, toRect, toEl, onComplete){
   // plus double rAF together is the single most reliable way to guarantee the browser has
   // actually committed the starting 3D transform first, on every engine.
   void ghost.offsetHeight;
+  if(opts && opts.slow && ghost.animate){
+    // Slow, readable bot flight: the card first grows and rises (so the player can read it),
+    // then travels to its destination. Web Animations API with fill:forwards, finish via
+    // onfinish, plus a timer backstop in case the event is ever missed.
+    const lift = opts.lift || 36;
+    // Start from a normal card size even when the source is a tiny bot slot (otherwise the ghost
+    // is a squashed sliver), centred on the source; the final scale shrinks it into the target.
+    const bw = Math.max(fromRect.width, 46), bh = Math.max(fromRect.height, 64);
+    const fcx = fromRect.left + fromRect.width/2, fcy = fromRect.top + fromRect.height/2;
+    const tcx = toRect.left + toRect.width/2,   tcy = toRect.top + toRect.height/2;
+    ghost.style.left = (fcx - bw/2) + 'px'; ghost.style.top = (fcy - bh/2) + 'px';
+    ghost.style.width = bw + 'px'; ghost.style.height = bh + 'px';
+    ghost.style.transformOrigin = 'center center';
+    const ddx = tcx - fcx, ddy = tcy - fcy;
+    const ssw = toRect.width / bw, ssh = toRect.height / bh;
+    const bigS = Math.min(1.8, Math.max(1.0, 78 / bw));
+    const midS = Math.max(ssw * 1.5, bigS * 0.6);
+    const anim = ghost.animate([
+      { transform:'translate3d(0,0,0) scale(1,1)', offset:0 },
+      { transform:`translate3d(${ddx*0.2}px, ${ddy*0.2 - lift}px, 0) scale(${bigS})`, offset:0.3 },
+      { transform:`translate3d(${ddx*0.7}px, ${ddy*0.7 - lift*0.4}px, 0) scale(${midS})`, offset:0.75 },
+      { transform:`translate3d(${ddx}px, ${ddy}px, 0) scale(${ssw},${ssh})`, offset:1 }
+    ], { duration: DURATION, easing:'ease-in-out', fill:'forwards' });
+    anim.onfinish = finish;
+    setTimeout(finish, DURATION+300);
+    return;
+  }
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
       ghost.style.transition = `transform ${DURATION}ms cubic-bezier(.3,.62,.4,1), opacity ${DURATION}ms ease`;
@@ -2248,10 +2357,16 @@ function botTakeTurn(p){
     // Reveal it face-up in the pile slot it came from, and pause before resolving.
     botRevealedDraw = {source: useOpen && top ? 'open' : 'closed', card: drawn};
     renderAll();
+    // Show the drawn card big (and say what it is) for a moment, before it moves anywhere.
+    try{
+      const revEl = document.getElementById(useOpen && top ? 'pile-open' : 'pile-closed');
+      if(revEl) revEl.classList.add('bot-reveal');
+      showBotCaption((S.names[p]||'בוט')+' · '+(useOpen && top ? 'לקח מהערימה הפתוחה: ' : 'שלף מהקופה: ')+cardText(drawn));
+    }catch(e){}
     // 800ms "thinking" delay — matches the exact spec given for this pacing: long enough to
     // register that a card was just revealed, short enough to keep the bot's decision reading as
     // deliberate rather than stalled.
-    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), 800);
+    setTimeout(()=>botResolveTurn(p, {drawn, worst:w, rankCounts}), Math.round(1100*animF()));
   } catch(err){
     console.error('botTakeTurn (phase 1) failed for player '+p, err);
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
@@ -2330,8 +2445,17 @@ function botResolveTurn(p, ctx){
       // gives the swap its own visual weight; stacking a long pause on TOP of that on every
       // single turn was what actually made the whole game feel stalled, on top of (separately)
       // the reveal-dwell time below.
-      setTimeout(advanceTurn, 400);
+      setTimeout(hideBotCaption, Math.round(350*animF()));
+      setTimeout(advanceTurn, Math.round(500*animF()));
     };
+
+    const f = animF();
+    const flyOpts = ()=>({slow:true, duration:Math.round(700*f), lift:40, big:1.6});
+    const pre = Math.round(400*f); // pause with the target highlighted, before the card moves
+    const nm = S.names[p]||'בוט';
+    // The flights are slow now, so a new game / round end can happen mid-turn: bail out quietly then.
+    const S0 = S;
+    const stale = ()=>{ if(S!==S0 || S.phase!=='playing'){ endBotReveal(); hideBotCaption(); botRevealedDraw=null; return true; } return false; };
 
     if(improves){
       const old = hand[w.idx]; // pre-swap value — S.hands[p] itself is untouched until its own beat below
@@ -2343,28 +2467,48 @@ function botResolveTurn(p, ctx){
       // direct, targeted update of just the open pile's own face (not a full renderAll(), which
       // would also touch the still-mid-swap hand slot before beat 2 has even started) shows the
       // departed card actually sitting on the discard pile before beat 2 begins.
-      flyGhostCard(old, slotRect, openRectNow, openEl, ()=>{
-        S.discardPile.push(old);
-        rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
-        const openElNow = document.getElementById('pile-open');
-        if(openElNow) revealPileFace(openElNow, old);
-        // BEAT 2 — arrive: only now does the drawn card fly into the slot it's actually replacing
-        // (which the player can already see is empty/departed, since beat 1 finished first).
-        // hand[w.idx] itself isn't written until THIS flight also finishes, in finalize() —
-        // matching "only after the final animation callback is hit should the DOM update the
-        // final face-up value and close the overlay" exactly: nothing about the destination
-        // slot's own face changes until both beats are done.
-        flyGhostCard(drawn, sourceRect, slotRect, slotEl, ()=>{
-          hand[w.idx] = drawn;
-          rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
-          finalize();
-        });
-      });
+      // Say which of its own cards is leaving and highlight that slot first, THEN fly it.
+      showBotCaption(nm+' · מוציא מהיד: '+cardText(old));
+      ringTarget(slotEl, pre+150);
+      setTimeout(()=>{
+        if(stale()) return;
+        flyGhostCard(old, slotRect, openRectNow, openEl, ()=>{
+          if(stale()) return;
+          S.discardPile.push(old);
+          rankCounts[old.rank]=(rankCounts[old.rank]||1)-1;
+          const openElNow = document.getElementById('pile-open');
+          if(openElNow) revealPileFace(openElNow, old);
+          // BEAT 2 — arrive: the drawn card (still shown big on its pile) now goes into the empty
+          // slot. Highlight the slot first, then fly. hand[w.idx] is written only when this flight
+          // finishes, in finalize().
+          showBotCaption(nm+' · מניח במקומו: '+cardText(drawn));
+          ringTarget(slotEl, pre+150);
+          setTimeout(()=>{
+            if(stale()) return;
+            const srcEl = useOpen ? document.getElementById('pile-open') : document.getElementById('pile-closed');
+            const src2 = srcEl ? srcEl.getBoundingClientRect() : sourceRect;
+            endBotReveal();
+            flyGhostCard(drawn, src2, slotRect, slotEl, ()=>{
+              if(stale()) return;
+              hand[w.idx] = drawn;
+              rankCounts[drawn.rank]=(rankCounts[drawn.rank]||0)+1;
+              finalize();
+            }, flyOpts());
+          }, pre);
+        }, flyOpts());
+      }, pre);
     } else {
-      flyGhostCard(drawn, sourceRect, openRectNow, openEl, ()=>{
-        S.discardPile.push(drawn);
-        finalize();
-      });
+      showBotCaption(nm+' · זורק לערימה: '+cardText(drawn));
+      ringTarget(document.getElementById('pile-open'), pre+150);
+      setTimeout(()=>{
+        if(stale()) return;
+        flyGhostCard(drawn, sourceRect, openRectNow, openEl, ()=>{
+          if(stale()) return;
+          S.discardPile.push(drawn);
+          finalize();
+        }, flyOpts());
+        endBotReveal();
+      }, pre);
     }
   } catch(err){
     // A bot AI bug should never be able to freeze the whole game — log it, tell the
@@ -2374,6 +2518,7 @@ function botResolveTurn(p, ctx){
     showToast('שגיאה בתור של '+(S.names[p]||('בוט '+p))+': '+err.message, 4500);
     S.turnActed = true;
     botRevealedDraw = null;
+    endBotReveal(); hideBotCaption();
     try{ renderAll(); } catch(e2){ console.error('renderAll after bot error also failed', e2); }
     if(isOnline && isHost) pushStateToFirebase();
     setTimeout(advanceTurn, 400);
