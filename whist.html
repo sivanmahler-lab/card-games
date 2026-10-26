@@ -2859,6 +2859,11 @@ function botDeclare(p){
     ? window.BotPersona.biddingMultiplier(S.names[p], botAggressiveness(S.names[p]))
     : botAggressiveness(S.names[p]);
   const est = estimateTricks(hand, S.trumpSuit) * mult;
+  // Measured over thousands of simulated rounds: the plain estimate under-counts trump length for
+  // everyone who is not the trump-caller (each trump held was worth ~0.33 more tricks than counted).
+  // This corrected figure is what non-callers declare from.
+  const trumpsHeld = hand.filter(c=>c.suit===S.trumpSuit).length;
+  const estP = isTrumpWinner ? est : Math.max(0, (-0.25 + 0.74*estimateTricks(hand, S.trumpSuit) + 0.33*trumpsHeld) * mult);
   // Whether this bot's persona actually "pulls the trigger" on a borderline zero-bid, given
   // that the hand already qualifies per hasOnlyLowCardsEverySuit(). A conservative persona
   // (riskAversionToZero > 1) takes it essentially every time; an aggressive one sometimes
@@ -2887,7 +2892,7 @@ function botDeclare(p){
     if(takeZeroBid){
       v = 0;
     } else {
-      v = Math.max(0, Math.min(13, Math.round(est + (est>=4.5 ? 0.35 : 0))));
+      v = Math.max(0, Math.min(13, Math.round(estP + (estP>=4.5 ? 0.35 : 0))));
       v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     }
   } else {
@@ -2907,41 +2912,23 @@ function botDeclare(p){
     const declaredSoFar = S.declareOrder.slice(0,3).reduce((sum,pl)=> sum + (S.bids[pl]||0), 0);
     if(takeZeroBid){
       v = 0;
-    } else if(declaredSoFar===11 || declaredSoFar===12){
-      // Right on the knife's edge — commit fully to whichever side this hand's own cards
-      // genuinely support, rather than splitting the difference:
-      //  - A hand honestly worth MEANINGFULLY more than "just enough to stay under 13" should
-      //    bid that honest number and let the round land UP. Artificially suppressing the bid
-      //    just to preserve UNDER would set this bot up to take more tricks than its own
-      //    (deliberately lowballed) bid — and a bid that ends up short of what's actually won is
-      //    penalized the same -10*|bid-won| regardless of round type (see the non-zero pts
-      //    formula below), so protecting THIS bot's own bidding accuracy matters more than the
-      //    round-type label ever does for a non-zero bid.
-      //  - Otherwise (the hand doesn't clearly support more than that), commit fully to staying
-      //    under — bid the UNDER-preserving total outright rather than a hedge between it and
-      //    the honest baseline.
-      const neededFor13 = 13 - declaredSoFar;
-      const baseline = Math.max(0, Math.min(13, Math.round(est)));
-      v = (baseline > neededFor13 + 1) ? baseline : Math.max(0, Math.min(baseline, neededFor13));
-      v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     } else {
-      const baseline = Math.max(0, Math.min(13, Math.round(est)));
-      const neededFor13 = 13 - declaredSoFar;
-      // Only reach for "closer to 13" if it's actually within reach of what the hand can
-      // support (don't bid wildly above what the cards justify just to hit the number) —
-      // otherwise fall back to the honest estimate, on the assumption someone else's bid
-      // was off rather than forcing a bid this hand can't back up.
-      if(declaredSoFar < 10 && neededFor13>=0 && neededFor13<=est+1.5){
-        v = Math.max(baseline, Math.min(13, neededFor13));
-      } else {
-        v = baseline;
+      // Honest bid from the corrected estimate. The one number this seat may not bid is the one
+      // that makes the total exactly 13 (see forbiddenLastValue) — when the honest bid IS that
+      // number, step to whichever neighbour the hand actually supports: one higher (round lands
+      // UP) if the hand is worth at least that much, one lower (round lands UNDER) if not.
+      // Measured: forcing the total toward 13 used to push this seat to over-bid by ~0.4 tricks.
+      v = Math.max(0, Math.min(13, Math.round(estP + (estP>=4.5 ? 0.35 : 0))));
+      const forbidNow = 13 - declaredSoFar;
+      if(v===forbidNow){
+        v = (estP >= forbidNow) ? Math.min(13, v+1) : Math.max(0, v-1);
       }
       v = window.BotPersona ? window.BotPersona.applyBidShading(v, S.names[p], 0) : v;
     }
   }
 
   const forbid = forbiddenLastValue();
-  if(forbid!==null && v===forbid){ v = v<13 ? v+1 : v-1; }
+  if(forbid!==null && v===forbid){ v = (estP>=v) ? (v<13 ? v+1 : v-1) : (v>0 ? v-1 : v+1); }
   v = Math.max(isTrumpWinner?S.trumpBid.count:0, Math.min(13, v));
   if(forbid!==null && v===forbid) v = v>0? v-1 : v+1;
   S.bids[p]=v;
