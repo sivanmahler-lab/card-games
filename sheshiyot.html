@@ -1402,7 +1402,10 @@ const SUIT_PATH = {
   // 2.5 for the top two) so its own top edge clears the top pair's bottom edge with a real gap —
   // re-verified standalone at all three of those same sizes (14/20/40px) plus at full card size,
   // and next to the other three suits at matching scale, before applying here.
-  c: '<circle cx="-2.7" cy="-2.6" r="2.5"/><circle cx="2.7" cy="-2.6" r="2.5"/><circle cx="0" cy="2.0" r="2.9"/><path d="M-0.9,4.4 L0.9,4.4 L2.0,7.2 L-2.0,7.2 Z"/>',
+  // Classic club: one lobe on top, two lower lobes, a small filler circle so they fuse into one shape,
+  // and a curved stem. (The previous version had two lobes on TOP and one below, which read as an
+  // upside-down "Mickey Mouse" head rather than a club.)
+  c: '<circle cx="0" cy="-3.6" r="3"/><circle cx="-3.5" cy="1.4" r="3"/><circle cx="3.5" cy="1.4" r="3"/><circle cx="0" cy="0.2" r="2.2"/><path d="M-0.7,1 C-0.5,4.6 -1.2,6.2 -3.2,7.4 H3.2 C1.2,6.2 0.5,4.6 0.7,1 Z"/>',
 };
 // Returns the <div class="sym"> markup for a suit, as an inline vector icon instead of a plain
 // unicode character. viewBox is centered on the path data's own origin (an 18x18 box, -9..9 on
