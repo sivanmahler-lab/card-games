@@ -3114,6 +3114,13 @@ function botPlay(p){
     const needMore = S.tricksWon[p] < S.bids[p];
     const sorted = legal.slice().sort((a,b)=> (a.suit===S.trumpSuit?1:0)-(b.suit===S.trumpSuit?1:0) || a.rank-b.rank);
     const iAmZero = (S.bids[p]===0);
+    // UNDER round = a SURPLUS of tricks: winning is easy later (everybody else is ducking), and every
+    // extra trick is a penalty for someone. So while there is plenty of slack — many more tricks left
+    // than this bot still needs — it does NOT fire off its heavy cards (aces, kings, long trump) at
+    // the start; it leads low and keeps them. (An UP round is the opposite: tricks are scarce, so
+    // cash the winners early.) Once the slack is gone, it cashes them as before.
+    const leadSlack = (13 - S.trickHistory.length) - Math.max(0, S.bids[p] - S.tricksWon[p]);
+    const saveWeapons = S.roundType==='UNDER' && leadSlack>=4;
     const zeroTargets = (S.roundType==='UNDER') ? [0,1,2,3].filter(pl=>pl!==p && S.bids[pl]===0 && S.tricksWon[pl]===0) : [];
     const earlyInRound = S.trickHistory.length < 8;
     // Whether this specific bot's persona "reliably notices" that a suit's top card has
@@ -3140,7 +3147,7 @@ function botPlay(p){
     // heuristics already cover reasonably. Only while trumpsUnaccountedFor>0 — once every trump
     // is already drawn or in this hand, there's nothing left to strip.
     const isCallerWithLongTrump = (p===S.trumpBid.player) && myTrumpCount>=4;
-    if(isCallerWithLongTrump && needMore && S.trumpBroken && trumpsUnaccountedFor>0){
+    if(isCallerWithLongTrump && needMore && !saveWeapons && S.trumpBroken && trumpsUnaccountedFor>0){
       const myTrumps = sorted.filter(c=>c.suit===S.trumpSuit);
       if(myTrumps.length>0) choice = myTrumps[myTrumps.length-1]; // highest trump in hand
     }
@@ -3152,7 +3159,7 @@ function botPlay(p){
     // Needs more tricks: cash a card that cannot be beaten (the master of its suit), preferring the
     // longest suit, before anything riskier. Unless a ruff is a real danger (an opponent is known to
     // be void while trumps are still out there).
-    if(!choice && needMore && !huntNow){
+    if(!choice && needMore && !huntNow && !saveWeapons){
       const masterNT = sorted.filter(c=>c.suit!==S.trumpSuit && unseenHigher(c)===0
         && !(trumpsUnaccountedFor>0 && anyOtherVoidIn(c.suit)));
       if(masterNT.length>0){
@@ -3216,7 +3223,7 @@ function botPlay(p){
       // short suit runs out fast and forces an awkward lead later once it's gone), and it's
       // exactly what a human deliberately passing the lead would actually choose.
       const nonTrump = sorted.filter(c=>c.suit!==S.trumpSuit);
-      if(needMore){
+      if(needMore && !saveWeapons){
         choice = nonTrump.length>0 ? nonTrump[nonTrump.length-1] : sorted[sorted.length-1];
       } else {
         const bySuitLen = {};
