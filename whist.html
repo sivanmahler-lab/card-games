@@ -2869,7 +2869,10 @@ function botDeclare(p){
   // (riskAversionToZero > 1) takes it essentially every time; an aggressive one sometimes
   // talks itself out of it even on a qualifying hand. Falls back to "always take it" (the
   // original behavior) if the persona module hasn't loaded.
-  const qualifiesForZero = hasOnlyLowCardsEverySuit(hand);
+  // A hand with almost no sure tricks anywhere is also a good zero bid even when it holds a few
+  // middling cards (measured: such hands stayed trick-free about 3 times in 4 even in UNDER rounds,
+  // where everyone hunts the zero-bidder, and 9 times in 10 in UP rounds).
+  const qualifiesForZero = !isTrumpWinner && (hasOnlyLowCardsEverySuit(hand) || estimateTricks(hand, S.trumpSuit) < 0.45);
   const takeZeroBid = window.BotPersona
     ? window.BotPersona.shouldConsiderZeroBid(qualifiesForZero, S.names[p])
     : qualifiesForZero;
