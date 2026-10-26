@@ -3155,10 +3155,14 @@ function botPlay(p){
       if(myTrumps.length>0) choice = myTrumps[myTrumps.length-1]; // highest trump in hand
     }
 
+    // Is this bot taking part in the early "everyone leads low" hunt of a zero-bidder (see below)?
+    const tricksPlayed = S.trickHistory.length;
+    const huntSlack = (13 - tricksPlayed) - Math.max(0, S.bids[p] - S.tricksWon[p]);
+    const huntNow = S.roundType==='UNDER' && zeroTargets.length>0 && !iAmZero && tricksPlayed<7 && (!needMore || huntSlack>=5);
     // Needs more tricks: cash a card that cannot be beaten (the master of its suit), preferring the
     // longest suit, before anything riskier. Unless a ruff is a real danger (an opponent is known to
     // be void while trumps are still out there).
-    if(!choice && needMore){
+    if(!choice && needMore && !huntNow){
       const masterNT = sorted.filter(c=>c.suit!==S.trumpSuit && unseenHigher(c)===0
         && !(trumpsUnaccountedFor>0 && anyOtherVoidIn(c.suit)));
       if(masterNT.length>0){
@@ -3171,21 +3175,20 @@ function botPlay(p){
       }
     }
 
-    // UNDER round (a surplus of tricks): everyone who doesn't need more tricks tries to pass the
-    // lead around and squeeze the zero-bidder into winning one. Done for the WHOLE round (not just
-    // the first 8 tricks) for as long as the zero-bidder has not yet taken a trick, and only by
-    // bots that don't still need tricks themselves.
-    if(!choice && S.roundType==='UNDER' && zeroTargets.length>0 && !needMore && !iAmZero){
-      // Zero-bid hunter, opening lead: rather than just any low non-trump card, prefer a suit
-      // a zero-bidder is NOT already known to be void in. Leading their known void does nothing
-      // to pressure them — they simply discard whatever they like from a suit they're free of
-      // anyway; leading a suit they still hold forces them to actually follow suit and risk
-      // winning a trick they bid they wouldn't. Falls back to the plain lowest-card approach if
-      // every non-trump suit is already a known void for every target (or void status is simply
-      // still unknown this early), same as the original behavior.
+    // UNDER round (a surplus of tricks) with a zero-bidder still trick-less: the classic way to bring
+    // him down is for EVERYONE to lead only their lowest cards (2, 3, 4...) in the first rounds,
+    // hoping he holds a suit whose lowest card is 5 or higher — that suit led low forces him to
+    // win. So in the first ~6 tricks every bot that can afford it (not just the ones whose bid is
+    // already met) leads its lowest non-trump card, rotating through suits and skipping suits he is
+    // known to be void in or has already ducked a low card in.
+    if(!choice && huntNow){
       const nonTrumpSorted = sorted.filter(c=>c.suit!==S.trumpSuit);
-      const pressuring = nonTrumpSorted.find(c=> !zeroTargets.every(zt=>S.playerVoids[zt][c.suit]));
-      choice = pressuring || nonTrumpSorted[0] || sorted[0];
+      const showedLow = (su)=> S.trickHistory.some(h=> h.cards.length>0 && h.cards[0].card.suit===su
+        && h.cards.some(pc=> zeroTargets.includes(pc.player) && pc.card.suit===su && pc.card.rank<=6));
+      const pool = nonTrumpSorted.filter(c=> !zeroTargets.every(zt=>S.playerVoids[zt][c.suit]));
+      const fresh = pool.filter(c=>!showedLow(c.suit));
+      const pick = (fresh.length>0 ? fresh : pool).slice().sort((a,b)=>a.rank-b.rank)[0];
+      choice = pick || nonTrumpSorted[0] || sorted[0];
     }
 
     if(!choice && S.roundType==='UP' && needMore){
