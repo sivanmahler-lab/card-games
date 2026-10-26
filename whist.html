@@ -1137,6 +1137,91 @@ function recordBotBidOutcome(name, bid, won){
   data[name] = {mult, rounds:(rec.rounds||0)+1};
   saveBotLearning(data);
 }
+/* ---- Player profile: the bots remember HOW YOU play ----------------------------------------------
+   Stored in this browser only (localStorage), like the bot calibration above. Local games against the
+   computer only — online games never read or write it. Three things are recorded:
+     - bidding: how far your bid usually is from the tricks you really win (bid - won)
+     - zero bids: how often a zero bid of yours survives (especially in UNDER rounds)
+     - opening leads: in UNDER rounds, do you open low early to hunt a zero-bidder, or open high
+   and the bots adapt to them (see playerBidAdjust / botsHuntHarder / playerHuntsZero below). */
+const PLAYER_PROFILE_KEY = 'whist_player_profile_v1';
+function emptyPlayerProfile(){
+  return {rounds:0, bidDiffSum:0, bidDiffN:0,
+          zero:{n:0, made:0, nUnder:0, madeUnder:0},
+          leads:{underEarly:0, underEarlyHigh:0, huntOpp:0, huntLow:0}};
+}
+function loadPlayerProfile(){
+  try{
+    const raw = localStorage.getItem(PLAYER_PROFILE_KEY);
+    if(!raw) return emptyPlayerProfile();
+    const parsed = JSON.parse(raw);
+    const base = emptyPlayerProfile();
+    if(!parsed || typeof parsed!=='object') return base;
+    return {
+      rounds: +parsed.rounds||0, bidDiffSum: +parsed.bidDiffSum||0, bidDiffN: +parsed.bidDiffN||0,
+      zero: Object.assign(base.zero, parsed.zero||{}),
+      leads: Object.assign(base.leads, parsed.leads||{})
+    };
+  } catch(e){ return emptyPlayerProfile(); }
+}
+function savePlayerProfile(pr){
+  try{ localStorage.setItem(PLAYER_PROFILE_KEY, JSON.stringify(pr)); } catch(e){ /* private mode etc */ }
+}
+// Called from finishRound() for every human seat of a LOCAL game.
+function recordHumanRound(r, roundType, voided){
+  if(isOnline) return;
+  const pr = loadPlayerProfile();
+  pr.rounds++;
+  if(r.bid>0){ pr.bidDiffSum += (r.bid - r.won); pr.bidDiffN++; }
+  if(r.bid===0 && !voided){
+    pr.zero.n++; if(r.made) pr.zero.made++;
+    if(roundType==='UNDER'){ pr.zero.nUnder++; if(r.made) pr.zero.madeUnder++; }
+  }
+  savePlayerProfile(pr);
+}
+// Called when the human opens a trick (local games only).
+function recordHumanLead(card){
+  if(isOnline || !S || S.roundType!=='UNDER' || S.trickHistory.length>=6) return;
+  const pr = loadPlayerProfile();
+  pr.leads.underEarly++;
+  if(card.rank>=11) pr.leads.underEarlyHigh++;
+  const me = seatFor(0);
+  if(S.bids.some((b,i)=>i!==me && b===0)){
+    pr.leads.huntOpp++;
+    if(card.rank<=5) pr.leads.huntLow++;
+  }
+  savePlayerProfile(pr);
+}
+// If you tend to bid ABOVE what you take, the tricks you leave over go to the bots (and the other
+// way round), so the bots expect a little more (or less) than their own hand says. Needs 8+ rounds.
+function playerBidAdjust(){
+  if(isOnline) return 0;
+  const pr = loadPlayerProfile();
+  if(pr.bidDiffN<8) return 0;
+  const bias = pr.bidDiffSum/pr.bidDiffN;
+  return Math.max(-0.3, Math.min(0.3, bias/3));
+}
+// Your zero bids keep surviving in UNDER rounds -> the bots hunt you harder (longer, and even
+// when they still need tricks themselves).
+function botsHuntHarder(){
+  if(isOnline) return false;
+  const pr = loadPlayerProfile();
+  return pr.zero.nUnder>=2 && (pr.zero.madeUnder/pr.zero.nUnder)>=0.5;
+}
+// You open low in the first tricks when a bot bids zero -> the bots only bid zero on hands that can
+// duck a low lead (every suit has a 2, 3 or 4).
+function playerHuntsZero(){
+  if(isOnline) return false;
+  const pr = loadPlayerProfile();
+  return pr.leads.huntOpp>=4 && (pr.leads.huntLow/pr.leads.huntOpp)>=0.6;
+}
+function canDuckLowLeads(hand){
+  for(let su=0;su<4;su++){
+    const cards = hand.filter(c=>c.suit===su);
+    if(cards.length>0 && !cards.some(c=>c.rank<=4)) return false;
+  }
+  return true;
+}
 // Display order only (does NOT affect trump-bidding strength, which still uses the SUITS
 // array index: תלתן < מעוין < לב < עלה). This controls the order cards are sorted/shown in a
 // hand and in the suit-choice buttons, so black/red alternate: עלה, לב, תלתן, מעוין.
@@ -2863,7 +2948,8 @@ function botDeclare(p){
   // everyone who is not the trump-caller (each trump held was worth ~0.33 more tricks than counted).
   // This corrected figure is what non-callers declare from.
   const trumpsHeld = hand.filter(c=>c.suit===S.trumpSuit).length;
-  const estP = isTrumpWinner ? est : Math.max(0, (-0.25 + 0.74*estimateTricks(hand, S.trumpSuit) + 0.33*trumpsHeld) * mult);
+  const humanAdj = playerBidAdjust();   // learned from how this player bids (0 until enough rounds)
+  const estP = isTrumpWinner ? est : Math.max(0, (-0.25 + 0.74*estimateTricks(hand, S.trumpSuit) + 0.33*trumpsHeld) * mult + humanAdj);
   // Whether this bot's persona actually "pulls the trigger" on a borderline zero-bid, given
   // that the hand already qualifies per hasOnlyLowCardsEverySuit(). A conservative persona
   // (riskAversionToZero > 1) takes it essentially every time; an aggressive one sometimes
@@ -2872,7 +2958,9 @@ function botDeclare(p){
   // A hand with almost no sure tricks anywhere is also a good zero bid even when it holds a few
   // middling cards (measured: such hands stayed trick-free about 3 times in 4 even in UNDER rounds,
   // where everyone hunts the zero-bidder, and 9 times in 10 in UP rounds).
-  const qualifiesForZero = !isTrumpWinner && (hasOnlyLowCardsEverySuit(hand) || estimateTricks(hand, S.trumpSuit) < 0.45);
+  let qualifiesForZero = !isTrumpWinner && (hasOnlyLowCardsEverySuit(hand) || estimateTricks(hand, S.trumpSuit) < 0.45);
+  // This player is known to hunt zero-bidders with low leads: only bid zero on a hand that can duck them.
+  if(qualifiesForZero && playerHuntsZero() && !canDuckLowLeads(hand)) qualifiesForZero = false;
   const takeZeroBid = window.BotPersona
     ? window.BotPersona.shouldConsiderZeroBid(qualifiesForZero, S.names[p])
     : qualifiesForZero;
@@ -2886,7 +2974,7 @@ function botDeclare(p){
     // bid on average, and a made bid is worth bid*bid+10 (it grows faster than the -10 per missed
     // trick), so when the hand honestly supports more, declare the higher number.
     v = S.trumpBid.count;
-    const callerEst = Math.round(est + (est>=4.5 ? 0.35 : 0));
+    const callerEst = Math.round(est + humanAdj + (est>=4.5 ? 0.35 : 0));
     if(callerEst > v) v = Math.min(13, callerEst);
   } else if(!isLastBidder){
     // Rule 2 (2nd/3rd bidder, not the trump-setter): count trump-suit length plus strong
@@ -2997,6 +3085,7 @@ function playHumanCard(c){
     return;
   }
   const myActual = seatFor(0);
+  if(S.currentTrick.length===0) recordHumanLead(c);
   playCard(myActual, c);
 }
 function playCard(p, c){
@@ -3155,7 +3244,8 @@ function botPlay(p){
     // Is this bot taking part in the early "everyone leads low" hunt of a zero-bidder (see below)?
     const tricksPlayed = S.trickHistory.length;
     const huntSlack = (13 - tricksPlayed) - Math.max(0, S.bids[p] - S.tricksWon[p]);
-    const huntNow = S.roundType==='UNDER' && zeroTargets.length>0 && !iAmZero && tricksPlayed<7 && (!needMore || huntSlack>=5);
+    const hardHunt = botsHuntHarder();   // this player's zero bids keep surviving -> hunt for longer
+    const huntNow = S.roundType==='UNDER' && zeroTargets.length>0 && !iAmZero && tricksPlayed<(hardHunt?10:7) && (!needMore || huntSlack>=(hardHunt?3:5));
     // Needs more tricks: cash a card that cannot be beaten (the master of its suit), preferring the
     // longest suit, before anything riskier. Unless a ruff is a real danger (an opponent is known to
     // be void while trumps are still out there).
@@ -3416,6 +3506,7 @@ function finishRound(){
   // (see recordBotBidOutcome/botAggressiveness above) so their bidding keeps calibrating
   // toward their own actual accuracy, game after game, on this browser.
   for(const r of results){ if(!S.isHuman[r.p]) recordBotBidOutcome(S.names[r.p], r.bid, r.won); }
+  { const vd = results.every(x=>!x.made); for(const r of results){ if(S.isHuman[r.p]) recordHumanRound(r, S.roundType, vd); } }
   // Dramatic-moment reaction #3: a BAD miss — off by 2 or more tricks in either direction, not
   // just any missed contract (missing by exactly 1 is common and not dramatic enough to react
   // to). Shown briefly right before the round-end modal covers the table, so it's still visible
