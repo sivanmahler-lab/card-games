@@ -4,12 +4,11 @@
 // way, so this deliberately does NOT try to cache or intercept anything Firebase-related.
 // Bump this number whenever a deploy must not be served from an old cache: the activate handler
 // below deletes every cache whose name differs from this one.
-const CACHE_NAME = 'card-games-v4';
+const CACHE_NAME = 'card-games-v5';
 const APP_SHELL = [
   './index.html',
   './whist.html',
   './sheshiyot.html',
-  './salon.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
