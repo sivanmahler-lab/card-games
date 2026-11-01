@@ -9,7 +9,6 @@ const APP_SHELL = [
   './index.html',
   './whist.html',
   './sheshiyot.html',
-  './salon.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
