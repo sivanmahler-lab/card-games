@@ -350,9 +350,9 @@ button{font-family:'Heebo',sans-serif;}
 /* ---------- TABLE ---------- */
 #screen-game{justify-content:flex-start;padding:8px;}
 .game-header{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0;flex-wrap:wrap;}
-#final-round-banner{display:none;text-align:center;font-size:13.5px;font-weight:700;color:#fff;
+#final-round-banner{display:none;text-align:center;font-size:13px;font-weight:700;color:#fff;
   background:linear-gradient(160deg,#c0272d,#8a1f2b);border:1px solid var(--gold-bright);border-radius:10px;
-  padding:8px 14px;margin:0 12px 6px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
+  padding:5px 12px;margin:0 12px 4px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
 #final-round-banner.show{display:block;}
 .pill{padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;letter-spacing:.3px;border:1px solid rgba(255,255,255,.25);white-space:nowrap;}
 button.pill{font-family:'Heebo',sans-serif;color:var(--gold-bright);background:rgba(212,175,90,.16);}
@@ -864,10 +864,13 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
   opacity:0;
   background:linear-gradient(160deg,var(--gold-bright),var(--gold));
   color:#241a05;font-weight:800;font-size:14px;
-  padding:7px 18px;border-radius:20px;margin-bottom:10px;
+  padding:7px 18px;border-radius:20px;
   box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 16px rgba(240,216,150,.5);
   white-space:nowrap;
   transition:opacity .15s ease;
+  /* Floats just above the piles instead of taking space in the column: on shorter phone screens the
+     reserved banner height pushed the piles down BEHIND the player's own hand ("where is the pile?"). */
+  position:absolute;bottom:100%;left:0;right:0;margin:0 auto 10px;width:max-content;
 }
 #my-turn-banner.show{
   visibility:visible;
@@ -1283,7 +1286,7 @@ button.pill.attn{background:linear-gradient(160deg,var(--gold-bright),var(--gold
       <div class="pgrid-wrap pos-1" id="pw-1"><div class="p-name" id="pn-1"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-1"></div></div></div>
       <div class="pgrid-wrap pos-2" id="pw-2"><div class="p-name" id="pn-2"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-2"></div></div></div>
       <div class="pgrid-wrap pos-3" id="pw-3"><div class="p-name" id="pn-3"></div><div class="pgrid-inner"><div class="pgrid small" id="pg-3"></div></div></div>
-      <div class="center-pot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
+      <div class="center-pot" style="position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:10;flex-direction:column;align-items:center;">
         <!-- "It's your turn" affordance: a bold gold banner right above the piles, shown only
              while it's actually this human player's turn — see renderAll()'s myTurnNow block.
              Complements (doesn't replace) the pulsing gold border on the player's own hand
@@ -2842,10 +2845,8 @@ function renderAll(){
     }
   } else if(S.phase==='playing'){
     const turnName = S.names[S.turn];
-    const finishNote = hasFinishCaller()
-      ? `🔔 ${S.finishCaller===myActual ? 'הכרזת' : finishCallerName()+' הכריז/ה'} "סיימתי" — סבב אחרון — `
-      : '';
-    pill.textContent = roundPrefix + finishNote + 'תור: ' + (S.turn===myActual?'שלך':turnName);
+    // (the red banner below already says who declared "finished" — keeping it out of this pill keeps the row short)
+    pill.textContent = roundPrefix + (hasFinishCaller() ? 'סבב אחרון — ' : '') + 'תור: ' + (S.turn===myActual?'שלך':turnName);
   } else if(S.phase==='ended'){
     pill.textContent = roundPrefix + 'הסתיים';
   }
@@ -2858,9 +2859,9 @@ function renderAll(){
     const callerName = finishCallerName();
     const callerIsMe = S.finishCaller===myActual;
     const turnIsMine = S.turn===myActual;
-    let extra = '';
-    if(turnIsMine && !callerIsMe) extra = ' — זה התור האחרון שלך!';
-    banner.textContent = `📣 ${callerIsMe ? 'הכרזת' : callerName+' הכריז/ה'} "סיימתי"! לכולם עוד תור אחד ואז הסבב נגמר.${extra}`;
+    banner.textContent = callerIsMe
+      ? '📣 הכרזת "סיימתי" — לכולם עוד תור אחד'
+      : (turnIsMine ? `📣 ${callerName}: "סיימתי" — זה התור האחרון שלך!` : `📣 ${callerName}: "סיימתי" — לכולם עוד תור אחד`);
     banner.classList.add('show');
   } else {
     banner.classList.remove('show');
